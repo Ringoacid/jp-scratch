@@ -1,0 +1,160 @@
+<Window x:Class="JpScratch.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="JP Scratch の設定"
+        Width="520" Height="620"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        ResizeMode="CanResize"
+        Background="{DynamicResource WindowBackgroundBrush}">
+
+    <Grid Margin="16,12,16,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+
+                <!-- ===== 表示 ===== -->
+                <TextBlock Text="表示" Style="{StaticResource SectionHeader}" Margin="0,0,0,6" />
+
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="ウィンドウの表示位置" Style="{StaticResource FieldLabel}" />
+                    <ComboBox x:Name="PositionCombo" Grid.Column="1" Style="{StaticResource AppComboBox}" />
+                </Grid>
+
+                <Grid Margin="0,4,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="テーマ" Style="{StaticResource FieldLabel}" />
+                    <ComboBox x:Name="ThemeCombo" Grid.Column="1" Style="{StaticResource AppComboBox}" />
+                </Grid>
+
+                <CheckBox x:Name="TopmostCheck" Style="{StaticResource AppCheckBox}"
+                          Content="常に手前に表示する" />
+                <CheckBox x:Name="HideOnFocusLostCheck" Style="{StaticResource AppCheckBox}"
+                          Content="フォーカスが外れたら自動的に隠す" />
+                <CheckBox x:Name="CopyOnHideCheck" Style="{StaticResource AppCheckBox}"
+                          Content="隠すときに本文をクリップボードへコピーする"
+                          ToolTip="フォーカス喪失・ホットキー・Esc・閉じるボタン、どの隠し方でもコピーします" />
+
+                <!-- ===== ホットキー ===== -->
+                <TextBlock Text="グローバルホットキー" Style="{StaticResource SectionHeader}" />
+                <TextBlock Text="入力欄を選んでキーを押すと割り当てられます。Backspace で解除。"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SubtleTextBrush}"
+                           FontSize="11"
+                           Margin="0,0,0,6" />
+
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="表示 / 非表示" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="ToggleHotkeyBox" Grid.Column="1"
+                             Style="{StaticResource AppTextBox}"
+                             IsReadOnly="True"
+                             PreviewKeyDown="HotkeyBox_PreviewKeyDown" />
+                </Grid>
+
+                <Grid Margin="0,4,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="全文をコピーして隠す" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="CopyHideHotkeyBox" Grid.Column="1"
+                             Style="{StaticResource AppTextBox}"
+                             IsReadOnly="True"
+                             PreviewKeyDown="HotkeyBox_PreviewKeyDown" />
+                </Grid>
+
+                <!-- ===== エディタ ===== -->
+                <TextBlock Text="エディタ" Style="{StaticResource SectionHeader}" />
+
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="フォント" Style="{StaticResource FieldLabel}" />
+                    <ComboBox x:Name="FontCombo" Grid.Column="1" Style="{StaticResource AppComboBox}"
+                              IsEditable="False" MaxDropDownHeight="320" />
+                    <TextBox x:Name="FontSizeBox" Grid.Column="2" Width="56" Margin="8,0,0,0"
+                             Style="{StaticResource AppTextBox}" TextAlignment="Right"
+                             ToolTip="フォントサイズ（Ctrl + マウスホイールでも変えられます）" />
+                </Grid>
+
+                <CheckBox x:Name="WordWrapCheck" Style="{StaticResource AppCheckBox}" Content="折り返して表示する" />
+                <CheckBox x:Name="LineNumbersCheck" Style="{StaticResource AppCheckBox}" Content="行番号を表示する" />
+                <CheckBox x:Name="CurrentLineCheck" Style="{StaticResource AppCheckBox}" Content="現在の行をハイライトする" />
+                <CheckBox x:Name="WhitespaceCheck" Style="{StaticResource AppCheckBox}"
+                          Content="空白（半角・全角スペース、タブ）を可視化する" />
+                <CheckBox x:Name="EndOfLineCheck" Style="{StaticResource AppCheckBox}" Content="改行記号を表示する" />
+
+                <!-- ===== 保存 ===== -->
+                <TextBlock Text="保存" Style="{StaticResource SectionHeader}" />
+
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="80" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="自動保存の待ち時間" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="AutoSaveBox" Grid.Column="1" Style="{StaticResource AppTextBox}"
+                             TextAlignment="Right" />
+                    <TextBlock Grid.Column="2" Text="ミリ秒" Style="{StaticResource FieldLabel}" Margin="8,0,0,0" />
+                </Grid>
+
+                <Grid Margin="0,4,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="80" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="ゴミ箱の保持期間" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="TrashDaysBox" Grid.Column="1" Style="{StaticResource AppTextBox}"
+                             TextAlignment="Right" />
+                    <TextBlock Grid.Column="2" Text="日" Style="{StaticResource FieldLabel}" Margin="8,0,0,0" />
+                </Grid>
+
+                <!-- ===== その他 ===== -->
+                <TextBlock Text="その他" Style="{StaticResource SectionHeader}" />
+                <CheckBox x:Name="StartupCheck" Style="{StaticResource AppCheckBox}"
+                          Content="Windows のサインイン時に常駐を開始する" />
+
+                <TextBlock x:Name="DataFolderText"
+                           TextWrapping="Wrap"
+                           FontSize="11"
+                           Margin="0,12,0,0"
+                           Foreground="{DynamicResource SubtleTextBrush}" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <DockPanel Grid.Row="1" Margin="0,14,0,0">
+            <Button x:Name="OpenFolderButton"
+                    HorizontalAlignment="Left"
+                    Style="{StaticResource AppButton}"
+                    Content="データフォルダを開く"
+                    MinWidth="140"
+                    Click="OpenFolderButton_Click" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="CancelButton" Style="{StaticResource AppButton}" Content="キャンセル"
+                        MinWidth="90" IsCancel="True" Click="CancelButton_Click" />
+                <Button x:Name="OkButton" Style="{StaticResource AppButton}" Content="OK"
+                        MinWidth="90" Margin="8,0,0,0" IsDefault="True" Click="OkButton_Click" />
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</Window>

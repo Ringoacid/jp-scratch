@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>JpScratch</RootNamespace>
+    <AssemblyName>JpScratch</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>0.1.0</Version>
+    <Product>JP Scratch</Product>
+    <!-- 常駐アプリなので起動時間を優先する（2.1 非機能要件） -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <TieredPGO>true</TieredPGO>
+    <!-- 一日中居座るアプリなので、スループットよりフットプリントを優先する。
+         ワークステーション GC・非並行にすると常駐時のヒープが目に見えて小さくなる。 -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <RetainVMGarbageCollection>false</RetainVMGarbageCollection>
+    <!-- インストーラーサイズ削減。UI 文言はすべて日本語ハードコードで、サテライトリソースは使わない -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- WFO0003: WinForms アナライザーはマニフェストでの DPI 設定をやめろと言うが、
+         これは WPF アプリで、DPI 認識はマニフェストで宣言するのが正しい。WinForms は
+         通知領域アイコンにしか使っておらず ApplicationHighDpiMode は関係しない。 -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WinForms は通知領域アイコンのためだけに使う。暗黙 using を残すと
+         Brush / Point / FontFamily / KeyEventArgs などが WPF 側と全面衝突するので外す。
+         TrayIconService だけが明示的に using する。 -->
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <!-- Microsoft.Data.Sqlite が引く SQLitePCLRaw 2.1.11 には高深刻度の脆弱性
+         (GHSA-2m69-gcr7-jv3q) があるため、同系列のパッチ版で推移的依存を上書きする -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+</Project>

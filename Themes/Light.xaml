@@ -1,0 +1,40 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ライトテーマ（要件 3.2.2）。長文を書く道具なので、白すぎない紙色を基調にする。 -->
+
+    <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#F3F3F3" />
+    <SolidColorBrush x:Key="ChromeBackgroundBrush" Color="#E8E8E8" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#D0D0D0" />
+
+    <SolidColorBrush x:Key="EditorBackgroundBrush" Color="#FDFDFD" />
+    <SolidColorBrush x:Key="EditorForegroundBrush" Color="#1B1B1B" />
+    <SolidColorBrush x:Key="CurrentLineBackgroundBrush" Color="#F0F4FB" />
+    <SolidColorBrush x:Key="CurrentLineBorderBrush" Color="#DCE6F5" />
+    <SolidColorBrush x:Key="LineNumberForegroundBrush" Color="#A0A0A0" />
+    <SolidColorBrush x:Key="SelectionBrush" Color="#B3D4FC" />
+    <SolidColorBrush x:Key="WhitespaceBrush" Color="#C8C8C8" />
+
+    <SolidColorBrush x:Key="TextBrush" Color="#1B1B1B" />
+    <SolidColorBrush x:Key="SubtleTextBrush" Color="#6B6B6B" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#3A7AE0" />
+    <SolidColorBrush x:Key="AccentTextBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#C63C3C" />
+
+    <SolidColorBrush x:Key="TabActiveBackgroundBrush" Color="#FDFDFD" />
+    <SolidColorBrush x:Key="TabInactiveBackgroundBrush" Color="#DEDEDE" />
+    <SolidColorBrush x:Key="TabHoverBackgroundBrush" Color="#EDEDED" />
+
+    <SolidColorBrush x:Key="ControlBackgroundBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="ControlHoverBrush" Color="#E0E0E0" />
+    <SolidColorBrush x:Key="ControlPressedBrush" Color="#CFCFCF" />
+
+    <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="#E8E8E8" />
+
+    <SolidColorBrush x:Key="ScrollBarThumbBrush" Color="#C4C4C4" />
+    <SolidColorBrush x:Key="ScrollBarThumbHoverBrush" Color="#A6A6A6" />
+
+    <SolidColorBrush x:Key="SearchMatchBrush" Color="#FFE9A8" />
+    <SolidColorBrush x:Key="SearchCurrentMatchBrush" Color="#FFB454" />
+
+</ResourceDictionary>

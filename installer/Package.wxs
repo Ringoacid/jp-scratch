@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <!--
+    JP Scratch の MSI（要件 5 / v1）。
+
+    ユーザー単位インストールにしている。常駐アプリを入れるのに管理者権限を要求するのは筋が悪く、
+    スタートアップ登録も本文の保存先も、もともと HKCU と %APPDATA% で完結するため。
+  -->
+
+  <Package Name="JP Scratch"
+           Manufacturer="JP Scratch Project"
+           Version="$(var.Version)"
+           UpgradeCode="BCA3FDC1-2C2A-4784-A68E-0C5A7C698CED"
+           Scope="perUser"
+           Compressed="yes">
+
+    <SummaryInformation Description="常駐型 日本語スクラッチパッド" />
+
+    <MajorUpgrade DowngradeErrorMessage="より新しいバージョンの [ProductName] が既にインストールされています。" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="AppIcon.ico" SourceFile="$(var.IconFile)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="JP Scratch" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Feature Id="Main" Title="JP Scratch" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="StartupEntry" />
+    </Feature>
+
+    <!-- 発行物をそのまま取り込む。ファイル一覧を手で維持しない。 -->
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(var.PublishDir)\**">
+        <Exclude Files="$(var.PublishDir)\**\*.pdb" />
+      </Files>
+    </ComponentGroup>
+
+    <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder" Guid="5167DC26-13D6-42E6-BA71-581AEE8A7538">
+      <Shortcut Id="AppShortcut"
+                Name="JP Scratch"
+                Description="常駐型 日本語スクラッチパッド"
+                Target="[INSTALLFOLDER]JpScratch.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <!-- ユーザー単位インストールのコンポーネントはキーパスを HKCU に置く必要がある -->
+      <RegistryValue Root="HKCU" Key="Software\JpScratch"
+                     Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!--
+      スタートアップ登録（要件 5）。
+      インストール時点の初期状態はここが決め、以降はアプリの設定画面が所有する。
+      アプリは初回起動時にこのキーの有無を読み取って設定へ反映するので、両者は競合しない。
+    -->
+    <Component Id="StartupEntry" Directory="INSTALLFOLDER" Guid="24D8D866-7C30-433E-AE07-E3AB7F9DC88D">
+      <RegistryValue Root="HKCU"
+                     Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                     Name="JpScratch"
+                     Type="string"
+                     Value="&quot;[INSTALLFOLDER]JpScratch.exe&quot; --startup"
+                     KeyPath="yes" />
+    </Component>
+
+  </Package>
+</Wix>
