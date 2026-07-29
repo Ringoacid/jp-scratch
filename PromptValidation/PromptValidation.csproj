@@ -2,12 +2,24 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>JpScratch.PromptValidation</RootNamespace>
     <AssemblyName>JpScratch.PromptValidation</AssemblyName>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Proofreading\DocumentDiff.cs" Link="Proofreading\DocumentDiff.cs" />
+    <Compile Include="..\Proofreading\ProofreadingProposal.cs"
+             Link="Proofreading\ProofreadingProposal.cs" />
+    <Compile Include="..\Proofreading\ProofreadingSession.cs"
+             Link="Proofreading\ProofreadingSession.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <None Update="cases.json">

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using ICSharpCode.AvalonEdit.Document;
+using JpScratch.Proofreading;
 
 namespace JpScratch.Models;
 
@@ -41,6 +42,12 @@ public sealed class ScratchTab : INotifyPropertyChanged
     /// エディタは 1 つだけ生成し、タブ切替ではこの Document を差し替える（メモリ 80MB 目標のため）。
     /// </summary>
     public TextDocument Document { get; } = new();
+
+    private ProofreadingSession? _proofreading;
+
+    /// <summary>このタブの校正提案。初回の校正結果を受け取るまで生成しない。</summary>
+    internal ProofreadingSession Proofreading =>
+        _proofreading ??= new ProofreadingSession(Document);
 
     /// <summary>最後にディスクへ書いた内容と一致しているか。自動保存の空振りを避けるために持つ。</summary>
     public bool IsDirty

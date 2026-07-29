@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using ICSharpCode.AvalonEdit.Document;
+using JpScratch.Proofreading;
 
 namespace JpScratch.PromptValidation;
 
@@ -60,6 +62,11 @@ internal static class DocumentDiffValidation
         Console.WriteLine(
             $"全文差分（ランダム往復200件）: {(randomizedPass ? "PASS" : "FAIL")}");
         passed &= randomizedPass;
+
+        bool anchorsPass = RunAnchorTests();
+        Console.WriteLine(
+            $"TextAnchor追従・失効: {(anchorsPass ? "PASS" : "FAIL")}");
+        passed &= anchorsPass;
 
         return passed;
     }
@@ -191,6 +198,76 @@ internal static class DocumentDiffValidation
         }
 
         return true;
+    }
+
+    private static bool RunAnchorTests()
+    {
+        TextDocument trackingDocument = new("前文。文章ア、後文。");
+        using ProofreadingSession tracking = new(trackingDocument);
+        DocumentDiffResult loaded =
+            tracking.LoadCorrectedDocument("前文。文章は、後文。");
+        if (!loaded.Accepted || tracking.Proposals.Count != 1)
+            return AnchorFailure("追従用提案を1件生成できない");
+
+        ProofreadingProposal tracked = tracking.Proposals[0];
+        int initialStart = tracked.Start;
+        trackingDocument.Insert(0, "追記。");
+        if (!tracked.IsActive || tracked.Start != initialStart + 3)
+            return AnchorFailure(
+                $"前方編集への追従位置が不正: {initialStart} → " +
+                $"{(tracked.IsActive ? tracked.Start : -1)}");
+
+        trackingDocument.Replace(tracked.Start, tracked.Length, "X");
+        if (tracked.IsActive || tracking.Proposals.Count != 0)
+            return AnchorFailure("提案範囲の置換で失効しない");
+
+        TextDocument applyDocument = new("文章ア、間違いが二ともある。");
+        using ProofreadingSession applying = new(applyDocument);
+        DocumentDiffResult applyLoaded =
+            applying.LoadCorrectedDocument("文章は、間違いが二つある。");
+        if (!applyLoaded.Accepted || applying.Proposals.Count != 2)
+            return AnchorFailure($"複数提案の生成数が不正: {applying.Proposals.Count}");
+
+        ProofreadingProposal second = applying.Proposals[1];
+        if (!applying.TryApply(applying.Proposals[0]) ||
+            !second.IsActive ||
+            !applying.TryApply(second) ||
+            applyDocument.Text != "文章は、間違いが二つある。" ||
+            applying.Proposals.Count != 0)
+        {
+            return AnchorFailure(
+                $"複数提案を順次適用できない: {applyDocument.Text} / " +
+                $"残り {applying.Proposals.Count}");
+        }
+
+        TextDocument boundaryDocument = new("文章ア");
+        using ProofreadingSession boundary = new(boundaryDocument);
+        boundary.LoadCorrectedDocument("文章は");
+        if (boundary.Proposals.Count != 1)
+            return AnchorFailure("境界テスト用提案を生成できない");
+        ProofreadingProposal boundaryProposal = boundary.Proposals[0];
+        boundaryDocument.Insert(boundaryProposal.Start, "前");
+        if (!boundaryProposal.IsActive ||
+            boundaryDocument.GetText(boundaryProposal.Start, boundaryProposal.Length) !=
+                boundaryProposal.Original)
+        {
+            return AnchorFailure("提案開始境界への挿入で原文範囲を保持できない");
+        }
+
+        boundaryDocument.Insert(
+            boundaryProposal.Start + boundaryProposal.Length,
+            "後");
+        bool endBoundaryPass = boundaryProposal.IsActive &&
+            boundaryDocument.GetText(boundaryProposal.Start, boundaryProposal.Length) ==
+                boundaryProposal.Original;
+        return endBoundaryPass ||
+            AnchorFailure("提案終了境界への挿入で原文範囲を保持できない");
+    }
+
+    private static bool AnchorFailure(string message)
+    {
+        Console.WriteLine($"  ! {message}");
+        return false;
     }
 
     private static string TrimTerminalLineBreaks(string value) =>

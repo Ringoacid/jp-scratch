@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace JpScratch.PromptValidation;
+namespace JpScratch.Proofreading;
 
 internal sealed record DocumentChange(
     int Start,
