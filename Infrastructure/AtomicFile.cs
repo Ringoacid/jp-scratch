@@ -4,7 +4,7 @@ using System.Text;
 namespace JpScratch.Infrastructure;
 
 /// <summary>
-/// 原子的なテキスト書き込み（要件 3.2.4 / R-8）。
+/// 一時ファイル経由で、既存の本文を壊さずに行うテキスト書き込み（要件 3.2.4 / R-8）。
 /// 一時ファイルへ書き切ってから <see cref="File.Replace(string,string,string?)"/> で差し替えるので、
 /// 書き込み中にプロセスが落ちても既存の本文は無傷で残る。
 /// </summary>

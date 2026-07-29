@@ -114,7 +114,7 @@ internal sealed class TabRepository(Database db)
         => db.Read("SELECT id FROM tabs WHERE is_active = 1 AND deleted_at IS NULL LIMIT 1;",
             reader => reader.Read() ? reader.GetString(0) : null);
 
-    /// <summary>本文を原子的に書き出す（要件 3.2.4 / R-8）。</summary>
+    /// <summary>一時ファイル経由で本文を書き出し、既存の本文を壊さない（要件 3.2.4 / R-8）。</summary>
     public void SaveBody(ScratchTab tab)
     {
         var path = tab.DeletedAt is null ? AppPaths.TabFile(tab.Id) : AppPaths.TrashFile(tab.Id);

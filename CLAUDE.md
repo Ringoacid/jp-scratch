@@ -32,7 +32,7 @@ powershell -File installer\build.ps1                    # MSI（要 WiX v5）
 
 ```
 App.xaml.cs        起動・常駐・単一インスタンス・クラッシュ時の保存
-Infrastructure/    Win32 相互運用、原子的ファイル書き込み、パス解決、単一インスタンス
+Infrastructure/    Win32 相互運用、一時ファイル経由の安全なファイル書き込み、パス解決、単一インスタンス
 Models/            設定・タブ・ホットキー
 Services/          設定・SQLite・タブ管理・ホットキー・ウィンドウ配置・テーマ・トレイ
 Editor/            AvalonEdit 拡張（検索ハイライト、全角スペース可視化、フォント解決）
@@ -46,7 +46,7 @@ installer/         WiX v5 による MSI
 触る前に理由まで理解しておくこと。いずれも一度踏んで直した箇所。
 
 - **本文は必ずプレーンテキストで残す。** アプリが壊れてもメモ帳でサルベージできることが要件そのもの
-  （requirements.md 3.2.4）。書き込みは一時ファイル → `File.Replace` の原子的置換（`Infrastructure/AtomicFile.cs`）。
+  （requirements.md 3.2.4）。書き込みは一時ファイルに保存してから `File.Replace` で置き換える（`Infrastructure/AtomicFile.cs`）。
 - **ウィンドウ位置は物理ピクセルで計算する**（`Services/WindowPlacer.cs`）。WPF の `Window.Left/Top` は
   混在 DPI のマルチモニタで信用できない。設定に持つのは「サイズ = DIP」「位置 = 物理ピクセル」。
 - **二重起動時の呼び戻しは名前付きイベント**（`Infrastructure/SingleInstance.cs`）。
