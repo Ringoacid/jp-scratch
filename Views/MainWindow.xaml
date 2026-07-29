@@ -175,6 +175,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <controls:FindReplacePanel x:Name="FindPanel"
@@ -191,7 +192,90 @@
                                    VerticalScrollBarVisibility="Auto"
                                    Background="{DynamicResource EditorBackgroundBrush}"
                                    Foreground="{DynamicResource EditorForegroundBrush}"
+                                   PreviewMouseLeftButtonDown="Editor_PreviewMouseLeftButtonDown"
                                    PreviewMouseWheel="Editor_PreviewMouseWheel" />
+
+                <Border x:Name="ProofreadingPanel"
+                        Grid.Row="2"
+                        Visibility="Collapsed"
+                        Background="{DynamicResource ChromeBackgroundBrush}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="0,1,0,0"
+                        Padding="10,7">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock x:Name="ProposalPositionText"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,10,0"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource SubtleTextBrush}" />
+
+                        <TextBlock x:Name="ProposalChangeText"
+                                   Grid.Column="1"
+                                   VerticalAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxHeight="40"
+                                   Foreground="{DynamicResource TextBrush}" />
+
+                        <StackPanel Grid.Row="1"
+                                    Grid.Column="0"
+                                    Grid.ColumnSpan="3"
+                                    Orientation="Horizontal"
+                                    HorizontalAlignment="Right"
+                                    Margin="0,7,0,0">
+                            <Button x:Name="AcceptProposalButton"
+                                    Style="{StaticResource AppButton}"
+                                    Content="許可"
+                                    ToolTip="許可 (Ctrl+.)"
+                                    Margin="0,0,6,0"
+                                    Click="AcceptProposalButton_Click" />
+                            <Button x:Name="RejectProposalButton"
+                                    Style="{StaticResource AppButton}"
+                                    Content="拒否"
+                                    ToolTip="拒否 (Ctrl+,)"
+                                    Margin="0,0,6,0"
+                                    Click="RejectProposalButton_Click" />
+                            <Button x:Name="ReasonProposalButton"
+                                    Style="{StaticResource AppButton}"
+                                    Content="理由をつけて… ▼"
+                                    Click="ReasonProposalButton_Click">
+                                <Button.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="理由をつけて退ける"
+                                                  Click="RejectWithReasonMenuItem_Click" />
+                                        <MenuItem Header="理由をつけて別案を出す（API料金が発生）"
+                                                  Click="AlternativeWithReasonMenuItem_Click" />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                            </Button>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2"
+                                    Orientation="Horizontal"
+                                    Margin="10,0,0,0">
+                            <Button Style="{StaticResource ChromeButton}"
+                                    FontFamily="Segoe MDL2 Assets"
+                                    Content="&#xE76B;"
+                                    ToolTip="前の提案"
+                                    Click="PreviousProposalButton_Click" />
+                            <Button Style="{StaticResource ChromeButton}"
+                                    FontFamily="Segoe MDL2 Assets"
+                                    Content="&#xE76C;"
+                                    ToolTip="次の提案"
+                                    Click="NextProposalButton_Click" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
             </Grid>
 
             <!-- ========== ステータスバー ========== -->

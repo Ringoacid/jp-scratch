@@ -109,6 +109,14 @@ internal sealed class SettingsService
         s.WindowHeight = Math.Clamp(s.WindowHeight, 240, 4000);
         s.FontSize = Math.Clamp(s.FontSize, 8, 72);
         s.AutoSaveDebounceMs = Math.Clamp(s.AutoSaveDebounceMs, 200, 10_000);
+        s.ProofreadingDebounceMs = Math.Clamp(
+            s.ProofreadingDebounceMs,
+            500,
+            60_000);
+        s.ProofreadingMinimumIntervalSeconds = Math.Clamp(
+            s.ProofreadingMinimumIntervalSeconds,
+            1,
+            600);
         s.TrashRetentionDays = Math.Clamp(s.TrashRetentionDays, 1, 365);
         s.AutoTitleMaxLength = Math.Clamp(s.AutoTitleMaxLength, 4, 60);
     }

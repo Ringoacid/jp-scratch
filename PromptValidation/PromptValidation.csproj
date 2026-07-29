@@ -11,14 +11,38 @@
 
   <ItemGroup>
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Infrastructure\AppPaths.cs"
+             Link="Infrastructure\AppPaths.cs" />
+    <Compile Include="..\Infrastructure\AtomicFile.cs"
+             Link="Infrastructure\AtomicFile.cs" />
+    <Compile Include="..\Models\GeminiApiKeySource.cs"
+             Link="Models\GeminiApiKeySource.cs" />
     <Compile Include="..\Proofreading\DocumentDiff.cs" Link="Proofreading\DocumentDiff.cs" />
+    <Compile Include="..\Proofreading\GeminiProofreadingClient.cs"
+             Link="Proofreading\GeminiProofreadingClient.cs" />
+    <Compile Include="..\Proofreading\ParagraphProofreadingPlanner.cs"
+             Link="Proofreading\ParagraphProofreadingPlanner.cs" />
     <Compile Include="..\Proofreading\ProofreadingProposal.cs"
              Link="Proofreading\ProofreadingProposal.cs" />
+    <Compile Include="..\Proofreading\ProofreadingPrompt.cs"
+             Link="Proofreading\ProofreadingPrompt.cs" />
+    <Compile Include="..\Proofreading\ProofreadingSchedule.cs"
+             Link="Proofreading\ProofreadingSchedule.cs" />
+    <Compile Include="..\Proofreading\ProofreadingResultMerger.cs"
+             Link="Proofreading\ProofreadingResultMerger.cs" />
     <Compile Include="..\Proofreading\ProofreadingSession.cs"
              Link="Proofreading\ProofreadingSession.cs" />
+    <Compile Include="..\Services\CredentialService.cs"
+             Link="Services\CredentialService.cs" />
+    <Compile Include="..\Services\Database.cs"
+             Link="Services\Database.cs" />
+    <Compile Include="..\Services\ReactionRepository.cs"
+             Link="Services\ReactionRepository.cs" />
   </ItemGroup>
 
   <ItemGroup>

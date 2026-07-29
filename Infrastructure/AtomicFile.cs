@@ -4,7 +4,7 @@ using System.Text;
 namespace JpScratch.Infrastructure;
 
 /// <summary>
-/// 一時ファイル経由で、既存の本文を壊さずに行うテキスト書き込み（要件 3.2.4 / R-8）。
+/// 一時ファイル経由で、既存データを壊さずに行うファイル書き込み（要件 3.2.4 / R-8）。
 /// 一時ファイルへ書き切ってから <see cref="File.Replace(string,string,string?)"/> で差し替えるので、
 /// 書き込み中にプロセスが落ちても既存の本文は無傷で残る。
 /// </summary>
@@ -28,6 +28,30 @@ internal static class AtomicFile
         {
             writer.Write(content);
             writer.Flush();
+            fs.Flush(flushToDisk: true);
+        }
+
+        if (File.Exists(path))
+        {
+            File.Replace(tmp, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
+        }
+        else
+        {
+            File.Move(tmp, path);
+        }
+    }
+
+    public static void WriteAllBytes(string path, ReadOnlySpan<byte> content)
+    {
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+        var tmp = path + ".tmp";
+
+        using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None,
+                                       bufferSize: 4096, FileOptions.WriteThrough))
+        {
+            fs.Write(content);
             fs.Flush(flushToDisk: true);
         }
 

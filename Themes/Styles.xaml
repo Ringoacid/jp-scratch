@@ -112,6 +112,16 @@
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
+    <Style x:Key="AppPasswordBox" TargetType="PasswordBox">
+        <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource TextBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="4,3" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
     <!--
         既定テンプレート（Aero2）は、背景も枠もチェックマークもテンプレート内部の固定色で描く。
         Background / Foreground を設定しても無視されるため、ダークテーマでは

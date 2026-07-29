@@ -74,6 +74,15 @@ public sealed class AppSettings
     public int AutoSaveDebounceMs { get; set; } = 1000;
     public int TrashRetentionDays { get; set; } = 30;
 
+    // ---- 3.5.5 API キー ----
+    /// <summary>キー本体は settings.json に入れず、取得元の選択だけを記録する。</summary>
+    public GeminiApiKeySource GeminiApiKeySource { get; set; } = GeminiApiKeySource.Unspecified;
+
+    // ---- 3.3.1 自動校正 ----
+    public bool AutoProofreadingEnabled { get; set; } = true;
+    public int ProofreadingDebounceMs { get; set; } = 2000;
+    public int ProofreadingMinimumIntervalSeconds { get; set; } = 10;
+
     // ---- その他 ----
     public bool StartWithWindows { get; set; } = true;
     /// <summary>タブ名の自動生成で使う最大文字数（要件 3.2.1）。</summary>

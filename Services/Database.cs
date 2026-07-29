@@ -18,11 +18,11 @@ internal sealed class Database : IDisposable
     /// </summary>
     private SqliteTransaction? _activeTransaction;
 
-    public Database()
+    public Database(string? databaseFile = null)
     {
         var csb = new SqliteConnectionStringBuilder
         {
-            DataSource = AppPaths.DatabaseFile,
+            DataSource = databaseFile ?? AppPaths.DatabaseFile,
             Mode = SqliteOpenMode.ReadWriteCreate,
             Cache = SqliteCacheMode.Private,
         };
@@ -41,7 +41,7 @@ internal sealed class Database : IDisposable
 
     /// <summary>
     /// user_version を版番号として扱う素朴な移行。
-    /// v2（校正）・v3（学習）のテーブルはそれぞれの実装時に版を足して追加する。
+    /// v3（学習）のテーブルはその実装時に版を足して追加する。
     /// </summary>
     private void Migrate()
     {
@@ -65,6 +65,62 @@ internal sealed class Database : IDisposable
                 CREATE INDEX idx_tabs_deleted ON tabs(deleted_at);
                 """);
             ExecuteInternal("PRAGMA user_version=1;");
+        }
+
+        if (version < 2)
+        {
+            ExecuteInternal("""
+                CREATE TABLE api_calls (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    called_at      TEXT    NOT NULL,
+                    trigger_type   TEXT    NOT NULL,
+                    model          TEXT    NOT NULL,
+                    prompt_tokens  INTEGER NOT NULL,
+                    output_tokens  INTEGER NOT NULL,
+                    usd_cost       TEXT    NOT NULL,
+                    usd_jpy_rate   REAL,
+                    rate_date      TEXT,
+                    jpy_cost       TEXT,
+                    duration_ms    INTEGER NOT NULL,
+                    status         TEXT    NOT NULL,
+                    error_message  TEXT,
+                    suggestion_cnt INTEGER NOT NULL DEFAULT 0,
+                    discarded_cnt  INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX idx_api_calls_at ON api_calls(called_at);
+
+                CREATE TABLE reactions (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    reacted_at     TEXT NOT NULL,
+                    api_call_id    INTEGER REFERENCES api_calls(id),
+                    tab_id         TEXT,
+                    original       TEXT NOT NULL,
+                    suggestion     TEXT NOT NULL,
+                    left_context   TEXT,
+                    right_context  TEXT,
+                    reaction       TEXT NOT NULL,
+                    user_reason    TEXT,
+                    used_in_prompt INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX idx_reactions_at  ON reactions(reacted_at);
+                CREATE INDEX idx_reactions_rxn ON reactions(reaction);
+
+                CREATE TABLE style_guides (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    generated_at     TEXT    NOT NULL,
+                    content          TEXT    NOT NULL,
+                    source_reactions INTEGER NOT NULL,
+                    is_active        INTEGER NOT NULL DEFAULT 0,
+                    is_user_edited   INTEGER NOT NULL DEFAULT 0
+                );
+
+                CREATE TABLE fx_rates (
+                    rate_date  TEXT PRIMARY KEY,
+                    usd_jpy    REAL NOT NULL,
+                    fetched_at TEXT NOT NULL
+                );
+                """);
+            ExecuteInternal("PRAGMA user_version=2;");
         }
     }
 

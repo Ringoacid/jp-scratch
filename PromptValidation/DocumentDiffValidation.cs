@@ -229,6 +229,16 @@ internal static class DocumentDiffValidation
             return AnchorFailure($"複数提案の生成数が不正: {applying.Proposals.Count}");
 
         ProofreadingProposal second = applying.Proposals[1];
+        ProofreadingProposal first = applying.Proposals[0];
+        if (!ReferenceEquals(applying.FindAtOffset(first.Start), first) ||
+            !ReferenceEquals(applying.FindAtOffset(second.Start), second) ||
+            !ReferenceEquals(applying.GetRelative(first, 1), second) ||
+            !ReferenceEquals(applying.GetRelative(second, 1), first) ||
+            !ReferenceEquals(applying.GetRelative(first, -1), second))
+        {
+            return AnchorFailure("複数提案の位置選択・循環移動が不正");
+        }
+
         if (!applying.TryApply(applying.Proposals[0]) ||
             !second.IsActive ||
             !applying.TryApply(second) ||

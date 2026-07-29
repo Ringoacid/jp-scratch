@@ -36,5 +36,7 @@
 
     <SolidColorBrush x:Key="SearchMatchBrush" Color="#5B4A1E" />
     <SolidColorBrush x:Key="SearchCurrentMatchBrush" Color="#9A6A15" />
+    <SolidColorBrush x:Key="ProofreadingUnderlineBrush" Color="#F0A43A" />
+    <SolidColorBrush x:Key="ProofreadingSelectionBrush" Color="#335B3A12" />
 
 </ResourceDictionary>

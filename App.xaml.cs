@@ -20,8 +20,11 @@ public partial class App : Application
     private readonly ThemeService _theme = new();
     private readonly HotkeyService _hotkeys = new();
     private readonly TrayIconService _tray = new();
+    private readonly CredentialService _credentials = new();
 
     private Database? _database;
+    private ReactionRepository? _reactions;
+    private Proofreading.GeminiProofreadingClient? _proofreadingClient;
     private TabManager? _tabs;
     private MainWindow? _window;
 
@@ -58,13 +61,26 @@ public partial class App : Application
         }
 
         _theme.Apply(_settings.Current.Theme);
+        ConfirmEnvironmentCredentialSource();
 
         _database = new Database();
+        _reactions = new ReactionRepository(_database);
+        _proofreadingClient = new Proofreading.GeminiProofreadingClient(
+            _credentials,
+            () => _settings.Current.GeminiApiKeySource);
         var repository = new TabRepository(_database);
         _tabs = new TabManager(repository, _settings);
         _tabs.Initialize();
 
-        _window = new MainWindow(_settings, _theme, _tabs, repository, _hotkeys);
+        _window = new MainWindow(
+            _settings,
+            _theme,
+            _tabs,
+            repository,
+            _hotkeys,
+            _credentials,
+            _reactions,
+            _proofreadingClient);
 
         // ホットキーはウィンドウの HWND に紐づける。
         // EnsureHandle なら「表示せずに HWND だけ作る」ができるので、常駐開始が速い。
@@ -113,6 +129,21 @@ public partial class App : Application
         Shutdown();
     }
 
+    private void ConfirmEnvironmentCredentialSource()
+    {
+        if (_settings.Current.GeminiApiKeySource != Models.GeminiApiKeySource.Unspecified ||
+            !_credentials.EnvironmentKeyAvailable)
+        {
+            return;
+        }
+
+        var dialog = new CredentialSourceDialog(_credentials.StoredKeyState);
+        dialog.ShowDialog();
+
+        _settings.Current.GeminiApiKeySource = dialog.SelectedSource;
+        _settings.SaveNow();
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         // 終了時保存（要件 3.2.4）。ここが最後の砦なので、例外で飛ばさない。
@@ -131,6 +162,7 @@ public partial class App : Application
 
         _hotkeys.Dispose();
         _tray.Dispose();
+        _proofreadingClient?.Dispose();
         _database?.Dispose();
         _singleInstance.Dispose();
 

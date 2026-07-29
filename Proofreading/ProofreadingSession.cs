@@ -24,6 +24,32 @@ internal sealed class ProofreadingSession : IDisposable
     /// <summary>提案一覧の追加・削除・失効時に発火する。描画層と下部パネルの更新起点。</summary>
     internal event Action? Changed;
 
+    internal ProofreadingProposal? FindAtOffset(int offset)
+        => _proposals.FirstOrDefault(proposal =>
+            proposal.IsActive &&
+            offset >= proposal.Start &&
+            offset < proposal.Start + proposal.Length);
+
+    internal ProofreadingProposal? GetRelative(
+        ProofreadingProposal? current,
+        int direction)
+    {
+        IReadOnlyList<ProofreadingProposal> active = _proposals
+            .Where(proposal => proposal.IsActive)
+            .OrderBy(proposal => proposal.Start)
+            .ToArray();
+        if (active.Count == 0)
+            return null;
+
+        int currentIndex = current is null ? -1 : active.IndexOfReference(current);
+        if (currentIndex < 0)
+            return direction < 0 ? active[^1] : active[0];
+
+        int next = ((currentIndex + Math.Sign(direction)) % active.Count + active.Count) %
+                   active.Count;
+        return active[next];
+    }
+
     /// <summary>
     /// モデルが返した修正版全文を現在の本文と比較し、既存提案を置き換える。
     /// 安全検査に失敗した場合は提案を空にし、拒否理由を呼び出し元へ返す。
@@ -88,6 +114,50 @@ internal sealed class ProofreadingSession : IDisposable
             return false;
 
         proposal.MarkRejected();
+        Changed?.Invoke();
+        return true;
+    }
+
+    /// <summary>
+    /// 理由つき別案生成が成功したとき、本文を変えずに同じ範囲の提案だけを差し替える。
+    /// </summary>
+    internal bool TryReplaceSuggestion(
+        ProofreadingProposal proposal,
+        string alternative)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_proposals.Contains(proposal) ||
+            !proposal.IsActive ||
+            string.IsNullOrWhiteSpace(alternative) ||
+            string.Equals(alternative, proposal.Original, StringComparison.Ordinal) ||
+            string.Equals(alternative, proposal.Suggestion, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        int start = proposal.Start;
+        if (!string.Equals(
+                _document.GetText(start, proposal.Length),
+                proposal.Original,
+                StringComparison.Ordinal))
+        {
+            RemoveAsInvalid(proposal);
+            return false;
+        }
+
+        var replacement = new ProofreadingProposal(
+            _document,
+            new DocumentChange(
+                start,
+                proposal.Length,
+                proposal.Original,
+                alternative,
+                proposal.LeftContext,
+                proposal.RightContext));
+
+        proposal.MarkRejected();
+        int index = _proposals.IndexOf(proposal);
+        _proposals[index] = replacement;
         Changed?.Invoke();
         return true;
     }
@@ -165,5 +235,21 @@ internal sealed class ProofreadingSession : IDisposable
         proposal.Invalidate();
         _proposals.Remove(proposal);
         Changed?.Invoke();
+    }
+}
+
+file static class ProofreadingProposalListExtensions
+{
+    internal static int IndexOfReference(
+        this IReadOnlyList<ProofreadingProposal> proposals,
+        ProofreadingProposal target)
+    {
+        for (int index = 0; index < proposals.Count; index++)
+        {
+            if (ReferenceEquals(proposals[index], target))
+                return index;
+        }
+
+        return -1;
     }
 }

@@ -28,7 +28,7 @@ internal static class Program
             IReadOnlyList<ValidationCase> cases = LoadCases();
 
             if (options.SelfTest)
-                return RunSelfTest();
+                return await RunSelfTestAsync();
             if (options.AnalyzeResultsPath is not null)
                 return DocumentDiffValidation.AnalyzeSavedResults(
                     options.AnalyzeResultsPath,
@@ -214,7 +214,7 @@ internal static class Program
         }
     }
 
-    private static int RunSelfTest()
+    private static async Task<int> RunSelfTestAsync()
     {
         Correction exact = new("typo", "文章ア", "文章が", "この", "、誤り", "", 0.9);
         Correction fallback = new("typo", "同じ", "違う", "後ろの", "", "", 0.9);
@@ -224,7 +224,14 @@ internal static class Program
         Console.WriteLine($"位置解決（完全一致）: {(exactPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"位置解決（複数候補）: {(fallbackPass ? "PASS" : "FAIL")}");
         bool diffPass = DocumentDiffValidation.RunSelfTests();
-        return exactPass && fallbackPass && diffPass ? 0 : 1;
+        bool paragraphPass = ParagraphProofreadingPlannerValidation.RunSelfTests();
+        bool credentialPass = CredentialServiceValidation.RunSelfTests();
+        bool reactionPass = ReactionRepositoryValidation.RunSelfTests();
+        bool schedulePass = ProofreadingScheduleValidation.RunSelfTests();
+        bool geminiClientPass = await GeminiProofreadingClientValidation.RunSelfTestsAsync();
+        return exactPass && fallbackPass && diffPass && paragraphPass &&
+               credentialPass && reactionPass && schedulePass &&
+               geminiClientPass ? 0 : 1;
     }
 
     private static void PrintHelp()

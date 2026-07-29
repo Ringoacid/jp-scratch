@@ -49,6 +49,12 @@ public sealed class ScratchTab : INotifyPropertyChanged
     internal ProofreadingSession Proofreading =>
         _proofreading ??= new ProofreadingSession(Document);
 
+    private ParagraphProofreadingPlanner? _proofreadingPlanner;
+
+    /// <summary>送信済み段落ハッシュはタブごとに独立して保持する。</summary>
+    internal ParagraphProofreadingPlanner ProofreadingPlanner =>
+        _proofreadingPlanner ??= new ParagraphProofreadingPlanner();
+
     /// <summary>最後にディスクへ書いた内容と一致しているか。自動保存の空振りを避けるために持つ。</summary>
     public bool IsDirty
     {

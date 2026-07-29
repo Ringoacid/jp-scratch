@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
+using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -16,10 +18,14 @@ public partial class SettingsWindow : Window
     private const string AutoFontLabel = "（自動: メイリオ → 游ゴシック）";
 
     private readonly SettingsService _service;
+    private readonly CredentialService _credentials;
+    private bool _deleteStoredKey;
+    private bool _loadingCredentialControls;
 
-    internal SettingsWindow(SettingsService service)
+    internal SettingsWindow(SettingsService service, CredentialService credentials)
     {
         _service = service;
+        _credentials = credentials;
         InitializeComponent();
         LoadFrom(service.Current);
     }
@@ -57,6 +63,22 @@ public partial class SettingsWindow : Window
         CurrentLineCheck.IsChecked = s.HighlightCurrentLine;
         WhitespaceCheck.IsChecked = s.ShowWhitespace;
         EndOfLineCheck.IsChecked = s.ShowEndOfLine;
+        AutoProofreadingCheck.IsChecked = s.AutoProofreadingEnabled;
+        ProofreadingDebounceBox.Text =
+            s.ProofreadingDebounceMs.ToString(CultureInfo.InvariantCulture);
+        ProofreadingIntervalBox.Text =
+            s.ProofreadingMinimumIntervalSeconds.ToString(CultureInfo.InvariantCulture);
+
+        _loadingCredentialControls = true;
+        CredentialSourceCombo.ItemsSource = new[]
+        {
+            "アプリに保存したキー",
+            $"環境変数 {CredentialService.EnvironmentVariableName}",
+        };
+        CredentialSourceCombo.SelectedIndex =
+            s.GeminiApiKeySource == GeminiApiKeySource.EnvironmentVariable ? 1 : 0;
+        _loadingCredentialControls = false;
+        RefreshCredentialStatus();
 
         AutoSaveBox.Text = s.AutoSaveDebounceMs.ToString(CultureInfo.InvariantCulture);
         TrashDaysBox.Text = s.TrashRetentionDays.ToString(CultureInfo.InvariantCulture);
@@ -90,6 +112,19 @@ public partial class SettingsWindow : Window
         s.HighlightCurrentLine = CurrentLineCheck.IsChecked == true;
         s.ShowWhitespace = WhitespaceCheck.IsChecked == true;
         s.ShowEndOfLine = EndOfLineCheck.IsChecked == true;
+        s.AutoProofreadingEnabled = AutoProofreadingCheck.IsChecked == true;
+        s.ProofreadingDebounceMs =
+            (int)ParseNumber(
+                ProofreadingDebounceBox.Text,
+                s.ProofreadingDebounceMs);
+        s.ProofreadingMinimumIntervalSeconds =
+            (int)ParseNumber(
+                ProofreadingIntervalBox.Text,
+                s.ProofreadingMinimumIntervalSeconds);
+
+        s.GeminiApiKeySource = CredentialSourceCombo.SelectedIndex == 1
+            ? GeminiApiKeySource.EnvironmentVariable
+            : GeminiApiKeySource.Stored;
 
         s.AutoSaveDebounceMs = (int)ParseNumber(AutoSaveBox.Text, s.AutoSaveDebounceMs);
         s.TrashRetentionDays = (int)ParseNumber(TrashDaysBox.Text, s.TrashRetentionDays);
@@ -145,6 +180,7 @@ public partial class SettingsWindow : Window
         // 現在値のコピーに書き込んでから差し替える。途中で例外が出ても設定が半端に壊れない。
         var updated = _service.Current.Clone();
         ApplyTo(updated);
+        if (!TryApplyCredentialChanges(updated)) return;
         _service.Replace(updated);
 
         DialogResult = true;
@@ -154,6 +190,90 @@ public partial class SettingsWindow : Window
     private void CancelButton_Click(object sender, RoutedEventArgs e) => Close();
 
     private void TitleBarCloseButton_Click(object sender, RoutedEventArgs e) => Close();
+
+    private void CredentialSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_loadingCredentialControls) RefreshCredentialStatus();
+    }
+
+    private void ApiKeyBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (ApiKeyBox.Password.Length > 0) _deleteStoredKey = false;
+        RefreshCredentialStatus();
+    }
+
+    private void DeleteStoredKeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        _deleteStoredKey = true;
+        ApiKeyBox.Clear();
+        RefreshCredentialStatus();
+    }
+
+    private void RefreshCredentialStatus()
+    {
+        if (CredentialStatusText is null) return;
+
+        string stored = _deleteStoredKey
+            ? "保存済みキー: OKを押すと削除"
+            : _credentials.StoredKeyState switch
+            {
+                StoredCredentialState.Available => "保存済みキー: あり（値は表示しません）",
+                StoredCredentialState.Unreadable => "保存済みキー: 読み取れません（削除または置き換えが必要です）",
+                _ => "保存済みキー: なし",
+            };
+
+        string environment = _credentials.EnvironmentKeyAvailable
+            ? $"環境変数 {CredentialService.EnvironmentVariableName}: 検出済み"
+            : $"環境変数 {CredentialService.EnvironmentVariableName}: 見つかりません";
+
+        string pending = ApiKeyBox?.Password.Length > 0
+            ? "\n新しいキー: OKを押すと暗号化して保存"
+            : "";
+
+        CredentialStatusText.Text = $"{stored}\n{environment}{pending}";
+    }
+
+    private bool TryApplyCredentialChanges(AppSettings updated)
+    {
+        if (updated.GeminiApiKeySource == GeminiApiKeySource.EnvironmentVariable &&
+            !_credentials.EnvironmentKeyAvailable)
+        {
+            MessageBox.Show(
+                this,
+                $"環境変数 {CredentialService.EnvironmentVariableName} が見つかりません。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
+
+        try
+        {
+            if (ApiKeyBox.Password.Length > 0)
+            {
+                _credentials.SaveStoredApiKey(ApiKeyBox.Password);
+            }
+            else if (_deleteStoredKey)
+            {
+                _credentials.DeleteStoredApiKey();
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException
+                                   or UnauthorizedAccessException
+                                   or CryptographicException
+                                   or ArgumentException)
+        {
+            MessageBox.Show(
+                this,
+                "APIキーを保存または削除できませんでした。データフォルダへのアクセス権を確認してください。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
+    }
 
     private void OpenFolderButton_Click(object sender, RoutedEventArgs e)
     {

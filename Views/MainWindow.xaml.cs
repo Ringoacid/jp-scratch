@@ -4,10 +4,12 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
 using JpScratch.Editor;
 using JpScratch.Infrastructure;
 using JpScratch.Models;
+using JpScratch.Proofreading;
 using JpScratch.Services;
 
 namespace JpScratch.Views;
@@ -22,9 +24,15 @@ public partial class MainWindow : Window
     private readonly TabManager _tabs;
     private readonly TabRepository _repository;
     private readonly HotkeyService _hotkeys;
+    private readonly CredentialService _credentials;
+    private readonly ReactionRepository _reactions;
+    private readonly GeminiProofreadingClient _proofreadingClient;
 
     private readonly IdeographicSpaceColorizer _ideographicSpace = new();
+    private readonly ProofreadingUnderlineRenderer _proofreadingRenderer = new();
     private readonly DispatcherTimer _statusTimer;
+    private readonly DispatcherTimer _proofreadingTimer;
+    private readonly ProofreadingSchedule _proofreadingSchedule = new();
 
     private IntPtr _handle;
 
@@ -41,15 +49,25 @@ public partial class MainWindow : Window
     private Point _dragOrigin;
 
     private CrossTabSearchWindow? _crossTabSearch;
+    private ProofreadingSession? _activeProofreading;
+    private ProofreadingProposal? _selectedProposal;
+    private bool _alternativeInProgress;
+    private bool _proofreadingRunInProgress;
 
     internal MainWindow(SettingsService settings, ThemeService theme, TabManager tabs,
-                        TabRepository repository, HotkeyService hotkeys)
+                        TabRepository repository, HotkeyService hotkeys,
+                        CredentialService credentials,
+                        ReactionRepository reactions,
+                        GeminiProofreadingClient proofreadingClient)
     {
         _settings = settings;
         _theme = theme;
         _tabs = tabs;
         _repository = repository;
         _hotkeys = hotkeys;
+        _credentials = credentials;
+        _reactions = reactions;
+        _proofreadingClient = proofreadingClient;
 
         InitializeComponent();
 
@@ -59,8 +77,10 @@ public partial class MainWindow : Window
 
         TabStrip.ItemsSource = _tabs.Tabs;
         _tabs.ActiveChanged += OnActiveTabChanged;
+        _tabs.TabTextChanged += OnTabTextChanged;
 
         Editor.TextArea.TextView.LineTransformers.Add(_ideographicSpace);
+        Editor.TextArea.TextView.BackgroundRenderers.Add(_proofreadingRenderer);
         Editor.TextArea.Caret.PositionChanged += (_, _) =>
         {
             // どの保存経路を通っても復元できるよう、キャレット位置は常にタブへ写しておく
@@ -83,6 +103,14 @@ public partial class MainWindow : Window
             _statusTimer.Stop();
             UpdateStatus();
         };
+
+        _proofreadingTimer = new DispatcherTimer();
+        _proofreadingTimer.Tick += async (_, _) =>
+        {
+            _proofreadingTimer.Stop();
+            await RunProofreadingAsync(manual: false);
+        };
+        ConfigureProofreadingSchedule();
 
         SetupInputBindings();
         ApplyEditorSettings();
@@ -273,6 +301,8 @@ public partial class MainWindow : Window
         _theme.Apply(settings.Theme);
         ApplyEditorSettings();
         _tabs.ReloadAutoSaveInterval();
+        ConfigureProofreadingSchedule();
+        ScheduleAutomaticProofreading();
         StartupRegistration.Sync(settings.StartWithWindows);
 
         var failures = _hotkeys.Reregister(settings);
@@ -320,6 +350,8 @@ public partial class MainWindow : Window
         Editor.TextArea.TextView.NonPrintableCharacterBrush = Brush("WhitespaceBrush");
 
         _ideographicSpace.Background = Brush("WhitespaceBrush");
+        _proofreadingRenderer.UnderlineBrush = Brush("ProofreadingUnderlineBrush");
+        _proofreadingRenderer.SelectedBackgroundBrush = Brush("ProofreadingSelectionBrush");
 
         FindPanel.ApplyTheme(Brush("SearchMatchBrush"), Brush("SearchCurrentMatchBrush"));
 
@@ -334,16 +366,114 @@ public partial class MainWindow : Window
     {
         if (tab is null) return;
 
+        if (_activeProofreading is not null)
+            _activeProofreading.Changed -= OnProofreadingChanged;
+
         // Document を差し替えるとキャレットが 0 に戻り、その通知で tab.CaretOffset が
         // 上書きされてしまう。復元したい位置は先に控えておく。
         var restoreOffset = Math.Clamp(tab.CaretOffset, 0, tab.Document.TextLength);
 
         Editor.Document = tab.Document;
+        _activeProofreading = tab.Proofreading;
+        _activeProofreading.Changed += OnProofreadingChanged;
+        _selectedProposal = null;
         Editor.CaretOffset = restoreOffset;
         Editor.ScrollToLine(Editor.TextArea.Caret.Line);
 
         FindPanel.OnDocumentSwapped();
+        RefreshProofreadingPresentation();
         UpdateStatus();
+        ScheduleAutomaticProofreading();
+    }
+
+    private void OnTabTextChanged(ScratchTab tab)
+    {
+        _proofreadingSchedule.NotifyChanged(tab.Id, DateTimeOffset.Now);
+        if (ReferenceEquals(tab, _tabs.Active))
+            ScheduleAutomaticProofreading();
+    }
+
+    private void OnProofreadingChanged()
+        => RefreshProofreadingPresentation();
+
+    private void RefreshProofreadingPresentation()
+    {
+        IReadOnlyList<ProofreadingProposal> proposals =
+            _activeProofreading?.Proposals
+                .Where(proposal => proposal.IsActive)
+                .OrderBy(proposal => proposal.Start)
+                .ToArray() ?? [];
+
+        if (_selectedProposal is null ||
+            !_selectedProposal.IsActive ||
+            !proposals.Contains(_selectedProposal))
+        {
+            _selectedProposal = proposals.FirstOrDefault();
+        }
+
+        _proofreadingRenderer.Proposals = proposals;
+        _proofreadingRenderer.Selected = _selectedProposal;
+
+        if (_selectedProposal is null)
+        {
+            ProofreadingPanel.Visibility = Visibility.Collapsed;
+            ProposalPositionText.Text = "";
+            ProposalChangeText.Text = "";
+        }
+        else
+        {
+            int index = IndexOfProposal(proposals, _selectedProposal);
+            ProposalPositionText.Text = $"{index + 1}/{proposals.Count}";
+            ProposalChangeText.Text =
+                $"「{_selectedProposal.Original}」→「{_selectedProposal.Suggestion}」";
+            ProofreadingPanel.Visibility = Visibility.Visible;
+        }
+
+        Editor.TextArea.TextView.Redraw();
+    }
+
+    private void SelectProposal(ProofreadingProposal proposal, bool scrollIntoView)
+    {
+        if (!proposal.IsActive)
+            return;
+
+        _selectedProposal = proposal;
+        RefreshProofreadingPresentation();
+
+        if (!scrollIntoView)
+            return;
+
+        int line = Editor.Document.GetLineByOffset(proposal.Start).LineNumber;
+        Editor.ScrollToLine(line);
+    }
+
+    private void SelectRelativeProposal(int offset)
+    {
+        IReadOnlyList<ProofreadingProposal> proposals =
+            _activeProofreading?.Proposals
+                .Where(proposal => proposal.IsActive)
+                .OrderBy(proposal => proposal.Start)
+                .ToArray() ?? [];
+        if (proposals.Count == 0)
+            return;
+
+        ProofreadingProposal? next =
+            _activeProofreading?.GetRelative(_selectedProposal, offset);
+        if (next is not null)
+            SelectProposal(next, scrollIntoView: true);
+    }
+
+    private static int IndexOfProposal(
+        IReadOnlyList<ProofreadingProposal> proposals,
+        ProofreadingProposal proposal)
+    {
+        for (int index = 0; index < proposals.Count; index++)
+        {
+            if (ReferenceEquals(proposals[index], proposal))
+                return index;
+        }
+
+        return -1;
     }
 
     private void NewTabButton_Click(object sender, RoutedEventArgs e)
@@ -473,6 +603,11 @@ public partial class MainWindow : Window
         Bind(Key.F, ModifierKeys.Control | ModifierKeys.Shift, () => OpenCrossTabSearch(""));
 
         Bind(Key.S, ModifierKeys.Control | ModifierKeys.Shift, ExportActiveTab);
+        Bind(Key.Enter, ModifierKeys.Control, RunManualProofreading);
+        Bind(Key.F8, ModifierKeys.None, () => SelectRelativeProposal(1));
+        Bind(Key.F8, ModifierKeys.Shift, () => SelectRelativeProposal(-1));
+        Bind(Key.OemPeriod, ModifierKeys.Control, AcceptSelectedProposal);
+        Bind(Key.OemComma, ModifierKeys.Control, RejectSelectedProposal);
     }
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
@@ -513,6 +648,499 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void Editor_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_activeProofreading is null)
+            return;
+
+        var position = Editor.GetPositionFromPoint(e.GetPosition(Editor));
+        if (position is null)
+            return;
+
+        int offset = Editor.Document.GetOffset(position.Value.Location);
+        ProofreadingProposal? proposal = _activeProofreading.FindAtOffset(offset);
+        if (proposal is null)
+            return;
+
+        SelectProposal(proposal, scrollIntoView: false);
+        Editor.TextArea.Focus();
+        e.Handled = true;
+    }
+
+    private void PreviousProposalButton_Click(object sender, RoutedEventArgs e)
+    {
+        SelectRelativeProposal(-1);
+        Editor.TextArea.Focus();
+    }
+
+    private void NextProposalButton_Click(object sender, RoutedEventArgs e)
+    {
+        SelectRelativeProposal(1);
+        Editor.TextArea.Focus();
+    }
+
+    private void AcceptProposalButton_Click(object sender, RoutedEventArgs e)
+        => AcceptSelectedProposal();
+
+    private void RejectProposalButton_Click(object sender, RoutedEventArgs e)
+        => RejectSelectedProposal();
+
+    private void ReasonProposalButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ReasonProposalButton.ContextMenu is not { } menu)
+            return;
+
+        menu.PlacementTarget = ReasonProposalButton;
+        menu.Placement = PlacementMode.Bottom;
+        menu.IsOpen = true;
+    }
+
+    private void RejectWithReasonMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedProposal is not { IsActive: true } proposal ||
+            !TryGetReason(generatesAlternative: false, out string reason))
+        {
+            return;
+        }
+
+        if (!CanReactTo(proposal))
+            return;
+
+        _reactions.Add(
+            _tabs.Active?.Id,
+            proposal,
+            ProofreadingReaction.RejectWithReason,
+            reason);
+        _activeProofreading?.Reject(proposal);
+        SetTransientStatus("理由を記録して拒否しました");
+        Editor.TextArea.Focus();
+    }
+
+    private async void AlternativeWithReasonMenuItem_Click(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (_alternativeInProgress ||
+            _proofreadingRunInProgress ||
+            _selectedProposal is not { IsActive: true } proposal ||
+            !TryGetReason(generatesAlternative: true, out string reason))
+        {
+            return;
+        }
+
+        _suppressHideOnDeactivate = true;
+        string? apiKey = _credentials.GetApiKey(
+            _settings.Current.GeminiApiKeySource);
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            MessageBox.Show(
+                this,
+                "Gemini APIキーが設定されていません。設定画面で登録してください。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            _suppressHideOnDeactivate = false;
+            return;
+        }
+
+        MessageBoxResult confirmation = MessageBox.Show(
+            this,
+            "別案生成のためGemini APIを1回呼び出します。料金が発生します。\n\n" +
+            "標準グローバル単価: 入力 $0.30／100万トークン、" +
+            "出力・推論 $2.50／100万トークン\n" +
+            "実行後に使用トークン数と料金を表示します。\n\n実行しますか？",
+            "API料金の確認",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (confirmation != MessageBoxResult.Yes)
+        {
+            _suppressHideOnDeactivate = false;
+            return;
+        }
+
+        _alternativeInProgress = true;
+        SetProposalActionsEnabled(false);
+        try
+        {
+            SetTransientStatus("別案を生成しています…");
+            GeminiAlternativeResult result =
+                await _proofreadingClient.GenerateAlternativeAsync(proposal, reason);
+
+            if (!CanReactTo(proposal))
+            {
+                ShowAlternativeCost(result, "生成中に本文が変更されたため、別案は適用しませんでした。");
+                return;
+            }
+
+            _reactions.Add(
+                _tabs.Active?.Id,
+                proposal,
+                ProofreadingReaction.RejectWithReason,
+                reason);
+
+            if (_activeProofreading?.TryReplaceSuggestion(
+                    proposal,
+                    result.Alternative) != true)
+            {
+                ShowAlternativeCost(result, "有効な別案へ差し替えられませんでした。");
+                return;
+            }
+
+            ShowAlternativeCost(result, "別案を表示しました。");
+        }
+        catch (GeminiClientException ex)
+        {
+            MessageBox.Show(
+                this,
+                ex.Message + "\n\n応答を受け取れなかったため、使用量と料金は確認できませんでした。",
+                "別案を生成できませんでした",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            SetTransientStatus("別案生成に失敗しました（使用量・料金は未確認）");
+        }
+        finally
+        {
+            _alternativeInProgress = false;
+            SetProposalActionsEnabled(true);
+            _suppressHideOnDeactivate = false;
+            Activate();
+            Editor.TextArea.Focus();
+        }
+    }
+
+    private void AcceptSelectedProposal()
+    {
+        if (_selectedProposal is not { IsActive: true } proposal ||
+            !CanReactTo(proposal))
+        {
+            return;
+        }
+
+        _reactions.Add(
+            _tabs.Active?.Id,
+            proposal,
+            ProofreadingReaction.Accept);
+        if (_activeProofreading?.TryApply(proposal) == true)
+            SetTransientStatus("修正を許可しました");
+        Editor.TextArea.Focus();
+    }
+
+    private void RejectSelectedProposal()
+    {
+        if (_selectedProposal is not { IsActive: true } proposal ||
+            !CanReactTo(proposal))
+        {
+            return;
+        }
+
+        _reactions.Add(
+            _tabs.Active?.Id,
+            proposal,
+            ProofreadingReaction.Reject);
+        _activeProofreading?.Reject(proposal);
+        SetTransientStatus("修正を拒否しました");
+        Editor.TextArea.Focus();
+    }
+
+    private bool CanReactTo(ProofreadingProposal proposal)
+        => proposal.IsActive &&
+           _activeProofreading is not null &&
+           _activeProofreading.Proposals.Contains(proposal) &&
+           string.Equals(
+               Editor.Document.GetText(proposal.Start, proposal.Length),
+               proposal.Original,
+               StringComparison.Ordinal);
+
+    private bool TryGetReason(bool generatesAlternative, out string reason)
+    {
+        _suppressHideOnDeactivate = true;
+        try
+        {
+            var dialog = new ProofreadingReasonDialog(
+                _reactions.GetRecentReasons(),
+                generatesAlternative)
+            {
+                Owner = this,
+            };
+            bool accepted = dialog.ShowDialog() == true;
+            reason = accepted ? dialog.Reason : "";
+            return accepted;
+        }
+        finally
+        {
+            _suppressHideOnDeactivate = false;
+        }
+    }
+
+    private void SetProposalActionsEnabled(bool enabled)
+    {
+        AcceptProposalButton.IsEnabled = enabled;
+        RejectProposalButton.IsEnabled = enabled;
+        ReasonProposalButton.IsEnabled = enabled;
+    }
+
+    private void ShowAlternativeCost(
+        GeminiAlternativeResult result,
+        string message)
+    {
+        decimal cost =
+            (result.Usage.PromptTokens * 0.30m +
+             result.Usage.BillableOutputTokens * 2.50m) / 1_000_000m;
+        string costText = cost.ToString("0.000000");
+        string summary =
+            $"{message}\n\n入力 {result.Usage.PromptTokens:N0}、" +
+            $"出力・推論 {result.Usage.BillableOutputTokens:N0} tokens\n" +
+            $"料金 ${costText}";
+
+        MessageBox.Show(
+            this,
+            summary,
+            "別案生成の使用量",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+        SetTransientStatus(
+            $"別案 ↑{result.Usage.PromptTokens:N0} " +
+            $"↓{result.Usage.BillableOutputTokens:N0} tok  ${costText}");
+    }
+
+    // ================= 校正の実行制御 =================
+
+    private void ConfigureProofreadingSchedule()
+    {
+        AppSettings settings = _settings.Current;
+        _proofreadingSchedule.Debounce =
+            TimeSpan.FromMilliseconds(settings.ProofreadingDebounceMs);
+        _proofreadingSchedule.MinimumSendInterval =
+            TimeSpan.FromSeconds(settings.ProofreadingMinimumIntervalSeconds);
+        if (!settings.AutoProofreadingEnabled)
+            _proofreadingTimer.Stop();
+    }
+
+    private void ScheduleAutomaticProofreading()
+    {
+        _proofreadingTimer.Stop();
+        if (!_settings.Current.AutoProofreadingEnabled ||
+            _proofreadingRunInProgress ||
+            _tabs.Active is not { } tab)
+        {
+            return;
+        }
+
+        DateTimeOffset? due = _proofreadingSchedule.GetAutomaticDueAt(tab.Id);
+        if (due is null)
+            return;
+
+        TimeSpan delay = due.Value - DateTimeOffset.Now;
+        if (delay < TimeSpan.FromMilliseconds(100))
+            delay = TimeSpan.FromMilliseconds(100);
+        _proofreadingTimer.Interval = delay;
+        _proofreadingTimer.Start();
+    }
+
+    private void RunManualProofreading()
+        => _ = RunProofreadingAsync(manual: true);
+
+    private async Task RunProofreadingAsync(bool manual)
+    {
+        if (_proofreadingRunInProgress ||
+            _alternativeInProgress ||
+            _tabs.Active is not { } tab)
+        {
+            return;
+        }
+
+        if (!manual &&
+            (!_settings.Current.AutoProofreadingEnabled ||
+             !_proofreadingSchedule.IsAutomaticDue(tab.Id, DateTimeOffset.Now)))
+        {
+            ScheduleAutomaticProofreading();
+            return;
+        }
+
+        if (NativeMethods.HasImeComposition(_handle))
+        {
+            SetTransientStatus("IME変換の確定後に校正します");
+            if (!manual)
+            {
+                _proofreadingTimer.Interval = TimeSpan.FromMilliseconds(500);
+                _proofreadingTimer.Start();
+            }
+            return;
+        }
+
+        string snapshot = tab.Document.Text;
+        if (snapshot.Length == 0)
+        {
+            if (!manual)
+                _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
+            return;
+        }
+
+        bool selectionRun = manual && Editor.SelectionLength > 0;
+        ProofreadingPlan plan = selectionRun
+            ? tab.ProofreadingPlanner.CreateSelectionPlan(
+                snapshot,
+                Editor.SelectionStart,
+                Editor.SelectionLength)
+            : tab.ProofreadingPlanner.CreateAutomaticPlan(snapshot);
+
+        if (plan.Requests.Count == 0)
+        {
+            if (!manual)
+                _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
+            SetTransientStatus("校正が必要な変更はありません");
+            return;
+        }
+
+        string? apiKey = _credentials.GetApiKey(
+            _settings.Current.GeminiApiKeySource);
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            if (!manual)
+                _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
+            SetTransientStatus("Gemini APIキーを設定してください");
+            return;
+        }
+
+        if (!ConfirmProofreadingApiUse(plan.Requests.Count, manual))
+        {
+            if (!manual)
+                _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
+            SetTransientStatus("校正をキャンセルしました");
+            return;
+        }
+
+        _proofreadingRunInProgress = true;
+        _proofreadingTimer.Stop();
+        SetProposalActionsEnabled(false);
+
+        List<(ProofreadingRequest Request, GeminiProofreadingResult Result)> results = [];
+        int promptTokens = 0;
+        int outputTokens = 0;
+        try
+        {
+            for (int index = 0; index < plan.Requests.Count; index++)
+            {
+                if (!ReferenceEquals(tab, _tabs.Active) ||
+                    !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
+                {
+                    SetTransientStatus("本文が変更されたため校正結果を破棄しました");
+                    return;
+                }
+
+                TimeSpan intervalDelay =
+                    _proofreadingSchedule.GetDelayBeforeSend(DateTimeOffset.Now);
+                if (intervalDelay > TimeSpan.Zero)
+                {
+                    SetTransientStatus(
+                        $"次の校正送信まで {Math.Ceiling(intervalDelay.TotalSeconds):0} 秒");
+                    await Task.Delay(intervalDelay);
+                }
+
+                if (!ReferenceEquals(tab, _tabs.Active) ||
+                    !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
+                {
+                    SetTransientStatus("本文が変更されたため残りの校正を中止しました");
+                    return;
+                }
+
+                SetTransientStatus(
+                    $"校正しています… {index + 1}/{plan.Requests.Count}");
+                ProofreadingRequest request = plan.Requests[index];
+                GeminiProofreadingResult result =
+                    await _proofreadingClient.ProofreadAsync(request);
+                _proofreadingSchedule.MarkSent(DateTimeOffset.Now);
+                results.Add((request, result));
+                promptTokens += result.Usage.PromptTokens;
+                outputTokens += result.Usage.BillableOutputTokens;
+            }
+
+            if (!selectionRun)
+            {
+                tab.ProofreadingPlanner.MarkSent(plan);
+                _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
+            }
+
+            if (!string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
+            {
+                SetTransientStatus("本文が変更されたため校正結果を破棄しました");
+                return;
+            }
+
+            string corrected = ProofreadingResultMerger.Merge(plan, results);
+            DocumentDiffResult loaded =
+                tab.Proofreading.LoadCorrectedDocument(corrected);
+            int proposals = loaded.Accepted ? loaded.Changes.Count : 0;
+            ShowProofreadingUsage(promptTokens, outputTokens, proposals);
+        }
+        catch (GeminiClientException ex)
+        {
+            if (!selectionRun)
+                _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
+            string knownUsage = results.Count == 0
+                ? "使用量・料金は確認できませんでした。"
+                : BuildUsageText(promptTokens, outputTokens);
+            MessageBox.Show(
+                this,
+                ex.Message + "\n\n" + knownUsage,
+                "校正できませんでした",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            SetTransientStatus("校正に失敗しました");
+        }
+        finally
+        {
+            _proofreadingRunInProgress = false;
+            SetProposalActionsEnabled(true);
+            ScheduleAutomaticProofreading();
+        }
+    }
+
+    private bool ConfirmProofreadingApiUse(int requestCount, bool manual)
+    {
+        _suppressHideOnDeactivate = true;
+        try
+        {
+            string trigger = manual ? "手動校正" : "自動校正";
+            MessageBoxResult result = MessageBox.Show(
+                this,
+                $"{trigger}でGemini APIを{requestCount}回呼び出します。料金が発生します。\n\n" +
+                "標準グローバル単価: 入力 $0.30／100万トークン、" +
+                "出力・推論 $2.50／100万トークン\n" +
+                "複数回の場合は各送信の間隔を空け、実行後に合計料金を表示します。\n\n" +
+                "実行しますか？",
+                "API料金の確認",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            return result == MessageBoxResult.Yes;
+        }
+        finally
+        {
+            _suppressHideOnDeactivate = false;
+        }
+    }
+
+    private void ShowProofreadingUsage(
+        int promptTokens,
+        int outputTokens,
+        int proposals)
+    {
+        string usage = BuildUsageText(promptTokens, outputTokens);
+        SetTransientStatus(
+            $"提案 {proposals}件  ↑{promptTokens:N0} ↓{outputTokens:N0} tok  " +
+            usage[(usage.LastIndexOf('$'))..]);
+    }
+
+    private static string BuildUsageText(int promptTokens, int outputTokens)
+    {
+        decimal cost =
+            (promptTokens * 0.30m + outputTokens * 2.50m) / 1_000_000m;
+        return $"入力 {promptTokens:N0}、出力・推論 {outputTokens:N0} tokens / " +
+               $"料金 ${cost:0.000000}";
+    }
+
     private void RestoreClosedTab()
     {
         if (_tabs.RestoreLastClosed() is null) SetTransientStatus("復元できるタブがありません");
@@ -536,7 +1164,7 @@ public partial class MainWindow : Window
         _suppressHideOnDeactivate = true;
         try
         {
-            var dialog = new SettingsWindow(_settings) { Owner = this };
+            var dialog = new SettingsWindow(_settings, _credentials) { Owner = this };
             dialog.ShowDialog();
         }
         finally

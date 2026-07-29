@@ -27,7 +27,7 @@ dotnet run --project PromptValidation -- --input "この文章を校正して"
 # APIを呼ばず、実際のプロンプトとJSON Schemaを確認
 dotnet run --project PromptValidation -- --dry-run --case style-01
 
-# 提案位置と全文差分ロジックをオフライン検査
+# 提案位置・全文差分・DPAPI資格情報ストアをオフライン検査
 dotnet run --project PromptValidation -- --self-test
 
 # 保存済みの全文応答から個別提案を抽出（APIは呼ばない）
@@ -78,6 +78,18 @@ AvalonEdit と同じ UTF-16 オフセットの局所置換へ変換する。絵�
 
 `ProofreadingSession` も同じ方法でリンクし、`--self-test` で TextAnchor の前方編集追従、
 範囲編集時の失効、境界挿入、複数提案の順次適用を検査する。
+複数提案については、本文オフセットからの個別選択と前後への循環移動も検査する。
+本体の `CredentialService` もリンクし、DPAPI暗号化、再読込、削除、破損ファイルの検出を
+一時ディレクトリだけで検査する。実際のAPIキーやGemini APIは使用しない。
+採用したシステム指示は本体の `ProofreadingPrompt` を共有し、検証版とのずれを防ぐ。
+本体の `GeminiProofreadingClient` もリンクし、ローカルHTTPスタブでリクエスト形式、
+前後文脈タグ、`usageMetadata`、差分生成、1回だけの再試行、恒久エラー、タイムアウト、
+キー未設定を検査する。`ParagraphProofreadingPlanner` の段落境界、変更検出、選択範囲、
+書記素を壊さない2,000文字分割もAPIを呼ばずに検査する。
+理由つき別案の専用プロンプトもローカルHTTPスタブで検査する。リアクションDBは一時SQLiteを使い、
+スキーマ移行、保存、理由候補の順位、本文をUndoしても記録が残ることを検査する。
+`ProofreadingSchedule` は時刻を固定してデバウンス、最小送信間隔、タブごとの待機状態を検査する。
+複数の段落・分割リクエストから返った局所差分を送信時点の全文へ戻せることも検査する。
 
 全文修正版には提案ごとのカテゴリ・理由が含まれない。固定表示を置く意味もないため、
 本体の提案モデルには保持せず、UIにも表示しない。分類・理由生成だけを目的とする
