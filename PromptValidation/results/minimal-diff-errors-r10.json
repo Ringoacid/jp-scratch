@@ -1,0 +1,1330 @@
+[
+  {
+    "id": "typo-01",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 1,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "コミニュケーション",
+        "suggestion": "コミュニケーション",
+        "left_context": "",
+        "right_context": "が大事です。",
+        "reason": "一般的な外来語の表記として誤っているため",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 723,
+    "candidateTokens": 49,
+    "elapsedMilliseconds": 1561.6359,
+    "costUsd": 0.00033940
+  },
+  {
+    "id": "typo-02",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 1,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "つて",
+        "suggestion": "ついて",
+        "left_context": "美容に",
+        "right_context": "調べています。",
+        "reason": "助詞の誤り",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 719,
+    "candidateTokens": 88,
+    "elapsedMilliseconds": 925.6299,
+    "costUsd": 0.00043570
+  },
+  {
+    "id": "typo-03",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 1,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "問ふ",
+        "suggestion": "塗る",
+        "left_context": "木材に防腐剤を",
+        "right_context": "。",
+        "reason": "「防腐剤を問ふ」は文脈上の明らかな誤字であり、「塗る」の誤りと考えられるため。",
+        "confidence": 0.95
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 718,
+    "candidateTokens": 114,
+    "elapsedMilliseconds": 1150.3768,
+    "costUsd": 0.00050040
+  },
+  {
+    "id": "typo-04",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 1,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「キーぼーぢ」 → 「キーボード」"
+    ],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "ぼーぢ",
+        "suggestion": "ード",
+        "left_context": "新しいキー",
+        "right_context": "を買った。",
+        "reason": "キーボードの誤記です。",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 712,
+    "candidateTokens": 88,
+    "elapsedMilliseconds": 1144.3379,
+    "costUsd": 0.00043360
+  },
+  {
+    "id": "typo-05",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 1,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "ア",
+        "suggestion": "は",
+        "left_context": "この文章",
+        "right_context": "、間違いが二ともある。",
+        "reason": "助詞の誤用または誤字",
+        "confidence": 0.99
+      },
+      {
+        "category": "typo",
+        "original": "二",
+        "suggestion": "二つ",
+        "left_context": "この文章ア、間違いが",
+        "right_context": "ともある。",
+        "reason": "脱字または誤字",
+        "confidence": 0.99
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 716,
+    "candidateTokens": 128,
+    "elapsedMilliseconds": 1140.3408,
+    "costUsd": 0.00053480
+  },
+  {
+    "id": "typo-01",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 2,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "コミニュケーション",
+        "suggestion": "コミュニケーション",
+        "left_context": "",
+        "right_context": "が大事です。",
+        "reason": "一般的な表記は「コミュニケーション」です。",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 723,
+    "candidateTokens": 87,
+    "elapsedMilliseconds": 943.7255,
+    "costUsd": 0.00043440
+  },
+  {
+    "id": "typo-02",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 2,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "つ",
+        "suggestion": "つい",
+        "left_context": "美容に",
+        "right_context": "調べています。",
+        "reason": "「につて」は「について」の誤記",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 719,
+    "candidateTokens": 91,
+    "elapsedMilliseconds": 1039.6587,
+    "costUsd": 0.00044320
+  },
+  {
+    "id": "typo-03",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 2,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "conversion",
+        "original": "問ふ",
+        "suggestion": "塗る",
+        "left_context": "木材に防腐剤を",
+        "right_context": "。",
+        "reason": "防腐剤に対する動詞の変換ミス",
+        "confidence": 0.99
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 718,
+    "candidateTokens": 97,
+    "elapsedMilliseconds": 924.0067,
+    "costUsd": 0.00045790
+  },
+  {
+    "id": "typo-04",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 2,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「キーぼーぢ」 → 「キーボード」"
+    ],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "ぼーぢ",
+        "suggestion": "ード",
+        "left_context": "新しいキー",
+        "right_context": "を買った。",
+        "reason": "キーボードの誤記です。",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 712,
+    "candidateTokens": 88,
+    "elapsedMilliseconds": 1039.457,
+    "costUsd": 0.00043360
+  },
+  {
+    "id": "typo-05",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 2,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「二とも」 → 「二つとも」"
+    ],
+    "corrections": [
+      {
+        "category": "grammar",
+        "original": "ア",
+        "suggestion": "は",
+        "left_context": "この文章",
+        "right_context": "、間違いが二ともある。",
+        "reason": "助詞の誤用",
+        "confidence": 1
+      },
+      {
+        "category": "typo",
+        "original": "二",
+        "suggestion": "三つ",
+        "left_context": "この文章ア、間違いが",
+        "right_context": "ともある。",
+        "reason": "誤字",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 716,
+    "candidateTokens": 162,
+    "elapsedMilliseconds": 1032.4676,
+    "costUsd": 0.00061980
+  },
+  {
+    "id": "typo-01",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 3,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "コミニュケーション",
+        "suggestion": "コミュニケーション",
+        "left_context": "",
+        "right_context": "が大事です。",
+        "reason": "慣用的な表記の誤り",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 723,
+    "candidateTokens": 59,
+    "elapsedMilliseconds": 946.9671,
+    "costUsd": 0.00036440
+  },
+  {
+    "id": "typo-02",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 3,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "つ",
+        "suggestion": "つい",
+        "left_context": "美容に",
+        "right_context": "て調べています。",
+        "reason": "助詞の誤用（つ -> つい）",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 719,
+    "candidateTokens": 91,
+    "elapsedMilliseconds": 919.5655,
+    "costUsd": 0.00044320
+  },
+  {
+    "id": "typo-03",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 3,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "問ふ",
+        "suggestion": "塗る",
+        "left_context": "木材に防腐剤を",
+        "right_context": "。",
+        "reason": "文脈上、「問ふ」は「塗る」の誤記と考えられるため",
+        "confidence": 0.9
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 718,
+    "candidateTokens": 76,
+    "elapsedMilliseconds": 1048.115,
+    "costUsd": 0.00040540
+  },
+  {
+    "id": "typo-04",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 3,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「キーぼーぢ」 → 「キーボード」"
+    ],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "ぼーぢ",
+        "suggestion": "ード",
+        "left_context": "新しいキー",
+        "right_context": "を買った。",
+        "reason": "キーボードの入力誤り",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 712,
+    "candidateTokens": 88,
+    "elapsedMilliseconds": 937.1856,
+    "costUsd": 0.00043360
+  },
+  {
+    "id": "typo-05",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 3,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「二とも」 → 「二つとも」"
+    ],
+    "corrections": [
+      {
+        "category": "grammar",
+        "original": "ア",
+        "suggestion": "は",
+        "left_context": "この文章",
+        "right_context": "、間違いが二ともある。",
+        "reason": "助詞の誤用",
+        "confidence": 1
+      },
+      {
+        "category": "typo",
+        "original": "二",
+        "suggestion": "三つ",
+        "left_context": "この文章ア、間違いが",
+        "right_context": "ともある。",
+        "reason": "誤字",
+        "confidence": 0.9
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 716,
+    "candidateTokens": 164,
+    "elapsedMilliseconds": 1040.1973,
+    "costUsd": 0.00062480
+  },
+  {
+    "id": "typo-01",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 4,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "kana_typo",
+        "original": "コミニュケーション",
+        "suggestion": "コミュニケーション",
+        "left_context": "",
+        "right_context": "が大事です。",
+        "reason": "「コミニュケーション」は「コミュニケーション」の誤記です。",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 723,
+    "candidateTokens": 55,
+    "elapsedMilliseconds": 828.2531,
+    "costUsd": 0.00035440
+  },
+  {
+    "id": "typo-02",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 4,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "つて",
+        "suggestion": "ついて",
+        "left_context": "美容に",
+        "right_context": "調べています。",
+        "reason": "助詞の誤り",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 719,
+    "candidateTokens": 45,
+    "elapsedMilliseconds": 828.5006,
+    "costUsd": 0.00032820
+  },
+  {
+    "id": "typo-03",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 4,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "問ふ",
+        "suggestion": "塗る",
+        "left_context": "木材に防腐剤を",
+        "right_context": "。",
+        "reason": "文脈上、「問ふ」は「塗る」の誤字であると考えられるため",
+        "confidence": 0.95
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 718,
+    "candidateTokens": 106,
+    "elapsedMilliseconds": 1035.8472,
+    "costUsd": 0.00048040
+  },
+  {
+    "id": "typo-04",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 4,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「キーぼーぢ」 → 「キーボード」"
+    ],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "ぼーぢ",
+        "suggestion": "ード",
+        "left_context": "新しいキー",
+        "right_context": "を買った。",
+        "reason": "キーボードの入力誤り",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 712,
+    "candidateTokens": 88,
+    "elapsedMilliseconds": 939.4904,
+    "costUsd": 0.00043360
+  },
+  {
+    "id": "typo-05",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 4,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「二とも」 → 「二つとも」"
+    ],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "ア",
+        "suggestion": "は",
+        "left_context": "この文章",
+        "right_context": "、間違いが二ともある。",
+        "reason": "助詞の誤り",
+        "confidence": 1
+      },
+      {
+        "category": "typo",
+        "original": "二",
+        "suggestion": "三",
+        "left_context": "間違いが",
+        "right_context": "ともある。",
+        "reason": "誤字",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 716,
+    "candidateTokens": 158,
+    "elapsedMilliseconds": 1142.4202,
+    "costUsd": 0.00060980
+  },
+  {
+    "id": "typo-01",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 5,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "kana_typo",
+        "original": "コミニュケーション",
+        "suggestion": "コミュニケーション",
+        "left_context": "",
+        "right_context": "が大事です。",
+        "reason": "一般的な表記は「コミュニケーション」であるため。",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 723,
+    "candidateTokens": 92,
+    "elapsedMilliseconds": 1247.9692,
+    "costUsd": 0.00044690
+  },
+  {
+    "id": "typo-02",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 5,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "つて",
+        "suggestion": "ついて",
+        "left_context": "美容に",
+        "right_context": "調べています。",
+        "reason": "助詞の誤り",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 719,
+    "candidateTokens": 88,
+    "elapsedMilliseconds": 936.5947,
+    "costUsd": 0.00043570
+  },
+  {
+    "id": "typo-03",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 5,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「問ふ」 → 「塗布」 または 「塗る」"
+    ],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "問",
+        "suggestion": "塗",
+        "left_context": "木材に防腐剤を",
+        "right_context": "ふ。",
+        "reason": "防腐剤を塗る文脈において「問ふ」は誤字であるため",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 718,
+    "candidateTokens": 102,
+    "elapsedMilliseconds": 934.3732,
+    "costUsd": 0.00047040
+  },
+  {
+    "id": "typo-04",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 5,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「キーぼーぢ」 → 「キーボード」"
+    ],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "ぼーぢ",
+        "suggestion": "ード",
+        "left_context": "新しいキー",
+        "right_context": "を買った。",
+        "reason": "キーボードの誤記",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 712,
+    "candidateTokens": 87,
+    "elapsedMilliseconds": 1038.2133,
+    "costUsd": 0.00043110
+  },
+  {
+    "id": "typo-05",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 5,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「二とも」 → 「二つとも」"
+    ],
+    "corrections": [
+      {
+        "category": "grammar",
+        "original": "ア",
+        "suggestion": "は",
+        "left_context": "この文章",
+        "right_context": "、間違いが二ともある。",
+        "reason": "助詞の誤用です。",
+        "confidence": 1
+      },
+      {
+        "category": "typo",
+        "original": "二",
+        "suggestion": "三",
+        "left_context": "間違いが",
+        "right_context": "ともある。",
+        "reason": "誤字です。",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 716,
+    "candidateTokens": 160,
+    "elapsedMilliseconds": 1047.5754,
+    "costUsd": 0.00061480
+  },
+  {
+    "id": "typo-01",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 6,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "コミニュケーション",
+        "suggestion": "コミュニケーション",
+        "left_context": "",
+        "right_context": "が大事です。",
+        "reason": "一般的な表記はコミュニケーションです",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 723,
+    "candidateTokens": 44,
+    "elapsedMilliseconds": 935.9029,
+    "costUsd": 0.00032690
+  },
+  {
+    "id": "typo-02",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 6,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "つて",
+        "suggestion": "ついて",
+        "left_context": "美容に",
+        "right_context": "調べています。",
+        "reason": "「につて」は「について」の誤記です。",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 719,
+    "candidateTokens": 95,
+    "elapsedMilliseconds": 1256.1773,
+    "costUsd": 0.00045320
+  },
+  {
+    "id": "typo-03",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 6,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "問ふ",
+        "suggestion": "塗る",
+        "left_context": "木材に防腐剤を",
+        "right_context": "。",
+        "reason": "「問ふ」は「塗る」の誤字",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 718,
+    "candidateTokens": 97,
+    "elapsedMilliseconds": 934.3337,
+    "costUsd": 0.00045790
+  },
+  {
+    "id": "typo-04",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 6,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「キーぼーぢ」 → 「キーボード」"
+    ],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "ぼーぢ",
+        "suggestion": "ード",
+        "left_context": "新しいキー",
+        "right_context": "を買った。",
+        "reason": "キーボードの誤記",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 712,
+    "candidateTokens": 87,
+    "elapsedMilliseconds": 934.472,
+    "costUsd": 0.00043110
+  },
+  {
+    "id": "typo-05",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 6,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「二とも」 → 「二つとも」"
+    ],
+    "corrections": [
+      {
+        "category": "grammar",
+        "original": "ア",
+        "suggestion": "は",
+        "left_context": "この文章",
+        "right_context": "、間違いが二ともある。",
+        "reason": "助詞の誤り",
+        "confidence": 1
+      },
+      {
+        "category": "typo",
+        "original": "二",
+        "suggestion": "三",
+        "left_context": "この文章ア、間違いが",
+        "right_context": "ともある。",
+        "reason": "誤字",
+        "confidence": 0.8
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 716,
+    "candidateTokens": 163,
+    "elapsedMilliseconds": 1145.6446,
+    "costUsd": 0.00062230
+  },
+  {
+    "id": "typo-01",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 7,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "kana_typo",
+        "original": "コミニュケーション",
+        "suggestion": "コミュニケーション",
+        "left_context": "",
+        "right_context": "が大事です。",
+        "reason": "一般的な外来語の表記として「コミニュケーション」ではなく「コミュニケーション」が正しいため。",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 723,
+    "candidateTokens": 102,
+    "elapsedMilliseconds": 1139.0815,
+    "costUsd": 0.00047190
+  },
+  {
+    "id": "typo-02",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 7,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "つて",
+        "suggestion": "ついて",
+        "left_context": "美容に",
+        "right_context": "調べています。",
+        "reason": "「につて」は「について」の誤記",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 719,
+    "candidateTokens": 92,
+    "elapsedMilliseconds": 932.5959,
+    "costUsd": 0.00044570
+  },
+  {
+    "id": "typo-03",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 7,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「問ふ」 → 「塗布」 または 「塗る」"
+    ],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "問",
+        "suggestion": "塗",
+        "left_context": "木材に防腐剤を",
+        "right_context": "ふ。",
+        "reason": "防腐剤は「問ふ」のではなく「塗る」もののため",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 718,
+    "candidateTokens": 99,
+    "elapsedMilliseconds": 1035.8678,
+    "costUsd": 0.00046290
+  },
+  {
+    "id": "typo-04",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 7,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「キーぼーぢ」 → 「キーボード」"
+    ],
+    "corrections": [
+      {
+        "category": "kana_typo",
+        "original": "ぼーぢ",
+        "suggestion": "ード",
+        "left_context": "新しいキー",
+        "right_context": "を買った。",
+        "reason": "キーボードのカナ打鍵ミス",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 712,
+    "candidateTokens": 91,
+    "elapsedMilliseconds": 941.0152,
+    "costUsd": 0.00044110
+  },
+  {
+    "id": "typo-05",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 7,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "ア",
+        "suggestion": "は",
+        "left_context": "この文章",
+        "right_context": "、間違いが二ともある。",
+        "reason": "助詞の誤り",
+        "confidence": 1
+      },
+      {
+        "category": "typo",
+        "original": "二とも",
+        "suggestion": "二つとも",
+        "left_context": "この文章ア、間違いが",
+        "right_context": "ある。",
+        "reason": "脱字",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 716,
+    "candidateTokens": 164,
+    "elapsedMilliseconds": 1143.9579,
+    "costUsd": 0.00062480
+  },
+  {
+    "id": "typo-01",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 8,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "kana_typo",
+        "original": "コミニュケーション",
+        "suggestion": "コミュニケーション",
+        "left_context": "",
+        "right_context": "が大事です。",
+        "reason": "「コミニュケーション」は「コミュニケーション」の誤記です。",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 723,
+    "candidateTokens": 55,
+    "elapsedMilliseconds": 937.7384,
+    "costUsd": 0.00035440
+  },
+  {
+    "id": "typo-02",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 8,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "つ",
+        "suggestion": "つい",
+        "left_context": "美容に",
+        "right_context": "て調べています。",
+        "reason": "助詞の誤用（正しくは「について」）",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 719,
+    "candidateTokens": 93,
+    "elapsedMilliseconds": 931.3793,
+    "costUsd": 0.00044820
+  },
+  {
+    "id": "typo-03",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 8,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "問ふ",
+        "suggestion": "塗る",
+        "left_context": "木材に防腐剤を",
+        "right_context": "。",
+        "reason": "「防腐剤を問ふ」は文脈上の誤字であり、正しくは「塗る」と考えられる",
+        "confidence": 0.95
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 718,
+    "candidateTokens": 111,
+    "elapsedMilliseconds": 1161.8963,
+    "costUsd": 0.00049290
+  },
+  {
+    "id": "typo-04",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 8,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「キーぼーぢ」 → 「キーボード」"
+    ],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "ぼーぢ",
+        "suggestion": "ード",
+        "left_context": "新しいキー",
+        "right_context": "を買った。",
+        "reason": "キーボードの入力誤り",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 712,
+    "candidateTokens": 90,
+    "elapsedMilliseconds": 1038.5445,
+    "costUsd": 0.00043860
+  },
+  {
+    "id": "typo-05",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 8,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「二とも」 → 「二つとも」"
+    ],
+    "corrections": [
+      {
+        "category": "grammar",
+        "original": "ア",
+        "suggestion": "は",
+        "left_context": "この文章",
+        "right_context": "、間違いが二ともある。",
+        "reason": "助詞の誤り",
+        "confidence": 1
+      },
+      {
+        "category": "typo",
+        "original": "二",
+        "suggestion": "三",
+        "left_context": "この文章ア、間違いが",
+        "right_context": "ともある。",
+        "reason": "誤字",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 716,
+    "candidateTokens": 161,
+    "elapsedMilliseconds": 1036.6543,
+    "costUsd": 0.00061730
+  },
+  {
+    "id": "typo-01",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 9,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "kana_typo",
+        "original": "コミニュケーション",
+        "suggestion": "コミュニケーション",
+        "left_context": "",
+        "right_context": "が大事です。",
+        "reason": "一般的な表記は「コミュニケーション」であるため",
+        "confidence": 0.95
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 723,
+    "candidateTokens": 93,
+    "elapsedMilliseconds": 1039.5423,
+    "costUsd": 0.00044940
+  },
+  {
+    "id": "typo-02",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 9,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "つて",
+        "suggestion": "ついて",
+        "left_context": "美容に",
+        "right_context": "調べています。",
+        "reason": "「につて」は「について」の誤記",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 719,
+    "candidateTokens": 92,
+    "elapsedMilliseconds": 839.607,
+    "costUsd": 0.00044570
+  },
+  {
+    "id": "typo-03",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 9,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "問ふ",
+        "suggestion": "塗る",
+        "left_context": "木材に防腐剤を",
+        "right_context": "",
+        "reason": "防腐剤を塗る場面で「問ふ」となっているのは明らかな誤字です。",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 718,
+    "candidateTokens": 103,
+    "elapsedMilliseconds": 928.6122,
+    "costUsd": 0.00047290
+  },
+  {
+    "id": "typo-04",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 9,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「キーぼーぢ」 → 「キーボード」"
+    ],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "ぼーぢ",
+        "suggestion": "ード",
+        "left_context": "新しいキー",
+        "right_context": "を買った。",
+        "reason": "キーボードの誤記",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 712,
+    "candidateTokens": 87,
+    "elapsedMilliseconds": 942.5477,
+    "costUsd": 0.00043110
+  },
+  {
+    "id": "typo-05",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 9,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「二とも」 → 「二つとも」"
+    ],
+    "corrections": [
+      {
+        "category": "grammar",
+        "original": "ア",
+        "suggestion": "は",
+        "left_context": "この文章",
+        "right_context": "、間違いが二ともある。",
+        "reason": "助詞の誤り",
+        "confidence": 1
+      },
+      {
+        "category": "typo",
+        "original": "二",
+        "suggestion": "三",
+        "left_context": "この文章ア、間違いが",
+        "right_context": "ともある。",
+        "reason": "誤字",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 716,
+    "candidateTokens": 161,
+    "elapsedMilliseconds": 1036.5303,
+    "costUsd": 0.00061730
+  },
+  {
+    "id": "typo-01",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 10,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "kana_typo",
+        "original": "コミニュケーション",
+        "suggestion": "コミュニケーション",
+        "left_context": "",
+        "right_context": "が大事です。",
+        "reason": "「コミニュケーション」は「コミュニケーション」の誤記です。",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 723,
+    "candidateTokens": 97,
+    "elapsedMilliseconds": 1033.6562,
+    "costUsd": 0.00045940
+  },
+  {
+    "id": "typo-02",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 10,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "つ",
+        "suggestion": "つい",
+        "left_context": "美容に",
+        "right_context": "て調べています。",
+        "reason": "助詞の誤り",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 719,
+    "candidateTokens": 86,
+    "elapsedMilliseconds": 1040.3253,
+    "costUsd": 0.00043070
+  },
+  {
+    "id": "typo-03",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 10,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "問ふ",
+        "suggestion": "塗る",
+        "left_context": "木材に防腐剤を",
+        "right_context": "。",
+        "reason": "防腐剤を塗る文脈で「問ふ」は明らかに誤りであるため",
+        "confidence": 0.95
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 718,
+    "candidateTokens": 107,
+    "elapsedMilliseconds": 1049.9295,
+    "costUsd": 0.00048290
+  },
+  {
+    "id": "typo-04",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 10,
+    "passed": true,
+    "failures": [],
+    "corrections": [
+      {
+        "category": "typo",
+        "original": "キーぼーぢ",
+        "suggestion": "キーボード",
+        "left_context": "新しい",
+        "right_context": "を買った。",
+        "reason": "キーボードの誤記です。",
+        "confidence": 1
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 712,
+    "candidateTokens": 89,
+    "elapsedMilliseconds": 1038.6018,
+    "costUsd": 0.00043610
+  },
+  {
+    "id": "typo-05",
+    "kind": "error",
+    "variant": "minimal-diff",
+    "iteration": 10,
+    "passed": false,
+    "failures": [
+      "期待修正を確認できない: 「二とも」 → 「二つとも」"
+    ],
+    "corrections": [
+      {
+        "category": "grammar",
+        "original": "ア",
+        "suggestion": "は",
+        "left_context": "この文章",
+        "right_context": "、間違いが二ともある。",
+        "reason": "助詞の誤用です。",
+        "confidence": 1
+      },
+      {
+        "category": "typo",
+        "original": "二",
+        "suggestion": "三",
+        "left_context": "文章ア、間違いが",
+        "right_context": "ともある。",
+        "reason": "誤字の可能性があります。",
+        "confidence": 0.5
+      }
+    ],
+    "discardedCount": 0,
+    "promptTokens": 716,
+    "candidateTokens": 165,
+    "elapsedMilliseconds": 930.5835,
+    "costUsd": 0.00062730
+  }
+]

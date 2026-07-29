@@ -1,0 +1,76 @@
+# プロンプト検証アプリ
+
+Gemini の校正精度と文体保護を、JP Scratch 本体へ組み込む前に検証する独立コンソールアプリ。
+既定のテストセットは、誤り検出5本と文体保護25本を `cases.json` に収録している。
+既定のプロンプト案は、文脈を含む全文を渡して修正版全文を受け取る `full-rewrite-safe`。
+
+## 実行
+
+PowerShell で API キーを現在のプロセスだけに設定して実行する。
+
+```powershell
+$env:GEMINI_API_KEY = "..."
+dotnet run --project PromptValidation
+```
+
+API キーは環境変数からのみ読み、引数・ログ・レポートには出力しない。
+
+主な実行例:
+
+```powershell
+# 1ケースだけ検証
+dotnet run --project PromptValidation -- --case typo-01
+
+# 任意の文章を試す
+dotnet run --project PromptValidation -- --input "この文章を校正して"
+
+# APIを呼ばず、実際のプロンプトとJSON Schemaを確認
+dotnet run --project PromptValidation -- --dry-run --case style-01
+
+# 提案位置と全文差分ロジックをオフライン検査
+dotnet run --project PromptValidation -- --self-test
+
+# 保存済みの全文応答から個別提案を抽出（APIは呼ばない）
+dotnet run --project PromptValidation -- --analyze-results PromptValidation/results
+
+# 結果をJSONでも保存
+dotnet run --project PromptValidation -- --output prompt-results.json
+
+# プロンプト案を比較（各ケース10回）
+dotnet run --project PromptValidation -- --suite error --repeat 10 --variant phrase-span
+
+# 1回の実行に費用上限を設定
+dotnet run --project PromptValidation -- --max-cost 0.25
+```
+
+終了コードは、全件合格なら `0`、検証失敗なら `1`、設定・通信エラーなら `2`。
+各API呼び出しと集計には、`usageMetadata` と現行単価に基づく推定USD料金を表示する。
+
+プロンプト案:
+
+- `full-rewrite-safe`（既定）: 全文の修正版を返す。文書境界と文中命令の無視を明示。
+- `full-rewrite`: ユーザー提示の簡潔な全文修正版方式。
+- `phrase-span`: 修正箇所ごとに語句・文節全体の置換JSONを返す。
+- `minimal-diff`: 修正箇所ごとに最小差分JSONを返す。
+- `current`: 初期の置換JSONプロンプト。
+
+## 合否判定
+
+- `error`: モデルの提案を原文へ適用した結果、`expectedChanges` の修正後候補（`to` 配列）の
+  いずれかが存在し、修正前文字列が残っていなければ合格。
+- `style`: 有効な提案が1件もなければ合格。口語などへの提案は文体保護違反として表示。
+- モデルの `original` と前後文脈から原文位置を解決できない提案は破棄し、失敗として集計。
+- 全文方式では、期待修正に加えて前後文脈の完全な保持、異常な長さ変化、文体例との完全一致を検査。
+
+`cases.json` は編集可能。ラフな文章は実際のユーザー文体に置き換えたり追加したりして評価する。
+
+## 全文から個別提案への変換
+
+`DocumentDiff` は原文とモデルの修正版全文を Unicode の書記素単位で比較し、各変更を
+AvalonEdit と同じ UTF-16 オフセットの局所置換へ変換する。絵文字・結合文字を途中で分割せず、
+同じ語の中で最大2書記素だけ離れた変更は1提案へまとめる。脱字のような純粋な挿入は、
+隣接1書記素を含む置換にして編集追従可能な範囲を持たせる。
+
+全提案を原文に再適用して修正版を再現できない場合、変更範囲が重なる場合、または変更量が
+安全上限を超える場合は応答全体を破棄する。詳細と検証結果は
+`algorithm-validation-2026-07-29.md` を参照。

@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="jp-scratch.csproj" />
+  <Project Path="PromptValidation/PromptValidation.csproj" />
 </Solution>

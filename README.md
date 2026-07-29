@@ -63,6 +63,18 @@ powershell -File tools\smoke-test.ps1 publish\fdd\JpScratch.exe
 
 > **`%APPDATA%\JpScratch` を消してから走る**ので、実データがある状態では実行しないこと。
 
+### 校正プロンプトの検証
+
+v2へ組み込む前の独立検証アプリは `PromptValidation/` にある。
+
+```powershell
+$env:GEMINI_API_KEY = "..."
+dotnet run --project PromptValidation
+```
+
+誤り例5本と文体保護例25本を一括評価する。個別実行、任意文章、ドライランなどの詳細は
+[`PromptValidation/README.md`](PromptValidation/README.md) を参照。
+
 ### インストーラー (MSI)
 
 前提: WiX v5（`dotnet tool install --global wix --version 5.0.2`）

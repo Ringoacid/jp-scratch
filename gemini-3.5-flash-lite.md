@@ -37,3 +37,11 @@
 - **Batch API**: サポート対象
 - **Flex 推論 (Flex Inference)**: サポート対象
 - **優先度推論 (Priority Inference)**: サポート対象
+
+## 6. 生成パラメータ
+- `temperature` / `top-K` / `top-P` のカスタム値はサポート対象外。指定しても無視される。
+- Gemini 3 ファミリー向けの設定値として `temperature=1.0` を使用する。
+
+## 7. Developer API 標準単価（2026-07-29 確認）
+- 入力: **$0.30 / 1,000,000 tokens**
+- 出力（thinking tokens を含む）: **$2.50 / 1,000,000 tokens**

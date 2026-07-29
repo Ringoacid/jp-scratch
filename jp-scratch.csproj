@@ -49,4 +49,10 @@
     <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
+  <!-- 独立したプロンプト検証アプリのソースを WPF 本体へ取り込まない。 -->
+  <ItemGroup>
+    <Compile Remove="PromptValidation\**\*.cs" />
+    <None Remove="PromptValidation\**\*" />
+  </ItemGroup>
+
 </Project>

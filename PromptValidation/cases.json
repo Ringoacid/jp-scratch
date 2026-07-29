@@ -1,0 +1,78 @@
+[
+  {
+    "id": "typo-01",
+    "kind": "error",
+    "text": "コミニュケーションが大事です。",
+    "beforeContext": "新しいチームでは、最初に目的と役割を共有します。認識のずれを減らすには、日々の会話と短いフィードバックが欠かせません。",
+    "afterContext": "特に困りごとは早めに言葉にして、全員が見える場所へ残します。形式よりも、必要な情報が伝わることを優先します。",
+    "expectedChanges": [
+      { "from": "コミニュケーション", "to": ["コミュニケーション"] }
+    ]
+  },
+  {
+    "id": "typo-02",
+    "kind": "error",
+    "text": "美容につて調べています。",
+    "beforeContext": "来月の記事では、毎日のスキンケアを取り上げる予定です。化粧品だけでなく、睡眠や食事との関係も確認しています。",
+    "afterContext": "専門家の見解と公的機関の資料を照らし合わせ、根拠の弱い情報は載せません。読者が試しやすい内容にまとめます。",
+    "expectedChanges": [
+      { "from": "美容につて", "to": ["美容について"] }
+    ]
+  },
+  {
+    "id": "typo-03",
+    "kind": "error",
+    "text": "木材に防腐剤を問ふ。",
+    "beforeContext": "屋外用の棚を作るため、切り出した板の表面を研磨しました。角を丸め、削りかすと汚れも落としてあります。",
+    "afterContext": "十分に乾燥させてから組み立て、最後に塗装します。作業中は手袋を着用し、換気にも注意します。",
+    "expectedChanges": [
+      { "from": "問ふ", "to": ["塗布", "塗る"] }
+    ]
+  },
+  {
+    "id": "typo-04",
+    "kind": "error",
+    "text": "新しいキーぼーぢを買った。",
+    "beforeContext": "長く使っていた入力機器の一部が反応しなくなりました。仕事で毎日使うため、修理ではなく交換することにしました。",
+    "afterContext": "打鍵感は軽く、以前よりも音が静かです。キー配列に慣れるまで、しばらく時間がかかりそうです。",
+    "expectedChanges": [
+      { "from": "キーぼーぢ", "to": ["キーボード"] }
+    ]
+  },
+  {
+    "id": "typo-05",
+    "kind": "error",
+    "text": "この文章ア、間違いが二ともある。",
+    "beforeContext": "校正機能が複数の誤りを個別に検出できるか試します。直す必要のない表現まで変更しないことも重要です。",
+    "afterContext": "それぞれを独立した提案として返し、利用者が一件ずつ判断できるようにします。原文にない箇所を作ってはいけません。",
+    "expectedChanges": [
+      { "from": "文章ア", "to": ["文章は"] },
+      { "from": "二とも", "to": ["二つとも", "間違いが二つある"] }
+    ]
+  },
+  { "id": "style-01", "kind": "style", "text": "今日はもう帰る。疲れたし。" },
+  { "id": "style-02", "kind": "style", "text": "これ、あとで見といて。" },
+  { "id": "style-03", "kind": "style", "text": "たぶん明日にはできるかな。" },
+  { "id": "style-04", "kind": "style", "text": "そういうの、俺は好きだよ。" },
+  { "id": "style-05", "kind": "style", "text": "この仕様でいけると思ってる。" },
+  { "id": "style-06", "kind": "style", "text": "まあ、そんな感じ。" },
+  { "id": "style-07", "kind": "style", "text": "サーバ落ちてるっぽい。" },
+  { "id": "style-08", "kind": "style", "text": "やってみたけどダメだった。" },
+  { "id": "style-09", "kind": "style", "text": "これ誰が直すんだっけ？" },
+  { "id": "style-10", "kind": "style", "text": "先にご飯食べてくる。" },
+  { "id": "style-11", "kind": "style", "text": "まだ決めてないんだよね。" },
+  { "id": "style-12", "kind": "style", "text": "動けばOK。細かいことはあと。" },
+  { "id": "style-13", "kind": "style", "text": "できるっちゃできる。" },
+  { "id": "style-14", "kind": "style", "text": "それはさすがに厳しくない？" },
+  { "id": "style-15", "kind": "style", "text": "一回見てもらえる？" },
+  { "id": "style-16", "kind": "style", "text": "昨日のやつ、もう終わってる。" },
+  { "id": "style-17", "kind": "style", "text": "このへん、いい感じに頼む。" },
+  { "id": "style-18", "kind": "style", "text": "無理なら明日でもいいよ。" },
+  { "id": "style-19", "kind": "style", "text": "原因、たぶんキャッシュ。" },
+  { "id": "style-20", "kind": "style", "text": "ひとまずここまで。" },
+  { "id": "style-21", "kind": "style", "text": "俺がやったほうが早いかも。" },
+  { "id": "style-22", "kind": "style", "text": "これでよくない？" },
+  { "id": "style-23", "kind": "style", "text": "知らんけど。" },
+  { "id": "style-24", "kind": "style", "text": "次、認証まわり。" },
+  { "id": "style-25", "kind": "style", "text": "ちょい待って、今見る。" }
+]
