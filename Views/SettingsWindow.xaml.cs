@@ -153,6 +153,8 @@ public partial class SettingsWindow : Window
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) => Close();
 
+    private void TitleBarCloseButton_Click(object sender, RoutedEventArgs e) => Close();
+
     private void OpenFolderButton_Click(object sender, RoutedEventArgs e)
     {
         try

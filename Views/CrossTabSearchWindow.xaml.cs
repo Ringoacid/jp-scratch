@@ -174,4 +174,6 @@ public partial class CrossTabSearchWindow : Window
     }
 
     private void JumpButton_Click(object sender, RoutedEventArgs e) => Jump();
+
+    private void TitleBarCloseButton_Click(object sender, RoutedEventArgs e) => Close();
 }

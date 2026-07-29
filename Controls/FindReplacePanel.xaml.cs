@@ -211,6 +211,45 @@ public partial class FindReplacePanel : UserControl
         var regex = BuildRegex();
         if (regex is null) return;
 
+        var replaceInSelection = InSelectionCheck.IsChecked == true;
+        var rangeStart = 0;
+        var rangeEnd = _editor.Document.TextLength;
+
+        if (replaceInSelection)
+        {
+            if (_editor.SelectionLength == 0)
+            {
+                MatchCountText.Text = "範囲未選択";
+                return;
+            }
+
+            rangeStart = _editor.SelectionStart;
+            rangeEnd = rangeStart + _editor.SelectionLength;
+
+            // 現在の検索位置が選択範囲外なら、選択範囲内の先頭の一致を対象にする。
+            // 検索ハイライトの「現在位置」は選択範囲とは独立しているため、
+            // ここを確認しないと「選択範囲内」を有効にしても範囲外を置換してしまう。
+            var firstIndexInRange = -1;
+            for (var i = 0; i < _renderer.Matches.Count; i++)
+            {
+                var match = _renderer.Matches[i];
+                if (match.Offset < rangeStart || match.Offset + match.Length > rangeEnd) continue;
+
+                if (firstIndexInRange < 0) firstIndexInRange = i;
+                if (i == _currentIndex) break;
+            }
+
+            var current = _renderer.Matches[_currentIndex];
+            if (current.Offset < rangeStart || current.Offset + current.Length > rangeEnd)
+                _currentIndex = firstIndexInRange;
+
+            if (_currentIndex < 0)
+            {
+                MatchCountText.Text = "0 件";
+                return;
+            }
+        }
+
         var (offset, length) = _renderer.Matches[_currentIndex];
         var original = _editor.Document.GetText(offset, length);
 
@@ -228,9 +267,36 @@ public partial class FindReplacePanel : UserControl
             _suppressRecalculation = false;
         }
 
-        _editor.CaretOffset = offset + replacement.Length;
+        if (!replaceInSelection)
+        {
+            _editor.CaretOffset = offset + replacement.Length;
+            UpdateMatches(resetIndex: false);
+            FindNext(forward: true);
+            return;
+        }
+
+        // 選択範囲を置換後の長さへ追従させて保持する。これにより、続けて「置換」を
+        // 押しても選択がキャレットへ縮まず、範囲外へ処理が漏れない。
+        rangeEnd += replacement.Length - length;
         UpdateMatches(resetIndex: false);
-        FindNext(forward: true);
+
+        var nextIndex = -1;
+        var firstIndex = -1;
+        var nextOffset = offset + replacement.Length;
+        for (var i = 0; i < _renderer.Matches.Count; i++)
+        {
+            var match = _renderer.Matches[i];
+            if (match.Offset < rangeStart || match.Offset + match.Length > rangeEnd) continue;
+
+            if (firstIndex < 0) firstIndex = i;
+            if (nextIndex < 0 && match.Offset >= nextOffset) nextIndex = i;
+        }
+
+        _currentIndex = nextIndex >= 0 ? nextIndex : firstIndex;
+        _renderer.CurrentIndex = _currentIndex;
+        _editor.Select(rangeStart, Math.Max(0, rangeEnd - rangeStart));
+        UpdateCountLabel();
+        Redraw();
     }
 
     private void ReplaceAll()
@@ -242,8 +308,9 @@ public partial class FindReplacePanel : UserControl
 
         var rangeStart = 0;
         var rangeEnd = _editor.Document.TextLength;
+        var replaceInSelection = InSelectionCheck.IsChecked == true;
 
-        if (InSelectionCheck.IsChecked == true)
+        if (replaceInSelection)
         {
             if (_editor.SelectionLength == 0)
             {
@@ -266,6 +333,7 @@ public partial class FindReplacePanel : UserControl
         }
 
         _suppressRecalculation = true;
+        var lengthDelta = 0;
         // まとめて 1 回の Undo で戻せるようにする
         _editor.Document.BeginUpdate();
         try
@@ -278,6 +346,7 @@ public partial class FindReplacePanel : UserControl
                     ? regex.Match(original).Result(ReplaceBox.Text)
                     : ReplaceBox.Text;
                 _editor.Document.Replace(offset, length, replacement);
+                lengthDelta += replacement.Length - length;
             }
         }
         finally
@@ -287,6 +356,8 @@ public partial class FindReplacePanel : UserControl
         }
 
         UpdateMatches(resetIndex: true);
+        if (replaceInSelection)
+            _editor.Select(rangeStart, Math.Max(0, rangeEnd + lengthDelta - rangeStart));
         MatchCountText.Text = $"{targets.Count} 件置換";
     }
 
