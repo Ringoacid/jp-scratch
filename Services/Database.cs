@@ -122,6 +122,17 @@ internal sealed class Database : IDisposable
                 """);
             ExecuteInternal("PRAGMA user_version=2;");
         }
+
+        if (version < 3)
+        {
+            ExecuteInternal("""
+                CREATE TABLE IF NOT EXISTS app_metadata (
+                    key   TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+                """);
+            ExecuteInternal("PRAGMA user_version=3;");
+        }
     }
 
     public SqliteCommand CreateCommand(string sql)

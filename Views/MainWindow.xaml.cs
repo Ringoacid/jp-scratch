@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -25,12 +27,30 @@ public partial class MainWindow : Window
     private readonly TabRepository _repository;
     private readonly HotkeyService _hotkeys;
     private readonly CredentialService _credentials;
+    private readonly PricingService _pricing;
+    private readonly ApiCallRepository _apiCalls;
+    private readonly FxRateService _fxRates;
     private readonly ReactionRepository _reactions;
     private readonly GeminiProofreadingClient _proofreadingClient;
+    private readonly DateTimeOffset _sessionStartedAt;
+
+    /// <summary>1回のGemini応答で固定するUSD額と、その時点の為替スナップショット。</summary>
+    private sealed record ApiUsageCost(
+        int PromptTokens,
+        int OutputTokens,
+        decimal UsdCost,
+        FxRate? FxRate,
+        bool IsUsageKnown)
+    {
+        internal decimal? JpyCost => FxRate is null ? null : UsdCost * FxRate.UsdJpy;
+    }
+
+    private sealed record RecordedApiCall(long? Id, ApiUsageCost Cost);
 
     private readonly IdeographicSpaceColorizer _ideographicSpace = new();
     private readonly ProofreadingUnderlineRenderer _proofreadingRenderer = new();
     private readonly DispatcherTimer _statusTimer;
+    private readonly DispatcherTimer _usageRolloverTimer;
     private readonly DispatcherTimer _proofreadingTimer;
     private readonly ProofreadingSchedule _proofreadingSchedule = new();
 
@@ -44,6 +64,7 @@ public partial class MainWindow : Window
 
     private DateTime _lastAutoHide = DateTime.MinValue;
     private DateTime _statusMessageUntil = DateTime.MinValue;
+    private DateOnly _usageDisplayDate = DateOnly.MinValue;
 
     private ScratchTab? _dragTab;
     private Point _dragOrigin;
@@ -55,9 +76,12 @@ public partial class MainWindow : Window
     private bool _proofreadingRunInProgress;
 
     internal MainWindow(SettingsService settings, ThemeService theme, TabManager tabs,
-                        TabRepository repository, HotkeyService hotkeys,
-                        CredentialService credentials,
-                        ReactionRepository reactions,
+                         TabRepository repository, HotkeyService hotkeys,
+                         CredentialService credentials,
+                         PricingService pricing,
+                         ApiCallRepository apiCalls,
+                         FxRateService fxRates,
+                         ReactionRepository reactions,
                         GeminiProofreadingClient proofreadingClient)
     {
         _settings = settings;
@@ -66,8 +90,12 @@ public partial class MainWindow : Window
         _repository = repository;
         _hotkeys = hotkeys;
         _credentials = credentials;
+        _pricing = pricing;
+        _apiCalls = apiCalls;
+        _fxRates = fxRates;
         _reactions = reactions;
         _proofreadingClient = proofreadingClient;
+        _sessionStartedAt = DateTimeOffset.Now;
 
         InitializeComponent();
 
@@ -104,6 +132,10 @@ public partial class MainWindow : Window
             UpdateStatus();
         };
 
+        _usageRolloverTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
+        _usageRolloverTimer.Tick += (_, _) => RefreshUsageForRollover();
+        Application.Current.Exit += (_, _) => _usageRolloverTimer.Stop();
+
         _proofreadingTimer = new DispatcherTimer();
         _proofreadingTimer.Tick += async (_, _) =>
         {
@@ -116,6 +148,10 @@ public partial class MainWindow : Window
         ApplyEditorSettings();
         ApplyThemeToEditor();
         OnActiveTabChanged(_tabs.Active);
+        DateTimeOffset initialUsageNow = DateTimeOffset.Now;
+        if (RefreshUsageDisplay(initialUsageNow))
+            _usageDisplayDate = LocalDate(initialUsageNow);
+        _usageRolloverTimer.Start();
     }
 
     // ================= ライフサイクル =================
@@ -746,8 +782,7 @@ public partial class MainWindow : Window
         MessageBoxResult confirmation = MessageBox.Show(
             this,
             "別案生成のためGemini APIを1回呼び出します。料金が発生します。\n\n" +
-            "標準グローバル単価: 入力 $0.30／100万トークン、" +
-            "出力・推論 $2.50／100万トークン\n" +
+            BuildPricingSummary() + "\n" +
             "実行後に使用トークン数と料金を表示します。\n\n実行しますか？",
             "API料金の確認",
             MessageBoxButton.YesNo,
@@ -761,15 +796,36 @@ public partial class MainWindow : Window
 
         _alternativeInProgress = true;
         SetProposalActionsEnabled(false);
+        ApiUsageCost? failedApiCost = null;
         try
         {
             SetTransientStatus("別案を生成しています…");
-            GeminiAlternativeResult result =
-                await _proofreadingClient.GenerateAlternativeAsync(proposal, reason);
+            var stopwatch = Stopwatch.StartNew();
+            GeminiAlternativeResult result;
+            try
+            {
+                result = await _proofreadingClient.GenerateAlternativeAsync(proposal, reason);
+            }
+            catch (GeminiClientException ex)
+            {
+                stopwatch.Stop();
+                failedApiCost = RecordFailedApiCall(
+                    ApiCallTrigger.Realternative,
+                    ex,
+                    stopwatch.Elapsed);
+                throw;
+            }
 
             if (!CanReactTo(proposal))
             {
-                ShowAlternativeCost(result, "生成中に本文が変更されたため、別案は適用しませんでした。");
+                RecordedApiCall recorded = RecordSuccessfulApiCall(
+                    ApiCallTrigger.Realternative,
+                    result.Usage,
+                    result.Elapsed,
+                    suggestionCount: 0,
+                    discardedCount: 1);
+                ShowAlternativeCost(result, recorded.Cost,
+                    "生成中に本文が変更されたため、別案は適用しませんでした。");
                 return;
             }
 
@@ -783,21 +839,40 @@ public partial class MainWindow : Window
                     proposal,
                     result.Alternative) != true)
             {
-                ShowAlternativeCost(result, "有効な別案へ差し替えられませんでした。");
+                RecordedApiCall recorded = RecordSuccessfulApiCall(
+                    ApiCallTrigger.Realternative,
+                    result.Usage,
+                    result.Elapsed,
+                    suggestionCount: 0,
+                    discardedCount: 1);
+                ShowAlternativeCost(result, recorded.Cost,
+                    "有効な別案へ差し替えられませんでした。");
                 return;
             }
 
-            ShowAlternativeCost(result, "別案を表示しました。");
+            RecordedApiCall recordedSuccess = RecordSuccessfulApiCall(
+                ApiCallTrigger.Realternative,
+                result.Usage,
+                result.Elapsed,
+                suggestionCount: 1,
+                discardedCount: 0);
+            ShowAlternativeCost(result, recordedSuccess.Cost, "別案を表示しました。");
         }
         catch (GeminiClientException ex)
         {
+            string knownUsage = ex.Usage is not null && failedApiCost is not null
+                ? BuildUsageText([failedApiCost])
+                : "応答を受け取れなかったため、使用量と料金は確認できませんでした。";
             MessageBox.Show(
                 this,
-                ex.Message + "\n\n応答を受け取れなかったため、使用量と料金は確認できませんでした。",
+                ex.Message + "\n\n" + knownUsage,
                 "別案を生成できませんでした",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-            SetTransientStatus("別案生成に失敗しました（使用量・料金は未確認）");
+            SetTransientStatus(ex.Usage is null
+                ? "別案生成に失敗しました（使用量・料金は未確認）"
+                : "別案生成に失敗しました " +
+                  (failedApiCost is null ? "（料金未確認）" : FormatCostWithJpy(failedApiCost)));
         }
         finally
         {
@@ -882,16 +957,13 @@ public partial class MainWindow : Window
 
     private void ShowAlternativeCost(
         GeminiAlternativeResult result,
+        ApiUsageCost cost,
         string message)
     {
-        decimal cost =
-            (result.Usage.PromptTokens * 0.30m +
-             result.Usage.BillableOutputTokens * 2.50m) / 1_000_000m;
-        string costText = cost.ToString("0.000000");
         string summary =
             $"{message}\n\n入力 {result.Usage.PromptTokens:N0}、" +
             $"出力・推論 {result.Usage.BillableOutputTokens:N0} tokens\n" +
-            $"料金 ${costText}";
+            $"料金 {FormatCostWithJpy(cost)}";
 
         MessageBox.Show(
             this,
@@ -901,7 +973,8 @@ public partial class MainWindow : Window
             MessageBoxImage.Information);
         SetTransientStatus(
             $"別案 ↑{result.Usage.PromptTokens:N0} " +
-            $"↓{result.Usage.BillableOutputTokens:N0} tok  ${costText}");
+            $"↓{result.Usage.BillableOutputTokens:N0} tok  " +
+            FormatCostWithJpy(cost));
     }
 
     // ================= 校正の実行制御 =================
@@ -1016,8 +1089,10 @@ public partial class MainWindow : Window
         SetProposalActionsEnabled(false);
 
         List<(ProofreadingRequest Request, GeminiProofreadingResult Result)> results = [];
-        int promptTokens = 0;
-        int outputTokens = 0;
+        List<long> successfulApiCallIds = [];
+        List<ApiUsageCost> responseCosts = [];
+        ApiCallTrigger trigger = manual ? ApiCallTrigger.Manual : ApiCallTrigger.Auto;
+        bool resultsApplied = false;
         try
         {
             for (int index = 0; index < plan.Requests.Count; index++)
@@ -1025,6 +1100,7 @@ public partial class MainWindow : Window
                 if (!ReferenceEquals(tab, _tabs.Active) ||
                     !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
                 {
+                    MarkApiCallsDiscarded(successfulApiCallIds);
                     SetTransientStatus("本文が変更されたため校正結果を破棄しました");
                     return;
                 }
@@ -1041,6 +1117,7 @@ public partial class MainWindow : Window
                 if (!ReferenceEquals(tab, _tabs.Active) ||
                     !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
                 {
+                    MarkApiCallsDiscarded(successfulApiCallIds);
                     SetTransientStatus("本文が変更されたため残りの校正を中止しました");
                     return;
                 }
@@ -1048,12 +1125,32 @@ public partial class MainWindow : Window
                 SetTransientStatus(
                     $"校正しています… {index + 1}/{plan.Requests.Count}");
                 ProofreadingRequest request = plan.Requests[index];
-                GeminiProofreadingResult result =
-                    await _proofreadingClient.ProofreadAsync(request);
+                var stopwatch = Stopwatch.StartNew();
+                GeminiProofreadingResult result;
+                try
+                {
+                    result = await _proofreadingClient.ProofreadAsync(request);
+                }
+                catch (GeminiClientException ex)
+                {
+                    stopwatch.Stop();
+                    ApiUsageCost? failedCost = RecordFailedApiCall(trigger, ex, stopwatch.Elapsed);
+                    if (failedCost is not null)
+                        responseCosts.Add(failedCost);
+                    throw;
+                }
+
+                RecordedApiCall recordedApiCall = RecordSuccessfulApiCall(
+                    trigger,
+                    result.Usage,
+                    result.Elapsed,
+                    suggestionCount: result.Diff.Accepted ? result.Diff.Changes.Count : 0,
+                    discardedCount: result.Diff.Accepted ? 0 : 1);
+                if (recordedApiCall.Id is long id)
+                    successfulApiCallIds.Add(id);
+                responseCosts.Add(recordedApiCall.Cost);
                 _proofreadingSchedule.MarkSent(DateTimeOffset.Now);
                 results.Add((request, result));
-                promptTokens += result.Usage.PromptTokens;
-                outputTokens += result.Usage.BillableOutputTokens;
             }
 
             if (!selectionRun)
@@ -1062,8 +1159,10 @@ public partial class MainWindow : Window
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
             }
 
-            if (!string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
+            if (!ReferenceEquals(tab, _tabs.Active) ||
+                !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
             {
+                MarkApiCallsDiscarded(successfulApiCallIds);
                 SetTransientStatus("本文が変更されたため校正結果を破棄しました");
                 return;
             }
@@ -1071,23 +1170,42 @@ public partial class MainWindow : Window
             string corrected = ProofreadingResultMerger.Merge(plan, results);
             DocumentDiffResult loaded =
                 tab.Proofreading.LoadCorrectedDocument(corrected);
+            if (!loaded.Accepted)
+            {
+                MarkApiCallsDiscarded(successfulApiCallIds);
+                SetTransientStatus("安全検査に失敗したため校正結果を破棄しました");
+                return;
+            }
+
+            // ここ以降の例外は、提案（0件を含む）が既にUIへ反映された後のもの。
+            resultsApplied = true;
             int proposals = loaded.Accepted ? loaded.Changes.Count : 0;
-            ShowProofreadingUsage(promptTokens, outputTokens, proposals);
+            ShowProofreadingUsage(proposals, responseCosts);
         }
         catch (GeminiClientException ex)
         {
+            if (!resultsApplied)
+                MarkApiCallsDiscarded(successfulApiCallIds);
             if (!selectionRun)
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
-            string knownUsage = results.Count == 0
+            string knownUsage = responseCosts.Count == 0
                 ? "使用量・料金は確認できませんでした。"
-                : BuildUsageText(promptTokens, outputTokens);
+                : BuildUsageText(responseCosts);
             MessageBox.Show(
                 this,
                 ex.Message + "\n\n" + knownUsage,
                 "校正できませんでした",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-            SetTransientStatus("校正に失敗しました");
+            SetTransientStatus(responseCosts.Count == 0
+                ? "校正に失敗しました（使用量・料金は未確認）"
+                : "校正に失敗しました " + FormatCostWithJpy(responseCosts));
+        }
+        catch
+        {
+            if (!resultsApplied)
+                MarkApiCallsDiscarded(successfulApiCallIds);
+            throw;
         }
         finally
         {
@@ -1106,8 +1224,7 @@ public partial class MainWindow : Window
             MessageBoxResult result = MessageBox.Show(
                 this,
                 $"{trigger}でGemini APIを{requestCount}回呼び出します。料金が発生します。\n\n" +
-                "標準グローバル単価: 入力 $0.30／100万トークン、" +
-                "出力・推論 $2.50／100万トークン\n" +
+                BuildPricingSummary() + "\n" +
                 "複数回の場合は各送信の間隔を空け、実行後に合計料金を表示します。\n\n" +
                 "実行しますか？",
                 "API料金の確認",
@@ -1122,24 +1239,397 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ShowProofreadingUsage(
-        int promptTokens,
-        int outputTokens,
-        int proposals)
+    /// <summary>
+    /// APIの結果を課金ログへ残す。ログ保存に失敗しても、既に得た校正結果や既存のUI処理は壊さない。
+    /// </summary>
+    private RecordedApiCall RecordSuccessfulApiCall(
+        ApiCallTrigger trigger,
+        GeminiUsage usage,
+        TimeSpan elapsed,
+        int suggestionCount,
+        int discardedCount)
     {
-        string usage = BuildUsageText(promptTokens, outputTokens);
-        SetTransientStatus(
-            $"提案 {proposals}件  ↑{promptTokens:N0} ↓{outputTokens:N0} tok  " +
-            usage[(usage.LastIndexOf('$'))..]);
+        ApiUsageCost cost = CreateUsageCost(
+            usage.PromptTokens, usage.BillableOutputTokens);
+        return new RecordedApiCall(RecordApiCall(new ApiCallLogEntry(
+            trigger,
+            PricingService.DefaultModel,
+            usage.PromptTokens,
+            usage.BillableOutputTokens,
+            cost.UsdCost,
+            ToDurationMilliseconds(elapsed),
+            ApiCallStatus.Ok,
+            null,
+            suggestionCount,
+            discardedCount,
+            cost.FxRate)), cost);
     }
 
-    private static string BuildUsageText(int promptTokens, int outputTokens)
+    private ApiUsageCost? RecordFailedApiCall(
+        ApiCallTrigger trigger,
+        GeminiClientException exception,
+        TimeSpan elapsed)
     {
-        decimal cost =
-            (promptTokens * 0.30m + outputTokens * 2.50m) / 1_000_000m;
-        return $"入力 {promptTokens:N0}、出力・推論 {outputTokens:N0} tokens / " +
-               $"料金 ${cost:0.000000}";
+        // キー未設定はHTTP送信より前の失敗なので、API呼び出しログには含めない。
+        if (exception.Error == GeminiClientError.MissingApiKey)
+            return null;
+
+        GeminiUsage? usage = exception.Usage;
+        int promptTokens = usage?.PromptTokens ?? 0;
+        int outputTokens = usage?.BillableOutputTokens ?? 0;
+        ApiUsageCost? cost = null;
+        if (usage is not null)
+        {
+            try
+            {
+                cost = CreateUsageCost(promptTokens, outputTokens);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        // 応答前失敗はUSD 0で、レートがあっても円額を0として固定する。
+        cost ??= new ApiUsageCost(0, 0, 0m, _fxRates.GetCachedRate(), IsUsageKnown: false);
+
+        RecordApiCall(new ApiCallLogEntry(
+            trigger,
+            PricingService.DefaultModel,
+            promptTokens,
+            outputTokens,
+            cost.UsdCost,
+            ToDurationMilliseconds(exception.Elapsed ?? elapsed),
+            exception.Error == GeminiClientError.Timeout
+                ? ApiCallStatus.Timeout
+                : ApiCallStatus.Error,
+            exception.Message,
+            0,
+            0,
+            cost.FxRate));
+        return cost;
     }
+
+    private long? RecordApiCall(ApiCallLogEntry entry)
+    {
+        long id;
+        try
+        {
+            id = _apiCalls.Add(entry);
+        }
+        catch (Exception)
+        {
+            // API呼び出し後に課金ログだけが失敗しても、校正結果の表示・既存のエラー処理は続ける。
+            return null;
+        }
+
+        RefreshUsageDisplay();
+        return id;
+    }
+
+    private void MarkApiCallsDiscarded(IEnumerable<long> ids)
+    {
+        bool changed = false;
+        foreach (long id in ids)
+        {
+            try
+            {
+                changed |= _apiCalls.MarkDiscarded(id);
+            }
+            catch (Exception)
+            {
+                // 破棄数の更新が失敗しても、校正実行の既存処理は続ける。
+            }
+        }
+
+        if (changed)
+            RefreshUsageDisplay();
+    }
+
+    private static long ToDurationMilliseconds(TimeSpan duration)
+        => (long)Math.Ceiling(Math.Max(0, duration.TotalMilliseconds));
+
+    private void ShowProofreadingUsage(int proposals, IReadOnlyList<ApiUsageCost> costs)
+    {
+        string usage = BuildUsageText(costs);
+        string compactUsage = usage == "使用量・料金は未確認"
+            ? usage
+            : usage[(usage.LastIndexOf('$'))..];
+        SetTransientStatus(
+            $"提案 {proposals}件  " +
+            compactUsage);
+    }
+
+    private static string BuildUsageText(IReadOnlyList<ApiUsageCost> costs)
+    {
+        IReadOnlyList<ApiUsageCost> known = costs.Where(cost => cost.IsUsageKnown).ToArray();
+        if (known.Count == 0)
+            return "使用量・料金は未確認";
+
+        int promptTokens = known.Sum(cost => cost.PromptTokens);
+        int outputTokens = known.Sum(cost => cost.OutputTokens);
+        string label = known.Count == costs.Count ? "" : "（既知分）";
+        string unknown = known.Count == costs.Count ? "" : "（一部料金未確認）";
+        return $"入力 {promptTokens:N0}、出力・推論 {outputTokens:N0} tokens{label} / " +
+               $"料金 {FormatCostWithJpy(known)}{unknown}";
+    }
+
+    private ApiUsageCost CreateUsageCost(int promptTokens, int outputTokens)
+    {
+        PricingQuote quote = _pricing.Calculate(
+            PricingService.DefaultModel, promptTokens, outputTokens);
+        // 応答単位で一度だけキャッシュを読む。このsnapshotをログと全ての応答表示で共有する。
+        FxRate? fxRate = _fxRates.GetCachedRate();
+        if (fxRate is null)
+            _ = RefreshFxRateAsync();
+        return new ApiUsageCost(promptTokens, outputTokens, quote.UsdCost, fxRate, IsUsageKnown: true);
+    }
+
+    private string BuildPricingSummary()
+    {
+        ModelPricing pricing =
+            _pricing.GetPricing(PricingService.DefaultModel);
+        return
+            $"{PricingService.DefaultModel} 単価（{pricing.UpdatedAt}）: " +
+            $"入力 ${pricing.InputUsdPerMillion:0.####}／100万トークン、" +
+            $"出力・推論 ${pricing.OutputUsdPerMillion:0.####}／100万トークン";
+    }
+
+    private static string FormatUsd(decimal cost)
+        => cost.ToString("0.########", CultureInfo.InvariantCulture);
+
+    /// <summary>起動後に静かに日次レートを更新し、既存のUSD表示を壊さずに再描画する。</summary>
+    internal async Task RefreshFxRateAsync()
+    {
+        try
+        {
+            await _fxRates.EnsureTodayAsync();
+            RefreshUsageDisplay();
+        }
+        catch (Exception)
+        {
+            // 為替は補助情報であり、終了競合を含む失敗をUIへ出さない。
+        }
+    }
+
+    private static string FormatCostWithJpy(ApiUsageCost cost)
+        => !cost.IsUsageKnown
+            ? "使用量・料金は未確認"
+            : cost.JpyCost is decimal jpyCost
+            ? $"${FormatUsd(cost.UsdCost)} ({FormatJpy(jpyCost)})" +
+              FormatRateReference(cost.FxRate)
+            : $"${FormatUsd(cost.UsdCost)} (¥—)";
+
+    private static string FormatCostWithJpy(IReadOnlyList<ApiUsageCost> costs)
+    {
+        IReadOnlyList<ApiUsageCost> known = costs.Where(cost => cost.IsUsageKnown).ToArray();
+        if (known.Count == 0)
+            return "使用量・料金は未確認";
+
+        decimal usdCost = known.Sum(cost => cost.UsdCost);
+        if (known.Any(cost => cost.UsdCost != 0m && cost.JpyCost is null))
+            return $"${FormatUsd(usdCost)} (¥—)" +
+                   (known.Count == costs.Count ? "" : "（一部料金未確認）");
+
+        decimal jpyCost = known.Sum(cost => cost.JpyCost ?? 0m);
+        return $"${FormatUsd(usdCost)} ({FormatJpy(jpyCost)})" +
+               FormatRateReferences(known) +
+               (known.Count == costs.Count ? "" : "（一部料金未確認）");
+    }
+
+    private static string FormatJpy(decimal value)
+    {
+        decimal rounded = value != 0m && Math.Abs(value) < 0.01m
+            ? Math.Round(value, 3, MidpointRounding.AwayFromZero)
+            : Math.Round(value, 2, MidpointRounding.AwayFromZero);
+        return "¥" + rounded.ToString(
+            Math.Abs(rounded) < 0.01m && rounded != 0m ? "0.###" : "0.00",
+            CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatRateReference(FxRate? rate)
+        => rate is null
+            ? ""
+            : $" (1USD=¥{rate.UsdJpy.ToString("0.####", CultureInfo.InvariantCulture)} / " +
+              $"{rate.RateDate:MM-dd}時点)";
+
+    private static string FormatRateReferences(IReadOnlyList<ApiUsageCost> costs)
+    {
+        (decimal Rate, DateOnly Date)[] rates = costs
+            .Where(cost => cost.JpyCost is not null && cost.FxRate is not null)
+            .Select(cost => (cost.FxRate!.UsdJpy, cost.FxRate.RateDate))
+            .Distinct()
+            .OrderBy(value => value.RateDate)
+            .ToArray();
+        if (rates.Length == 1)
+            return FormatRateReference(new FxRate(rates[0].Date, rates[0].Rate, default));
+        if (rates.Length > 1)
+        {
+            return $" (ログ固定レート合計 / {rates[0].Date:MM-dd}〜" +
+                   $"{rates[^1].Date:MM-dd}・{rates.Length}レート)";
+        }
+        return "";
+    }
+
+    /// <summary>
+    /// 永続ログから常設の利用状況を更新する。DB読み取りや表示更新が失敗した場合は、
+    /// 校正・別案生成の操作を妨げず、最後に表示できた値を保つ。
+    /// </summary>
+    private bool RefreshUsageDisplay(DateTimeOffset? currentTime = null)
+    {
+        try
+        {
+            DateTimeOffset now = currentTime ?? DateTimeOffset.Now;
+            DateTimeOffset todayStart = LocalStartOfDay(now);
+            DateTimeOffset monthStart = LocalStartOfMonth(now);
+            ApiCallLog? latest = _apiCalls.GetLatest();
+            ApiCallUsageSummary session = _apiCalls.GetUsageSummary(_sessionStartedAt);
+            ApiCallUsageSummary today = _apiCalls.GetUsageSummary(
+                todayStart, LocalStartOfNextDay(now));
+            ApiCallUsageSummary month = _apiCalls.GetUsageSummary(
+                monthStart, LocalStartOfNextMonth(now));
+
+            string latestText = latest is null
+                ? "直—"
+                : $"直↑{latest.PromptTokens:N0}↓{latest.OutputTokens:N0}" +
+                  $"${FormatUsd(latest.UsdCost)} ({FormatJpy(latest)}{FormatRateDateSuffix(latest)})";
+            StatusUsage.Text =
+                $"{latestText}｜起${FormatUsd(session.UsdCost)} ({FormatJpy(session)})｜" +
+                $"日${FormatUsd(today.UsdCost)} ({FormatJpy(today)})｜" +
+                $"月${FormatUsd(month.UsdCost)} ({FormatJpy(month)})";
+            StatusUsage.ToolTip = string.Join(
+                Environment.NewLine,
+                FormatUsageTooltip("直近", latest),
+                FormatUsageTooltip("起動後", session),
+                FormatUsageTooltip("今日", today),
+                FormatUsageTooltip("今月", month),
+                FormatCachedRateTooltip());
+            _usageDisplayDate = LocalDate(now);
+            return true;
+        }
+        catch (Exception)
+        {
+            // 集計表示は補助情報であり、読み取り失敗で既存UIを壊さない。
+            return false;
+        }
+    }
+
+    /// <summary>日付が変わったときだけ永続ログを再集計し、毎分のDB読取を避ける。</summary>
+    private void RefreshUsageForRollover()
+    {
+        DateTimeOffset now = DateTimeOffset.Now;
+        if (LocalDate(now) == _usageDisplayDate)
+            return;
+
+        if (RefreshUsageDisplay(now))
+            _usageDisplayDate = LocalDate(now);
+
+        // 日次判定はサービス側に任せ、通信失敗時も既存表示と校正をそのまま続ける。
+        _ = RefreshFxRateAsync();
+    }
+
+    private static DateOnly LocalDate(DateTimeOffset value)
+    {
+        DateTime local = value.LocalDateTime;
+        return new DateOnly(local.Year, local.Month, local.Day);
+    }
+
+    private static DateTimeOffset LocalStartOfDay(DateTimeOffset value)
+    {
+        DateTime local = value.LocalDateTime;
+        return new DateTimeOffset(new DateTime(
+            local.Year, local.Month, local.Day, 0, 0, 0, DateTimeKind.Local));
+    }
+
+    private static DateTimeOffset LocalStartOfMonth(DateTimeOffset value)
+    {
+        DateTime local = value.LocalDateTime;
+        return new DateTimeOffset(new DateTime(
+            local.Year, local.Month, 1, 0, 0, 0, DateTimeKind.Local));
+    }
+
+    private static DateTimeOffset LocalStartOfNextDay(DateTimeOffset value)
+    {
+        DateTime localStart = value.LocalDateTime.Date;
+        return new DateTimeOffset(localStart.AddDays(1));
+    }
+
+    private static DateTimeOffset LocalStartOfNextMonth(DateTimeOffset value)
+    {
+        DateTime localStart = new(
+            value.LocalDateTime.Year, value.LocalDateTime.Month, 1,
+            0, 0, 0, DateTimeKind.Local);
+        return new DateTimeOffset(localStart.AddMonths(1));
+    }
+
+    private static string FormatUsageTooltip(string label, ApiCallLog? entry)
+        => entry is null
+            ? $"{label}: 記録なし"
+            : $"{label}: 1回（{FormatStatusCounts(entry.Status)}）  " +
+              $"入力 {entry.PromptTokens:N0} / 出力 {entry.OutputTokens:N0} tokens  " +
+              $"${FormatUsd(entry.UsdCost)} ({FormatJpy(entry)})" +
+              FormatRateReference(entry.UsdJpyRate is decimal rate && entry.RateDate is DateOnly date
+                  ? new FxRate(date, rate, default) : null) +
+              $"  提案 {entry.SuggestionCount:N0} / 破棄 {entry.DiscardedCount:N0}";
+
+    private static string FormatUsageTooltip(string label, ApiCallUsageSummary summary)
+        => $"{label}: {summary.TotalCalls:N0}回（{FormatStatusCounts(summary)}）  " +
+           $"入力 {summary.PromptTokens:N0} / 出力 {summary.OutputTokens:N0} tokens  " +
+           $"${FormatUsd(summary.UsdCost)} ({FormatJpy(summary)})  " +
+           FormatSummaryRateReference(summary) +
+           $"  提案 {summary.SuggestionCount:N0} / 破棄 {summary.DiscardedCount:N0}";
+
+    private string FormatCachedRateTooltip()
+    {
+        FxRate? rate = _fxRates.GetCachedRate();
+        return rate is null
+            ? "現在のキャッシュ: なし（JPY換算は次回取得後のログから表示）"
+            : "現在のキャッシュ: " + FormatRateReference(rate).Trim();
+    }
+
+    private static string FormatJpy(ApiCallLog entry)
+        => entry.JpyCost is decimal cost
+            ? FormatJpy(cost)
+            : entry.UsdCost == 0m ? FormatJpy(0m) : "¥—";
+
+    private static string FormatJpy(ApiCallUsageSummary summary)
+        => summary.IsJpyComplete ? FormatJpy(summary.JpyCost) : "¥—";
+
+    private static string FormatRateDateSuffix(ApiCallLog entry)
+        => entry.JpyCost is not null && entry.RateDate is DateOnly date
+            ? "@" + date.ToString("MM-dd", CultureInfo.InvariantCulture)
+            : "";
+
+    private static string FormatSummaryRateReference(ApiCallUsageSummary summary)
+    {
+        if (!summary.IsJpyComplete)
+            return "JPY換算に未記録ログあり";
+        if (summary.DistinctRateCount == 1 &&
+            summary.SingleUsdJpyRate is decimal rate && summary.SingleRateDate is DateOnly date)
+        {
+            return $"1USD=¥{rate.ToString("0.####", CultureInfo.InvariantCulture)} / " +
+                   $"{date:MM-dd}時点（ログ固定）";
+        }
+        if (summary.DistinctRateCount > 1 &&
+            summary.FirstRateDate is DateOnly first && summary.LastRateDate is DateOnly last)
+        {
+            return $"ログ固定レート合計 / {first:MM-dd}〜{last:MM-dd}・" +
+                   $"{summary.DistinctRateCount}レート";
+        }
+        return summary.UsdCost == 0m ? "JPY 0円（レート不要）" : "ログ固定レート情報なし";
+    }
+
+    private static string FormatStatusCounts(ApiCallStatus status)
+        => status switch
+        {
+            ApiCallStatus.Ok => "成功 1",
+            ApiCallStatus.Error => "error 1",
+            ApiCallStatus.Timeout => "timeout 1",
+            _ => throw new ArgumentOutOfRangeException(nameof(status)),
+        };
+
+    private static string FormatStatusCounts(ApiCallUsageSummary summary)
+        => $"成功 {summary.OkCalls:N0} / error {summary.ErrorCalls:N0} / timeout {summary.TimeoutCalls:N0}";
 
     private void RestoreClosedTab()
     {

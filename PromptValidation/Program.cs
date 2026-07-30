@@ -226,11 +226,15 @@ internal static class Program
         bool diffPass = DocumentDiffValidation.RunSelfTests();
         bool paragraphPass = ParagraphProofreadingPlannerValidation.RunSelfTests();
         bool credentialPass = CredentialServiceValidation.RunSelfTests();
+        bool pricingPass = PricingServiceValidation.RunSelfTests();
+        bool apiCallPass = ApiCallRepositoryValidation.RunSelfTests();
+        bool migrationPass = DatabaseMigrationValidation.RunSelfTests();
+        bool fxRatePass = await FxRateServiceValidation.RunSelfTestsAsync();
         bool reactionPass = ReactionRepositoryValidation.RunSelfTests();
         bool schedulePass = ProofreadingScheduleValidation.RunSelfTests();
         bool geminiClientPass = await GeminiProofreadingClientValidation.RunSelfTestsAsync();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
-               credentialPass && reactionPass && schedulePass &&
+               credentialPass && pricingPass && apiCallPass && migrationPass && fxRatePass && reactionPass && schedulePass &&
                geminiClientPass ? 0 : 1;
     }
 

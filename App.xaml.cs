@@ -23,6 +23,9 @@ public partial class App : Application
     private readonly CredentialService _credentials = new();
 
     private Database? _database;
+    private PricingService? _pricing;
+    private ApiCallRepository? _apiCalls;
+    private FxRateService? _fxRates;
     private ReactionRepository? _reactions;
     private Proofreading.GeminiProofreadingClient? _proofreadingClient;
     private TabManager? _tabs;
@@ -64,6 +67,9 @@ public partial class App : Application
         ConfirmEnvironmentCredentialSource();
 
         _database = new Database();
+        _pricing = new PricingService();
+        _apiCalls = new ApiCallRepository(_database);
+        _fxRates = new FxRateService(_database);
         _reactions = new ReactionRepository(_database);
         _proofreadingClient = new Proofreading.GeminiProofreadingClient(
             _credentials,
@@ -79,6 +85,9 @@ public partial class App : Application
             repository,
             _hotkeys,
             _credentials,
+            _pricing,
+            _apiCalls,
+            _fxRates,
             _reactions,
             _proofreadingClient);
 
@@ -112,6 +121,9 @@ public partial class App : Application
         {
             _window.ShowAndFocus();
         }
+
+        // 為替は補助情報なので、初期表示や校正操作をネットワーク待ちにしない。
+        _ = _window.RefreshFxRateAsync();
 
         if (failures.Count > 0)
         {
@@ -163,6 +175,7 @@ public partial class App : Application
         _hotkeys.Dispose();
         _tray.Dispose();
         _proofreadingClient?.Dispose();
+        _fxRates?.Dispose();
         _database?.Dispose();
         _singleInstance.Dispose();
 

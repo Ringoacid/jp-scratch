@@ -17,6 +17,7 @@ internal static class GeminiProofreadingClientValidation
         bool successPass = await TestSuccessAsync();
         bool contextPass = await TestContextRequestAsync();
         bool alternativePass = await TestAlternativeRequestAsync();
+        bool invalidAlternativeUsagePass = await TestInvalidAlternativeUsageAsync();
         bool retryPass = await TestRetryAsync();
         bool permanentFailurePass = await TestPermanentFailureAsync();
         bool timeoutPass = await TestTimeoutAsync();
@@ -25,12 +26,13 @@ internal static class GeminiProofreadingClientValidation
         Console.WriteLine($"Geminiクライアント（成功・差分）: {(successPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（前後文脈）: {(contextPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（理由つき別案）: {(alternativePass ? "PASS" : "FAIL")}");
+        Console.WriteLine($"Geminiクライアント（無効別案の使用量）: {(invalidAlternativeUsagePass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（1回リトライ）: {(retryPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（恒久エラー）: {(permanentFailurePass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（タイムアウト）: {(timeoutPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（キー未設定）: {(missingKeyPass ? "PASS" : "FAIL")}");
 
-        return successPass && contextPass && alternativePass &&
+        return successPass && contextPass && alternativePass && invalidAlternativeUsagePass &&
                retryPass && permanentFailurePass &&
                timeoutPass && missingKeyPass;
     }
@@ -60,14 +62,58 @@ internal static class GeminiProofreadingClientValidation
             .GetProperty("parts")[0].GetProperty("text").GetString() ?? "";
         string user = request.RootElement.GetProperty("contents")[0]
             .GetProperty("parts")[0].GetProperty("text").GetString() ?? "";
-        return system == ProofreadingPrompt.AlternativeSystemInstruction &&
-               user.Contains("<original>\nア\n</original>", StringComparison.Ordinal) &&
-               user.Contains("<rejected-suggestion>\nは\n</rejected-suggestion>",
-                   StringComparison.Ordinal) &&
-               user.Contains(
-                   "<user-reason>\n助詞は「は」ではありません\n</user-reason>",
-                   StringComparison.Ordinal) &&
-               result.Usage.BillableOutputTokens == 3;
+        bool systemPass =
+            system ==
+            ProofreadingPrompt.AlternativeSystemInstruction.ReplaceLineEndings("\n");
+        bool originalPass =
+            user.Contains("<original>\nア\n</original>", StringComparison.Ordinal);
+        bool suggestionPass =
+            user.Contains(
+                "<rejected-suggestion>\nは\n</rejected-suggestion>",
+                StringComparison.Ordinal);
+        bool reasonPass =
+            user.Contains(
+                "<user-reason>\n助詞は「は」ではありません\n</user-reason>",
+                StringComparison.Ordinal);
+        bool usagePass = result.Usage.BillableOutputTokens == 3;
+        bool pass =
+            systemPass && originalPass && suggestionPass && reasonPass && usagePass;
+        if (!pass)
+        {
+            Console.WriteLine(
+                "  理由つき別案の内訳: " +
+                $"system={systemPass}, original={originalPass}, " +
+                $"suggestion={suggestionPass}, reason={reasonPass}, usage={usagePass}");
+            Console.WriteLine($"  別案リクエスト: {EscapeForDiagnostic(user)}");
+            Console.WriteLine(
+                $"  出力トークン: {result.Usage.BillableOutputTokens}");
+        }
+        return pass;
+    }
+
+    private static async Task<bool> TestInvalidAlternativeUsageAsync()
+    {
+        var handler = new StubHandler((_, _, _) => Task.FromResult(
+            SuccessResponse("は", prompt: 11, candidate: 1, thoughts: 2, total: 14)));
+        using HttpClient http = new(handler) { BaseAddress = new Uri("https://example.invalid/") };
+        using var client = CreateClient(http);
+        var document = new TextDocument("この文章ア誤りです。");
+        using var session = new ProofreadingSession(document);
+        session.LoadCorrectedDocument("この文章は誤りです。");
+        ProofreadingProposal proposal = session.Proposals.Single();
+
+        try
+        {
+            await client.GenerateAlternativeAsync(proposal, "助詞は「は」ではありません");
+            return false;
+        }
+        catch (GeminiClientException ex)
+        {
+            return handler.Count == 1 &&
+                   ex.Error == GeminiClientError.InvalidResponse &&
+                   ex.Usage is { PromptTokens: 11, BillableOutputTokens: 3 } &&
+                   ex.Elapsed is { } elapsed && elapsed >= TimeSpan.Zero;
+        }
     }
 
     private static async Task<bool> TestContextRequestAsync()
@@ -94,7 +140,7 @@ internal static class GeminiProofreadingClientValidation
         using JsonDocument document = JsonDocument.Parse(handler.LastBody);
         string user = document.RootElement.GetProperty("contents")[0]
             .GetProperty("parts")[0].GetProperty("text").GetString() ?? "";
-        return user ==
+        string expected = (
             """
             <context-before correction-allowed="false">
             前の段落。
@@ -105,7 +151,14 @@ internal static class GeminiProofreadingClientValidation
             <context-after correction-allowed="false">
             後の段落。
             </context-after>
-            """;
+            """).ReplaceLineEndings("\n");
+        bool pass = user == expected;
+        if (!pass)
+        {
+            Console.WriteLine($"  前後文脈の期待値: {EscapeForDiagnostic(expected)}");
+            Console.WriteLine($"  前後文脈の実際値: {EscapeForDiagnostic(user)}");
+        }
+        return pass;
     }
 
     private static async Task<bool> TestSuccessAsync()
@@ -219,6 +272,12 @@ internal static class GeminiProofreadingClientValidation
             delay: (_, _) => Task.CompletedTask,
             requestTimeout: TimeSpan.FromSeconds(1));
 
+    private static string EscapeForDiagnostic(string value)
+        => value
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\r", "\\r", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal);
+
     private static bool ValidateRequest(StubHandler handler)
     {
         if (handler.LastBody is null ||
@@ -239,7 +298,8 @@ internal static class GeminiProofreadingClientValidation
 
         return config.GetProperty("temperature").GetDouble() == 1.0 &&
                config.GetProperty("responseMimeType").GetString() == "text/plain" &&
-               system == ProofreadingPrompt.SystemInstruction &&
+               system ==
+                   ProofreadingPrompt.SystemInstruction.ReplaceLineEndings("\n") &&
                user == "<document>\nこの文s尿です。\n</document>";
     }
 

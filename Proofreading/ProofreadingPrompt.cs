@@ -56,21 +56,19 @@ internal static class ProofreadingPrompt
         string reason,
         string leftContext,
         string rightContext)
-        => $"""
-        <context-before>
-        {leftContext}
-        </context-before>
-        <original>
-        {original}
-        </original>
-        <rejected-suggestion>
-        {rejectedSuggestion}
-        </rejected-suggestion>
-        <user-reason>
-        {reason}
-        </user-reason>
-        <context-after>
-        {rightContext}
-        </context-after>
-        """;
+        => "<context-before>\n" +
+           $"{leftContext}\n" +
+           "</context-before>\n" +
+           "<original>\n" +
+           $"{original}\n" +
+           "</original>\n" +
+           "<rejected-suggestion>\n" +
+           $"{rejectedSuggestion}\n" +
+           "</rejected-suggestion>\n" +
+           "<user-reason>\n" +
+           $"{reason}\n" +
+           "</user-reason>\n" +
+           "<context-after>\n" +
+           $"{rightContext}\n" +
+           "</context-after>";
 }

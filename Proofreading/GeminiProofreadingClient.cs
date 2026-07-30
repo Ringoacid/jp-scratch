@@ -20,16 +20,23 @@ internal sealed class GeminiClientException : Exception
 {
     internal GeminiClientError Error { get; }
     internal HttpStatusCode? StatusCode { get; }
+    /// <summary>HTTP成功後に判明した使用量。応答を安全に採用できない場合だけ任意で保持する。</summary>
+    internal GeminiUsage? Usage { get; }
+    internal TimeSpan? Elapsed { get; }
 
     internal GeminiClientException(
         GeminiClientError error,
         string message,
         HttpStatusCode? statusCode = null,
-        Exception? innerException = null)
+        Exception? innerException = null,
+        GeminiUsage? usage = null,
+        TimeSpan? elapsed = null)
         : base(message, innerException)
     {
         Error = error;
         StatusCode = statusCode;
+        Usage = usage;
+        Elapsed = elapsed;
     }
 }
 
@@ -154,7 +161,9 @@ internal sealed class GeminiProofreadingClient : IDisposable
         {
             throw new GeminiClientException(
                 GeminiClientError.InvalidResponse,
-                "Gemini APIから有効な別案が返されませんでした。");
+                "Gemini APIから有効な別案が返されませんでした。",
+                usage: generated.Usage,
+                elapsed: generated.Elapsed);
         }
 
         return new GeminiAlternativeResult(
@@ -394,13 +403,17 @@ internal sealed class GeminiProofreadingClient : IDisposable
         string systemInstruction,
         string userMessage)
     {
+        // raw文字列リテラルの改行はソースの改行コードに依存する。
+        // 検証済みプロンプトを環境にかかわらず同じバイト列で送るためLFへ統一する。
+        string normalizedSystemInstruction =
+            systemInstruction.ReplaceLineEndings("\n");
         JsonObject request = new()
         {
             ["systemInstruction"] = new JsonObject
             {
                 ["parts"] = new JsonArray(new JsonObject
                 {
-                    ["text"] = systemInstruction
+                    ["text"] = normalizedSystemInstruction
                 })
             },
             ["contents"] = new JsonArray(new JsonObject

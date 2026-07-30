@@ -283,16 +283,31 @@
                     Background="{DynamicResource StatusBarBackgroundBrush}"
                     BorderBrush="{DynamicResource BorderBrush}"
                     BorderThickness="0,1,0,0"
-                    Padding="10,3">
-                <DockPanel>
-                    <TextBlock x:Name="StatusRight"
-                               DockPanel.Dock="Right"
-                               FontSize="11"
+                    Padding="10,2">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <DockPanel Grid.Row="0">
+                        <TextBlock x:Name="StatusRight"
+                                   DockPanel.Dock="Right"
+                                   MaxWidth="210"
+                                   FontSize="11"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource SubtleTextBrush}" />
+                        <TextBlock x:Name="StatusLeft"
+                                   FontSize="11"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource SubtleTextBrush}" />
+                    </DockPanel>
+                    <TextBlock x:Name="StatusUsage"
+                               Grid.Row="1"
+                               Margin="0,1,0,0"
+                               FontSize="10"
+                               TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource SubtleTextBrush}" />
-                    <TextBlock x:Name="StatusLeft"
-                               FontSize="11"
-                               Foreground="{DynamicResource SubtleTextBrush}" />
-                </DockPanel>
+                </Grid>
             </Border>
         </Grid>
     </Border>

@@ -54,7 +54,7 @@ internal static class ReactionRepositoryValidation
                 "SELECT count(*) FROM reactions;",
                 reader => reader.Read() ? reader.GetInt32(0) : 0);
             bool passed =
-                version == 2 &&
+                version == 3 &&
                 count == 4 &&
                 applied &&
                 document.Text == "文章ア" &&

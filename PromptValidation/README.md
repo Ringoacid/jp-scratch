@@ -28,7 +28,7 @@ dotnet run --project PromptValidation -- --input "この文章を校正して"
 # APIを呼ばず、実際のプロンプトとJSON Schemaを確認
 dotnet run --project PromptValidation -- --dry-run --case style-01
 
-# 提案位置・全文差分・DPAPI資格情報ストアをオフライン検査
+# 提案位置・全文差分・資格情報・料金/ログ/為替・DB移行をオフライン検査
 dotnet run --project PromptValidation -- --self-test
 
 # 保存済みの全文応答から個別提案を抽出（APIは呼ばない）
@@ -82,6 +82,17 @@ AvalonEdit と同じ UTF-16 オフセットの局所置換へ変換する。絵�
 複数提案については、本文オフセットからの個別選択と前後への循環移動も検査する。
 本体の `CredentialService` もリンクし、DPAPI暗号化、再読込、削除、破損ファイルの検出を
 一時ディレクトリだけで検査する。実際のAPIキーやGemini APIは使用しない。
+`PricingService` もリンクし、`pricing.json` の初回生成、モデル別 `decimal` 料金計算、既定モデルの補完、
+破損ファイルの隔離を一時ディレクトリだけで検査する。
+`ApiCallRepository` もリンクし、`api_calls` の全列、Invariant CultureによるUSD/JPY文字列、既存JPY列のNULL、
+成功・error・timeout・破棄済みを含む精密decimal集計、全期間・セッション相当・当日・当月の日時境界、
+DSTで重複するローカル時刻を含む`DateTimeOffset`比較、最後に挿入した有効ログの取得を一時SQLiteだけで検査する。出力トークンは候補出力と推論トークンの合計を
+課金対象として本体側で記録する。
+`FxRateService` はローカルHTTPスタブだけで、当日・週末のキャッシュ再利用、期限切れ時のupsert、
+HTTP/timeout/不正JSONの古いキャッシュへのfallback、空キャッシュ時のnull、同時取得の一本化を検査する。
+失敗後の同日再呼出・再起動相当の別serviceでもHTTPが増えないこと、翌日の再試行も検査する。
+`DatabaseMigrationValidation` はDB v3の`app_metadata`を含む移行を一時SQLiteだけで検査する。したがって
+`--self-test` は、料金・ログ・為替を含めて外部APIを一切呼ばない全オフライン検証である。
 採用したシステム指示は本体の `ProofreadingPrompt` を共有し、検証版とのずれを防ぐ。
 本体の `GeminiProofreadingClient` もリンクし、ローカルHTTPスタブでリクエスト形式、
 前後文脈タグ、`usageMetadata`、差分生成、1回だけの再試行、恒久エラー、タイムアウト、
