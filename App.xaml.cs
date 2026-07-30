@@ -101,6 +101,7 @@ public partial class App : Application
 
         _tray.ToggleRequested += () => _window?.ToggleVisibility();
         _tray.SettingsRequested += () => _window?.OpenSettings();
+        _tray.BillingHistoryRequested += () => _window?.OpenBillingHistory();
         _tray.ExitRequested += ExitApplication;
         _tray.Initialize();
         _tray.SetTooltip($"JP Scratch — {_settings.Current.ToggleHotkey} で表示");

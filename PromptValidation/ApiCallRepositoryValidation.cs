@@ -211,6 +211,284 @@ internal static class ApiCallRepositoryValidation
         }
     }
 
+    /// <summary>課金履歴画面向け <see cref="ApiCallRepository.GetHistory"/> の自己テスト。</summary>
+    internal static bool RunHistorySelfTests()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "JpScratchApiCallHistoryValidation",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string databaseFile = Path.Combine(directory, "test.db");
+        CultureInfo originalCulture = CultureInfo.CurrentCulture;
+        CultureInfo originalUiCulture = CultureInfo.CurrentUICulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-FR");
+
+            using var database = new Database(databaseFile);
+            DateTimeOffset timestamp = At(2026, 7, 1, 0, 0);
+            var repository = new ApiCallRepository(database, () => timestamp);
+
+            long AddAt(DateTimeOffset at, ApiCallLogEntry entry)
+            {
+                timestamp = at;
+                return repository.Add(entry);
+            }
+
+            // from境界ちょうど（7/1 00:00）に置く行。
+            long r1 = AddAt(At(2026, 7, 1, 0, 0), new ApiCallLogEntry(
+                ApiCallTrigger.Manual, "gemini-3.5-flash-lite", 10, 5,
+                0.00001m, 12, ApiCallStatus.Ok, null, 1, 0));
+            FxRate fxR2 = new(new DateOnly(2026, 7, 15), 150m, At(2026, 7, 15, 12, 0));
+            long r2 = AddAt(At(2026, 7, 15, 12, 0), new ApiCallLogEntry(
+                ApiCallTrigger.Auto, "gemini-3.5-flash-lite", 20, 10,
+                0.00002m, 20, ApiCallStatus.Ok, null, 2, 0, fxR2));
+            // r3はr2とcalled_atが完全に同時刻。idの新しいr3が先に並ぶことを確認する対象。
+            long r3 = AddAt(At(2026, 7, 15, 12, 0), new ApiCallLogEntry(
+                ApiCallTrigger.Auto, "gemini-3.5-flash-lite", 8, 3,
+                0.000009m, 30, ApiCallStatus.Error,
+                "Gemini APIがHTTP 500を返しました。", 0, 0));
+            long r4 = AddAt(At(2026, 7, 20, 9, 0), new ApiCallLogEntry(
+                ApiCallTrigger.Realternative, "gemini-3.5-flash-lite", 5, 5,
+                0.000005m, 45, ApiCallStatus.Timeout,
+                "Gemini APIへの接続が15秒以内に完了しませんでした。", 0, 1));
+            FxRate fxR5 = new(new DateOnly(2026, 7, 25), 152.3m, At(2026, 7, 25, 9, 0));
+            long r5 = AddAt(At(2026, 7, 25, 9, 0), new ApiCallLogEntry(
+                ApiCallTrigger.StyleGuide, "gemini-3.5-flash-lite", 30, 15,
+                0.00004m, 60, ApiCallStatus.Ok, null, 0, 0, fxR5));
+            // to境界ちょうど（8/1 00:00）に置く行。7月の問い合わせでは除外される側。
+            long r6 = AddAt(At(2026, 8, 1, 0, 0), new ApiCallLogEntry(
+                ApiCallTrigger.Manual, "gemini-3.5-flash-lite", 1, 1,
+                0.000001m, 5, ApiCallStatus.Ok, null, 1, 0));
+
+            // 壊れた行を直接INSERTする。日時パース不可・usd_costパース不可・未知trigger。
+            // いずれも7月の期間内に収まる日時を使い、除外されることを確認する。
+            database.Execute(
+                """
+                INSERT INTO api_calls (
+                    called_at, trigger_type, model, prompt_tokens, output_tokens,
+                    usd_cost, duration_ms, status, suggestion_cnt, discarded_cnt)
+                VALUES ('not-an-iso-date', 'manual', 'gemini-3.5-flash-lite', 1, 1, '0.001', 1, 'ok', 0, 0);
+                """);
+            database.Execute(
+                """
+                INSERT INTO api_calls (
+                    called_at, trigger_type, model, prompt_tokens, output_tokens,
+                    usd_cost, duration_ms, status, suggestion_cnt, discarded_cnt)
+                VALUES ($called_at, 'manual', 'gemini-3.5-flash-lite', 1, 1, 'not-a-number', 1, 'ok', 0, 0);
+                """,
+                ("$called_at", At(2026, 7, 16, 0, 0).ToString("O", CultureInfo.InvariantCulture)));
+            database.Execute(
+                """
+                INSERT INTO api_calls (
+                    called_at, trigger_type, model, prompt_tokens, output_tokens,
+                    usd_cost, duration_ms, status, suggestion_cnt, discarded_cnt)
+                VALUES ($called_at, 'unknown', 'gemini-3.5-flash-lite', 1, 1, '0.001', 1, 'ok', 0, 0);
+                """,
+                ("$called_at", At(2026, 7, 17, 0, 0).ToString("O", CultureInfo.InvariantCulture)));
+
+            ApiCallHistoryPage julyAll = repository.GetHistory(
+                At(2026, 7, 1, 0, 0), At(2026, 8, 1, 0, 0));
+            ApiCallHistoryPage autoOnly = repository.GetHistory(
+                At(2026, 7, 1, 0, 0), At(2026, 8, 1, 0, 0),
+                [ApiCallTrigger.Auto]);
+            ApiCallHistoryPage multiTrigger = repository.GetHistory(
+                At(2026, 7, 1, 0, 0), At(2026, 8, 1, 0, 0),
+                [ApiCallTrigger.Realternative, ApiCallTrigger.StyleGuide]);
+            ApiCallHistoryPage emptyTriggerSet = repository.GetHistory(
+                At(2026, 7, 1, 0, 0), At(2026, 8, 1, 0, 0), []);
+            ApiCallHistoryPage truncated = repository.GetHistory(
+                At(2026, 7, 1, 0, 0), At(2026, 8, 1, 0, 0), null, 2);
+            ApiCallHistoryPage augustBoundary = repository.GetHistory(
+                At(2026, 8, 1, 0, 0), At(2026, 8, 2, 0, 0));
+
+            bool limitThrows = Throws<ArgumentOutOfRangeException>(
+                () => repository.GetHistory(limit: 0));
+            bool rangeThrows = Throws<ArgumentException>(
+                () => repository.GetHistory(At(2026, 8, 1, 0, 0), At(2026, 7, 1, 0, 0)));
+
+            var expectedR1 = new ApiCallHistoryRow(
+                r1, At(2026, 7, 1, 0, 0), ApiCallTrigger.Manual, "gemini-3.5-flash-lite",
+                10, 5, 0.00001m, null, null, null, 12, ApiCallStatus.Ok, null, 1, 0);
+            var expectedR2 = new ApiCallHistoryRow(
+                r2, At(2026, 7, 15, 12, 0), ApiCallTrigger.Auto, "gemini-3.5-flash-lite",
+                20, 10, 0.00002m, 150m, new DateOnly(2026, 7, 15), 0.003m, 20,
+                ApiCallStatus.Ok, null, 2, 0);
+            var expectedR3 = new ApiCallHistoryRow(
+                r3, At(2026, 7, 15, 12, 0), ApiCallTrigger.Auto, "gemini-3.5-flash-lite",
+                8, 3, 0.000009m, null, null, null, 30, ApiCallStatus.Error,
+                "Gemini APIがHTTP 500を返しました。", 0, 0);
+            var expectedR4 = new ApiCallHistoryRow(
+                r4, At(2026, 7, 20, 9, 0), ApiCallTrigger.Realternative, "gemini-3.5-flash-lite",
+                5, 5, 0.000005m, null, null, null, 45, ApiCallStatus.Timeout,
+                "Gemini APIへの接続が15秒以内に完了しませんでした。", 0, 1);
+            var expectedR5 = new ApiCallHistoryRow(
+                r5, At(2026, 7, 25, 9, 0), ApiCallTrigger.StyleGuide, "gemini-3.5-flash-lite",
+                30, 15, 0.00004m, 152.3m, new DateOnly(2026, 7, 25), 0.006092m, 60,
+                ApiCallStatus.Ok, null, 0, 0);
+            var expectedR6 = new ApiCallHistoryRow(
+                r6, At(2026, 8, 1, 0, 0), ApiCallTrigger.Manual, "gemini-3.5-flash-lite",
+                1, 1, 0.000001m, null, null, null, 5, ApiCallStatus.Ok, null, 1, 0);
+
+            bool passed =
+                julyAll.TotalCount == 5 && !julyAll.Truncated && julyAll.Rows.Count == 5 &&
+                julyAll.Rows[0] == expectedR5 && julyAll.Rows[1] == expectedR4 &&
+                julyAll.Rows[2] == expectedR3 && julyAll.Rows[3] == expectedR2 &&
+                julyAll.Rows[4] == expectedR1 &&
+                autoOnly.TotalCount == 2 && !autoOnly.Truncated && autoOnly.Rows.Count == 2 &&
+                autoOnly.Rows[0] == expectedR3 && autoOnly.Rows[1] == expectedR2 &&
+                multiTrigger.TotalCount == 2 && multiTrigger.Rows.Count == 2 &&
+                multiTrigger.Rows[0] == expectedR5 && multiTrigger.Rows[1] == expectedR4 &&
+                emptyTriggerSet.TotalCount == 5 && emptyTriggerSet.Rows.Count == 5 &&
+                truncated.TotalCount == 5 && truncated.Truncated && truncated.Rows.Count == 2 &&
+                truncated.Rows[0] == expectedR5 && truncated.Rows[1] == expectedR4 &&
+                augustBoundary.TotalCount == 1 && augustBoundary.Rows.Count == 1 &&
+                augustBoundary.Rows[0] == expectedR6 &&
+                limitThrows && rangeThrows;
+
+            Console.WriteLine(
+                "API呼び出し履歴（期間・種別フィルタ、並び順、limit、壊れた行の除外）: " +
+                (passed ? "PASS" : "FAIL"));
+            return passed;
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+            CultureInfo.CurrentUICulture = originalUiCulture;
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    /// <summary>課金履歴画面のヘッダ合計向け、<see cref="ApiCallRepository.GetUsageSummary"/> の種別フィルタの自己テスト。</summary>
+    internal static bool RunUsageSummaryTriggerFilterSelfTests()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "JpScratchApiCallUsageSummaryTriggerValidation",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string databaseFile = Path.Combine(directory, "test.db");
+        CultureInfo originalCulture = CultureInfo.CurrentCulture;
+        CultureInfo originalUiCulture = CultureInfo.CurrentUICulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-FR");
+
+            using var database = new Database(databaseFile);
+            DateTimeOffset timestamp = At(2026, 7, 1, 0, 0);
+            var repository = new ApiCallRepository(database, () => timestamp);
+
+            long AddAt(DateTimeOffset at, ApiCallLogEntry entry)
+            {
+                timestamp = at;
+                return repository.Add(entry);
+            }
+
+            AddAt(At(2026, 7, 1, 0, 0), new ApiCallLogEntry(
+                ApiCallTrigger.Manual, "gemini-3.5-flash-lite", 10, 5,
+                0.00001m, 12, ApiCallStatus.Ok, null, 1, 0));
+            FxRate fxR2 = new(new DateOnly(2026, 7, 15), 150m, At(2026, 7, 15, 12, 0));
+            AddAt(At(2026, 7, 15, 12, 0), new ApiCallLogEntry(
+                ApiCallTrigger.Auto, "gemini-3.5-flash-lite", 20, 10,
+                0.00002m, 20, ApiCallStatus.Ok, null, 2, 0, fxR2));
+            AddAt(At(2026, 7, 15, 12, 0), new ApiCallLogEntry(
+                ApiCallTrigger.Auto, "gemini-3.5-flash-lite", 8, 3,
+                0.000009m, 30, ApiCallStatus.Error,
+                "Gemini APIがHTTP 500を返しました。", 0, 0));
+            AddAt(At(2026, 7, 20, 9, 0), new ApiCallLogEntry(
+                ApiCallTrigger.Realternative, "gemini-3.5-flash-lite", 5, 5,
+                0.000005m, 45, ApiCallStatus.Timeout,
+                "Gemini APIへの接続が15秒以内に完了しませんでした。", 0, 1));
+            FxRate fxR5 = new(new DateOnly(2026, 7, 25), 152.3m, At(2026, 7, 25, 9, 0));
+            AddAt(At(2026, 7, 25, 9, 0), new ApiCallLogEntry(
+                ApiCallTrigger.StyleGuide, "gemini-3.5-flash-lite", 30, 15,
+                0.00004m, 60, ApiCallStatus.Ok, null, 0, 0, fxR5));
+            AddAt(At(2026, 8, 1, 0, 0), new ApiCallLogEntry(
+                ApiCallTrigger.Manual, "gemini-3.5-flash-lite", 1, 1,
+                0.000001m, 5, ApiCallStatus.Ok, null, 1, 0));
+
+            // 未知trigger（不正データ）は、フィルタ有無に関わらずGetHistoryと同じく除外される。
+            database.Execute(
+                """
+                INSERT INTO api_calls (
+                    called_at, trigger_type, model, prompt_tokens, output_tokens,
+                    usd_cost, duration_ms, status, suggestion_cnt, discarded_cnt)
+                VALUES ($called_at, 'unknown', 'gemini-3.5-flash-lite', 1, 1, '0.001', 1, 'ok', 0, 0);
+                """,
+                ("$called_at", At(2026, 7, 17, 0, 0).ToString("O", CultureInfo.InvariantCulture)));
+
+            DateTimeOffset julyFrom = At(2026, 7, 1, 0, 0);
+            DateTimeOffset julyTo = At(2026, 8, 1, 0, 0);
+
+            ApiCallUsageSummary all = repository.GetUsageSummary(julyFrom, julyTo);
+            ApiCallUsageSummary nullTriggers = repository.GetUsageSummary(julyFrom, julyTo, null);
+            ApiCallUsageSummary emptyTriggers = repository.GetUsageSummary(julyFrom, julyTo, []);
+            ApiCallUsageSummary autoOnly = repository.GetUsageSummary(
+                julyFrom, julyTo, [ApiCallTrigger.Auto]);
+            ApiCallUsageSummary multiTrigger = repository.GetUsageSummary(
+                julyFrom, julyTo, [ApiCallTrigger.Realternative, ApiCallTrigger.StyleGuide]);
+            ApiCallUsageSummary noMatch = repository.GetUsageSummary(
+                At(2026, 8, 1, 0, 0), At(2026, 8, 2, 0, 0), [ApiCallTrigger.StyleGuide]);
+
+            var expectedAll = new ApiCallUsageSummary(
+                5, 3, 1, 1, 73, 38, 0.000084m, 3, 1, 0.009092m, false,
+                null, null, new DateOnly(2026, 7, 15), new DateOnly(2026, 7, 25), 2);
+            var expectedAutoOnly = new ApiCallUsageSummary(
+                2, 1, 1, 0, 28, 13, 0.000029m, 2, 0, 0.003m, false,
+                150m, new DateOnly(2026, 7, 15), new DateOnly(2026, 7, 15), new DateOnly(2026, 7, 15), 1);
+            var expectedMultiTrigger = new ApiCallUsageSummary(
+                2, 1, 0, 1, 35, 20, 0.000045m, 0, 1, 0.006092m, false,
+                152.3m, new DateOnly(2026, 7, 25), new DateOnly(2026, 7, 25), new DateOnly(2026, 7, 25), 1);
+
+            bool passed =
+                all == expectedAll &&
+                nullTriggers == expectedAll &&
+                emptyTriggers == expectedAll &&
+                autoOnly == expectedAutoOnly &&
+                multiTrigger == expectedMultiTrigger &&
+                noMatch == ApiCallUsageSummary.Empty;
+
+            Console.WriteLine(
+                "API利用集計（種別フィルタ、null/空=全種別、未知triggerの除外）: " +
+                (passed ? "PASS" : "FAIL"));
+            return passed;
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+            CultureInfo.CurrentUICulture = originalUiCulture;
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private static bool Throws<TException>(Action action) where TException : Exception
+    {
+        try
+        {
+            action();
+            return false;
+        }
+        catch (TException)
+        {
+            return true;
+        }
+    }
+
     private static DateTimeOffset At(int year, int month, int day, int hour, int minute)
         => new(year, month, day, hour, minute, 0, TimeSpan.FromHours(9));
 

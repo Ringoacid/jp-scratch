@@ -59,8 +59,18 @@ public partial class MainWindow : Window
     /// <summary>表示する直前に前面だったウィンドウ。「コピーして隠す」で戻す先（要件 3.1.4）。</summary>
     private IntPtr _previousForeground;
 
-    /// <summary>設定ダイアログなど、自分の子ウィンドウを開いている間は自動非表示を止める。</summary>
-    private bool _suppressHideOnDeactivate;
+    /// <summary>
+    /// 自動非表示の抑止（要件 3.1.3）。設定ダイアログ・全タブ検索・課金履歴など、複数の子ウィンドウを
+    /// 同時に開いている状態で片方だけ閉じても、残りが開いている間は抑止され続ける必要がある。
+    /// bool 共有では、後から閉じた側が無条件に解除してしまい、まだ開いている側があっても
+    /// 自動非表示が働いてしまう不具合があった。ロジックは <see cref="HideSuppressionCounter"/> に
+    /// 切り出してあり、PromptValidation から参照カウントの挙動だけを単体検証できる。
+    /// </summary>
+    private readonly HideSuppressionCounter _hideSuppression = new();
+
+    private void SuppressAutoHide() => _hideSuppression.Suppress();
+
+    private void ReleaseAutoHide() => _hideSuppression.Release();
 
     private DateTime _lastAutoHide = DateTime.MinValue;
     private DateTime _statusMessageUntil = DateTime.MinValue;
@@ -70,6 +80,7 @@ public partial class MainWindow : Window
     private Point _dragOrigin;
 
     private CrossTabSearchWindow? _crossTabSearch;
+    private BillingHistoryWindow? _billingHistory;
     private ProofreadingSession? _activeProofreading;
     private ProofreadingProposal? _selectedProposal;
     private bool _alternativeInProgress;
@@ -199,7 +210,17 @@ public partial class MainWindow : Window
     internal void WarmUp()
     {
         ShowActivated = false;
-        _suppressHideOnDeactivate = true;
+        SuppressAutoHide();
+
+        // 正常系では BeginInvoke のコールバックが後から1回だけ解放する。ここでの解放は
+        // 「その前に何かで失敗した」経路専用なので、二重解放を避けるために一度きりにする。
+        bool suppressionReleased = false;
+        void ReleaseOnce()
+        {
+            if (suppressionReleased) return;
+            suppressionReleased = true;
+            ReleaseAutoHide();
+        }
 
         try
         {
@@ -211,13 +232,20 @@ public partial class MainWindow : Window
             {
                 Hide();
                 ShowActivated = true;
-                _suppressHideOnDeactivate = false;
+                ReleaseOnce();
             });
         }
         catch (InvalidOperationException)
         {
+            // 例外の握りつぶし方自体は変えない。この型だけは起動続行のため飲み込む。
             ShowActivated = true;
-            _suppressHideOnDeactivate = false;
+            ReleaseOnce();
+        }
+        catch
+        {
+            // それ以外の例外はこれまで通り再スローする。抑止カウントの解放漏れだけを防ぐ。
+            ReleaseOnce();
+            throw;
         }
     }
 
@@ -299,7 +327,7 @@ public partial class MainWindow : Window
 
         if (!_settings.Current.HideOnFocusLost) return;
         if (PinButton.IsChecked == true) return;          // ピン留め中は隠さない
-        if (_suppressHideOnDeactivate) return;            // 設定ダイアログなどを開いている
+        if (_hideSuppression.IsSuppressed) return;         // 設定ダイアログなどを開いている
 
         // 変換中に消えると入力そのものが失われる（要件 3.1.3 / R-5）
         if (NativeMethods.HasImeComposition(_handle)) return;
@@ -637,6 +665,7 @@ public partial class MainWindow : Window
         Bind(Key.F3, ModifierKeys.None, () => FindPanel.FindNext(forward: true));
         Bind(Key.F3, ModifierKeys.Shift, () => FindPanel.FindNext(forward: false));
         Bind(Key.F, ModifierKeys.Control | ModifierKeys.Shift, () => OpenCrossTabSearch(""));
+        Bind(Key.B, ModifierKeys.Control | ModifierKeys.Shift, OpenBillingHistory);
 
         Bind(Key.S, ModifierKeys.Control | ModifierKeys.Shift, ExportActiveTab);
         Bind(Key.Enter, ModifierKeys.Control, RunManualProofreading);
@@ -764,7 +793,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        _suppressHideOnDeactivate = true;
+        SuppressAutoHide();
         string? apiKey = _credentials.GetApiKey(
             _settings.Current.GeminiApiKeySource);
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -775,7 +804,7 @@ public partial class MainWindow : Window
                 "JP Scratch",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
-            _suppressHideOnDeactivate = false;
+            ReleaseAutoHide();
             return;
         }
 
@@ -790,7 +819,7 @@ public partial class MainWindow : Window
             MessageBoxResult.No);
         if (confirmation != MessageBoxResult.Yes)
         {
-            _suppressHideOnDeactivate = false;
+            ReleaseAutoHide();
             return;
         }
 
@@ -878,7 +907,7 @@ public partial class MainWindow : Window
         {
             _alternativeInProgress = false;
             SetProposalActionsEnabled(true);
-            _suppressHideOnDeactivate = false;
+            ReleaseAutoHide();
             Activate();
             Editor.TextArea.Focus();
         }
@@ -929,7 +958,7 @@ public partial class MainWindow : Window
 
     private bool TryGetReason(bool generatesAlternative, out string reason)
     {
-        _suppressHideOnDeactivate = true;
+        SuppressAutoHide();
         try
         {
             var dialog = new ProofreadingReasonDialog(
@@ -944,7 +973,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            _suppressHideOnDeactivate = false;
+            ReleaseAutoHide();
         }
     }
 
@@ -1217,7 +1246,7 @@ public partial class MainWindow : Window
 
     private bool ConfirmProofreadingApiUse(int requestCount, bool manual)
     {
-        _suppressHideOnDeactivate = true;
+        SuppressAutoHide();
         try
         {
             string trigger = manual ? "手動校正" : "自動校正";
@@ -1235,7 +1264,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            _suppressHideOnDeactivate = false;
+            ReleaseAutoHide();
         }
     }
 
@@ -1395,9 +1424,6 @@ public partial class MainWindow : Window
             $"出力・推論 ${pricing.OutputUsdPerMillion:0.####}／100万トークン";
     }
 
-    private static string FormatUsd(decimal cost)
-        => cost.ToString("0.########", CultureInfo.InvariantCulture);
-
     /// <summary>起動後に静かに日次レートを更新し、既存のUSD表示を壊さずに再描画する。</summary>
     internal async Task RefreshFxRateAsync()
     {
@@ -1416,9 +1442,9 @@ public partial class MainWindow : Window
         => !cost.IsUsageKnown
             ? "使用量・料金は未確認"
             : cost.JpyCost is decimal jpyCost
-            ? $"${FormatUsd(cost.UsdCost)} ({FormatJpy(jpyCost)})" +
-              FormatRateReference(cost.FxRate)
-            : $"${FormatUsd(cost.UsdCost)} (¥—)";
+            ? $"${UsageFormatting.FormatUsd(cost.UsdCost)} ({UsageFormatting.FormatJpy(jpyCost)})" +
+              UsageFormatting.FormatRateReference(cost.FxRate)
+            : $"${UsageFormatting.FormatUsd(cost.UsdCost)} (¥—)";
 
     private static string FormatCostWithJpy(IReadOnlyList<ApiUsageCost> costs)
     {
@@ -1428,30 +1454,14 @@ public partial class MainWindow : Window
 
         decimal usdCost = known.Sum(cost => cost.UsdCost);
         if (known.Any(cost => cost.UsdCost != 0m && cost.JpyCost is null))
-            return $"${FormatUsd(usdCost)} (¥—)" +
+            return $"${UsageFormatting.FormatUsd(usdCost)} (¥—)" +
                    (known.Count == costs.Count ? "" : "（一部料金未確認）");
 
         decimal jpyCost = known.Sum(cost => cost.JpyCost ?? 0m);
-        return $"${FormatUsd(usdCost)} ({FormatJpy(jpyCost)})" +
+        return $"${UsageFormatting.FormatUsd(usdCost)} ({UsageFormatting.FormatJpy(jpyCost)})" +
                FormatRateReferences(known) +
                (known.Count == costs.Count ? "" : "（一部料金未確認）");
     }
-
-    private static string FormatJpy(decimal value)
-    {
-        decimal rounded = value != 0m && Math.Abs(value) < 0.01m
-            ? Math.Round(value, 3, MidpointRounding.AwayFromZero)
-            : Math.Round(value, 2, MidpointRounding.AwayFromZero);
-        return "¥" + rounded.ToString(
-            Math.Abs(rounded) < 0.01m && rounded != 0m ? "0.###" : "0.00",
-            CultureInfo.InvariantCulture);
-    }
-
-    private static string FormatRateReference(FxRate? rate)
-        => rate is null
-            ? ""
-            : $" (1USD=¥{rate.UsdJpy.ToString("0.####", CultureInfo.InvariantCulture)} / " +
-              $"{rate.RateDate:MM-dd}時点)";
 
     private static string FormatRateReferences(IReadOnlyList<ApiUsageCost> costs)
     {
@@ -1462,7 +1472,7 @@ public partial class MainWindow : Window
             .OrderBy(value => value.RateDate)
             .ToArray();
         if (rates.Length == 1)
-            return FormatRateReference(new FxRate(rates[0].Date, rates[0].Rate, default));
+            return UsageFormatting.FormatRateReference(new FxRate(rates[0].Date, rates[0].Rate, default));
         if (rates.Length > 1)
         {
             return $" (ログ固定レート合計 / {rates[0].Date:MM-dd}〜" +
@@ -1492,18 +1502,20 @@ public partial class MainWindow : Window
             string latestText = latest is null
                 ? "直—"
                 : $"直↑{latest.PromptTokens:N0}↓{latest.OutputTokens:N0}" +
-                  $"${FormatUsd(latest.UsdCost)} ({FormatJpy(latest)}{FormatRateDateSuffix(latest)})";
+                  $"${UsageFormatting.FormatUsd(latest.UsdCost)} " +
+                  $"({UsageFormatting.FormatJpy(latest)}{UsageFormatting.FormatRateDateSuffix(latest)})";
             StatusUsage.Text =
-                $"{latestText}｜起${FormatUsd(session.UsdCost)} ({FormatJpy(session)})｜" +
-                $"日${FormatUsd(today.UsdCost)} ({FormatJpy(today)})｜" +
-                $"月${FormatUsd(month.UsdCost)} ({FormatJpy(month)})";
+                $"{latestText}｜起${UsageFormatting.FormatUsd(session.UsdCost)} ({UsageFormatting.FormatJpy(session)})｜" +
+                $"日${UsageFormatting.FormatUsd(today.UsdCost)} ({UsageFormatting.FormatJpy(today)})｜" +
+                $"月${UsageFormatting.FormatUsd(month.UsdCost)} ({UsageFormatting.FormatJpy(month)})";
             StatusUsage.ToolTip = string.Join(
                 Environment.NewLine,
                 FormatUsageTooltip("直近", latest),
                 FormatUsageTooltip("起動後", session),
                 FormatUsageTooltip("今日", today),
                 FormatUsageTooltip("今月", month),
-                FormatCachedRateTooltip());
+                FormatCachedRateTooltip(),
+                "クリックで課金履歴");
             _usageDisplayDate = LocalDate(now);
             return true;
         }
@@ -1534,19 +1546,10 @@ public partial class MainWindow : Window
         return new DateOnly(local.Year, local.Month, local.Day);
     }
 
-    private static DateTimeOffset LocalStartOfDay(DateTimeOffset value)
-    {
-        DateTime local = value.LocalDateTime;
-        return new DateTimeOffset(new DateTime(
-            local.Year, local.Month, local.Day, 0, 0, 0, DateTimeKind.Local));
-    }
+    // ローカル日/月の境界計算は Services/UsagePeriod.cs に集約し、課金履歴画面のクエリと共有する。
+    private static DateTimeOffset LocalStartOfDay(DateTimeOffset value) => UsagePeriod.StartOfDay(value);
 
-    private static DateTimeOffset LocalStartOfMonth(DateTimeOffset value)
-    {
-        DateTime local = value.LocalDateTime;
-        return new DateTimeOffset(new DateTime(
-            local.Year, local.Month, 1, 0, 0, 0, DateTimeKind.Local));
-    }
+    private static DateTimeOffset LocalStartOfMonth(DateTimeOffset value) => UsagePeriod.StartOfMonth(value);
 
     private static DateTimeOffset LocalStartOfNextDay(DateTimeOffset value)
     {
@@ -1565,18 +1568,18 @@ public partial class MainWindow : Window
     private static string FormatUsageTooltip(string label, ApiCallLog? entry)
         => entry is null
             ? $"{label}: 記録なし"
-            : $"{label}: 1回（{FormatStatusCounts(entry.Status)}）  " +
+            : $"{label}: 1回（{UsageFormatting.FormatStatusCounts(entry.Status)}）  " +
               $"入力 {entry.PromptTokens:N0} / 出力 {entry.OutputTokens:N0} tokens  " +
-              $"${FormatUsd(entry.UsdCost)} ({FormatJpy(entry)})" +
-              FormatRateReference(entry.UsdJpyRate is decimal rate && entry.RateDate is DateOnly date
+              $"${UsageFormatting.FormatUsd(entry.UsdCost)} ({UsageFormatting.FormatJpy(entry)})" +
+              UsageFormatting.FormatRateReference(entry.UsdJpyRate is decimal rate && entry.RateDate is DateOnly date
                   ? new FxRate(date, rate, default) : null) +
               $"  提案 {entry.SuggestionCount:N0} / 破棄 {entry.DiscardedCount:N0}";
 
     private static string FormatUsageTooltip(string label, ApiCallUsageSummary summary)
-        => $"{label}: {summary.TotalCalls:N0}回（{FormatStatusCounts(summary)}）  " +
+        => $"{label}: {summary.TotalCalls:N0}回（{UsageFormatting.FormatStatusCounts(summary)}）  " +
            $"入力 {summary.PromptTokens:N0} / 出力 {summary.OutputTokens:N0} tokens  " +
-           $"${FormatUsd(summary.UsdCost)} ({FormatJpy(summary)})  " +
-           FormatSummaryRateReference(summary) +
+           $"${UsageFormatting.FormatUsd(summary.UsdCost)} ({UsageFormatting.FormatJpy(summary)})  " +
+           UsageFormatting.FormatSummaryRateReference(summary) +
            $"  提案 {summary.SuggestionCount:N0} / 破棄 {summary.DiscardedCount:N0}";
 
     private string FormatCachedRateTooltip()
@@ -1584,52 +1587,8 @@ public partial class MainWindow : Window
         FxRate? rate = _fxRates.GetCachedRate();
         return rate is null
             ? "現在のキャッシュ: なし（JPY換算は次回取得後のログから表示）"
-            : "現在のキャッシュ: " + FormatRateReference(rate).Trim();
+            : "現在のキャッシュ: " + UsageFormatting.FormatRateReference(rate).Trim();
     }
-
-    private static string FormatJpy(ApiCallLog entry)
-        => entry.JpyCost is decimal cost
-            ? FormatJpy(cost)
-            : entry.UsdCost == 0m ? FormatJpy(0m) : "¥—";
-
-    private static string FormatJpy(ApiCallUsageSummary summary)
-        => summary.IsJpyComplete ? FormatJpy(summary.JpyCost) : "¥—";
-
-    private static string FormatRateDateSuffix(ApiCallLog entry)
-        => entry.JpyCost is not null && entry.RateDate is DateOnly date
-            ? "@" + date.ToString("MM-dd", CultureInfo.InvariantCulture)
-            : "";
-
-    private static string FormatSummaryRateReference(ApiCallUsageSummary summary)
-    {
-        if (!summary.IsJpyComplete)
-            return "JPY換算に未記録ログあり";
-        if (summary.DistinctRateCount == 1 &&
-            summary.SingleUsdJpyRate is decimal rate && summary.SingleRateDate is DateOnly date)
-        {
-            return $"1USD=¥{rate.ToString("0.####", CultureInfo.InvariantCulture)} / " +
-                   $"{date:MM-dd}時点（ログ固定）";
-        }
-        if (summary.DistinctRateCount > 1 &&
-            summary.FirstRateDate is DateOnly first && summary.LastRateDate is DateOnly last)
-        {
-            return $"ログ固定レート合計 / {first:MM-dd}〜{last:MM-dd}・" +
-                   $"{summary.DistinctRateCount}レート";
-        }
-        return summary.UsdCost == 0m ? "JPY 0円（レート不要）" : "ログ固定レート情報なし";
-    }
-
-    private static string FormatStatusCounts(ApiCallStatus status)
-        => status switch
-        {
-            ApiCallStatus.Ok => "成功 1",
-            ApiCallStatus.Error => "error 1",
-            ApiCallStatus.Timeout => "timeout 1",
-            _ => throw new ArgumentOutOfRangeException(nameof(status)),
-        };
-
-    private static string FormatStatusCounts(ApiCallUsageSummary summary)
-        => $"成功 {summary.OkCalls:N0} / error {summary.ErrorCalls:N0} / timeout {summary.TimeoutCalls:N0}";
 
     private void RestoreClosedTab()
     {
@@ -1651,7 +1610,7 @@ public partial class MainWindow : Window
     {
         if (!IsVisible) ShowAndFocus();
 
-        _suppressHideOnDeactivate = true;
+        SuppressAutoHide();
         try
         {
             var dialog = new SettingsWindow(_settings, _credentials) { Owner = this };
@@ -1659,7 +1618,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            _suppressHideOnDeactivate = false;
+            ReleaseAutoHide();
         }
 
         Activate();
@@ -1668,18 +1627,30 @@ public partial class MainWindow : Window
 
     private void OpenCrossTabSearch(string initialTerm)
     {
-        _suppressHideOnDeactivate = true;
-
         if (_crossTabSearch is null)
         {
-            _crossTabSearch = new CrossTabSearchWindow(_tabs, _repository) { Owner = this };
-            _crossTabSearch.Closed += (_, _) =>
+            // 生成のたびに1回だけ確保する。既に開いている状態でこのメソッドが再度呼ばれても
+            // （例: Ctrl+Shift+F の再押下）多重に加算しない。加算と解除を1:1に保つのが目的。
+            SuppressAutoHide();
+            try
             {
+                _crossTabSearch = new CrossTabSearchWindow(_tabs, _repository) { Owner = this };
+                _crossTabSearch.Closed += (_, _) =>
+                {
+                    _crossTabSearch = null;
+                    ReleaseAutoHide();
+                };
+                _crossTabSearch.HitSelected += JumpToHit;
+                _crossTabSearch.Show();
+            }
+            catch
+            {
+                // 生成・表示のどこで失敗しても抑止カウントを積んだままにしない。Show() より前の失敗では
+                // Closed が発火しないため、ここで明示的に解放してから同じ例外を再スローする。
                 _crossTabSearch = null;
-                _suppressHideOnDeactivate = false;
-            };
-            _crossTabSearch.HitSelected += JumpToHit;
-            _crossTabSearch.Show();
+                ReleaseAutoHide();
+                throw;
+            }
         }
         else
         {
@@ -1688,6 +1659,44 @@ public partial class MainWindow : Window
 
         _crossTabSearch.SetTerm(initialTerm);
     }
+
+    /// <summary>課金履歴画面を開く（要件 3.1.1 / 3.6.2）。トレイメニュー・ステータスバー・Ctrl+Shift+B から呼ぶ。</summary>
+    public void OpenBillingHistory()
+    {
+        if (_billingHistory is null)
+        {
+            // 生成のたびに1回だけ確保する。既に開いている状態でこのメソッドが再度呼ばれても
+            // （例: Ctrl+Shift+B の再押下）多重に加算しない。加算と解除を1:1に保つのが目的。
+            SuppressAutoHide();
+            try
+            {
+                // BillingHistoryWindow のコンストラクタは末尾で LoadHistory() を呼びSQLiteを読むため、
+                // DBロック・破損・XAMLリソース解決失敗などで例外が飛びうる。生成・表示のどこで
+                // 失敗しても抑止カウントを積んだままにしない（Show() より前の失敗では Closed が
+                // 発火しないため、ここで明示的に解放してから同じ例外を再スローする）。
+                _billingHistory = new BillingHistoryWindow(_apiCalls) { Owner = this };
+                _billingHistory.Closed += (_, _) =>
+                {
+                    _billingHistory = null;
+                    ReleaseAutoHide();
+                };
+                _billingHistory.Show();
+            }
+            catch
+            {
+                _billingHistory = null;
+                ReleaseAutoHide();
+                throw;
+            }
+        }
+        else
+        {
+            _billingHistory.Activate();
+            _billingHistory.Refresh();
+        }
+    }
+
+    private void StatusUsage_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) => OpenBillingHistory();
 
     private void JumpToHit(CrossTabHit hit)
     {
@@ -1712,7 +1721,7 @@ public partial class MainWindow : Window
     {
         if (_tabs.Active is not { } tab) return;
 
-        _suppressHideOnDeactivate = true;
+        SuppressAutoHide();
         try
         {
             var dialog = new Microsoft.Win32.SaveFileDialog
@@ -1733,7 +1742,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            _suppressHideOnDeactivate = false;
+            ReleaseAutoHide();
         }
     }
 

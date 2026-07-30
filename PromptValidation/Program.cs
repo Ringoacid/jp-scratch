@@ -228,13 +228,22 @@ internal static class Program
         bool credentialPass = CredentialServiceValidation.RunSelfTests();
         bool pricingPass = PricingServiceValidation.RunSelfTests();
         bool apiCallPass = ApiCallRepositoryValidation.RunSelfTests();
+        bool apiCallHistoryPass = ApiCallRepositoryValidation.RunHistorySelfTests();
+        bool apiCallUsageTriggerPass = ApiCallRepositoryValidation.RunUsageSummaryTriggerFilterSelfTests();
+        bool hideSuppressionPass = HideSuppressionCounterValidation.RunSelfTests();
+        bool customDateRangePass = CustomDateRangeParserValidation.RunSelfTests();
+        bool billingHistoryEmptyStatePass = BillingHistoryEmptyStateValidation.RunSelfTests();
+        bool usagePeriodPass = UsagePeriodValidation.RunSelfTests();
         bool migrationPass = DatabaseMigrationValidation.RunSelfTests();
         bool fxRatePass = await FxRateServiceValidation.RunSelfTestsAsync();
         bool reactionPass = ReactionRepositoryValidation.RunSelfTests();
         bool schedulePass = ProofreadingScheduleValidation.RunSelfTests();
         bool geminiClientPass = await GeminiProofreadingClientValidation.RunSelfTestsAsync();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
-               credentialPass && pricingPass && apiCallPass && migrationPass && fxRatePass && reactionPass && schedulePass &&
+               credentialPass && pricingPass && apiCallPass && apiCallHistoryPass &&
+               apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
+               billingHistoryEmptyStatePass && usagePeriodPass &&
+               migrationPass && fxRatePass && reactionPass && schedulePass &&
                geminiClientPass ? 0 : 1;
     }
 

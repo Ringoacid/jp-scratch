@@ -17,6 +17,7 @@ internal sealed class TrayIconService : IDisposable
 
     public event Action? ToggleRequested;
     public event Action? SettingsRequested;
+    public event Action? BillingHistoryRequested;
     public event Action? ExitRequested;
 
     public void Initialize()
@@ -27,6 +28,7 @@ internal sealed class TrayIconService : IDisposable
         menu.Items.Add("表示 / 非表示(&T)", null, (_, _) => ToggleRequested?.Invoke());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("設定(&S)...", null, (_, _) => SettingsRequested?.Invoke());
+        menu.Items.Add("課金履歴(&B)...", null, (_, _) => BillingHistoryRequested?.Invoke());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("終了(&X)", null, (_, _) => ExitRequested?.Invoke());
 

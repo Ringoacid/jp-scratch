@@ -39,16 +39,24 @@
              Link="Proofreading\ProofreadingSession.cs" />
     <Compile Include="..\Services\CredentialService.cs"
              Link="Services\CredentialService.cs" />
+    <Compile Include="..\Services\CustomDateRangeParser.cs"
+             Link="Services\CustomDateRangeParser.cs" />
     <Compile Include="..\Services\Database.cs"
              Link="Services\Database.cs" />
     <Compile Include="..\Services\FxRateService.cs"
              Link="Services\FxRateService.cs" />
+    <Compile Include="..\Services\HideSuppressionCounter.cs"
+             Link="Services\HideSuppressionCounter.cs" />
     <Compile Include="..\Services\ApiCallRepository.cs"
              Link="Services\ApiCallRepository.cs" />
     <Compile Include="..\Services\PricingService.cs"
              Link="Services\PricingService.cs" />
     <Compile Include="..\Services\ReactionRepository.cs"
              Link="Services\ReactionRepository.cs" />
+    <Compile Include="..\Services\UsageFormatting.cs"
+             Link="Services\UsageFormatting.cs" />
+    <Compile Include="..\Services\UsagePeriod.cs"
+             Link="Services\UsagePeriod.cs" />
   </ItemGroup>
 
   <ItemGroup>

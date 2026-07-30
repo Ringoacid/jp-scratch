@@ -306,6 +306,8 @@
                                Margin="0,1,0,0"
                                FontSize="10"
                                TextTrimming="CharacterEllipsis"
+                               Cursor="Hand"
+                               MouseLeftButtonUp="StatusUsage_MouseLeftButtonUp"
                                Foreground="{DynamicResource SubtleTextBrush}" />
                 </Grid>
             </Border>

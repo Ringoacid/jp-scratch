@@ -1,0 +1,195 @@
+<Window x:Class="JpScratch.Views.BillingHistoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="課金履歴"
+        Width="1240" Height="620"
+        MinWidth="760" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        UseLayoutRounding="True"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        PreviewKeyDown="Window_PreviewKeyDown">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="32"
+                            ResizeBorderThickness="6"
+                            CornerRadius="0"
+                            GlassFrameThickness="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+
+    <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="32" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Background="{DynamicResource ChromeBackgroundBrush}">
+                <TextBlock Text="課金履歴"
+                           Margin="12,0,0,0"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Foreground="{DynamicResource SubtleTextBrush}" />
+                <Button HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Margin="0,0,2,0"
+                        Style="{StaticResource ChromeButton}"
+                        FontFamily="Segoe MDL2 Assets"
+                        Content="&#xE8BB;"
+                        ToolTip="閉じる"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                        Click="TitleBarCloseButton_Click" />
+            </Grid>
+
+            <Grid Grid.Row="1" Margin="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- ===== フィルタ: 期間 ===== -->
+                <DockPanel Grid.Row="0" Margin="0,0,0,8" LastChildFill="False">
+                    <Button x:Name="RefreshButton"
+                            DockPanel.Dock="Right"
+                            Style="{StaticResource AppButton}"
+                            Content="更新"
+                            Click="RefreshButton_Click" />
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="期間" Style="{StaticResource FieldLabel}" />
+                        <ComboBox x:Name="PeriodCombo"
+                                  Style="{StaticResource AppComboBox}"
+                                  Width="110"
+                                  Margin="0,0,16,0"
+                                  SelectionChanged="PeriodCombo_SelectionChanged" />
+                        <TextBlock Text="開始" Style="{StaticResource FieldLabel}" />
+                        <TextBox x:Name="CustomFromBox"
+                                 Style="{StaticResource AppTextBox}"
+                                 Width="96"
+                                 Margin="0,0,8,0"
+                                 ToolTip="yyyy-MM-dd"
+                                 TextChanged="CustomRange_TextChanged" />
+                        <TextBlock Text="〜" VerticalAlignment="Center" Margin="0,0,8,0"
+                                   Foreground="{DynamicResource SubtleTextBrush}" />
+                        <TextBox x:Name="CustomToBox"
+                                 Style="{StaticResource AppTextBox}"
+                                 Width="96"
+                                 ToolTip="yyyy-MM-dd"
+                                 TextChanged="CustomRange_TextChanged" />
+                    </StackPanel>
+                </DockPanel>
+
+                <!-- ===== フィルタ: 種別 ===== -->
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Text="種別" Style="{StaticResource FieldLabel}" />
+                    <CheckBox x:Name="TriggerAutoCheck" Style="{StaticResource AppCheckBox}"
+                              Content="自動" IsChecked="True" Margin="0,4,16,4"
+                              Checked="TriggerCheck_Changed" Unchecked="TriggerCheck_Changed" />
+                    <CheckBox x:Name="TriggerManualCheck" Style="{StaticResource AppCheckBox}"
+                              Content="手動" IsChecked="True" Margin="0,4,16,4"
+                              Checked="TriggerCheck_Changed" Unchecked="TriggerCheck_Changed" />
+                    <CheckBox x:Name="TriggerRealternativeCheck" Style="{StaticResource AppCheckBox}"
+                              Content="別案生成" IsChecked="True" Margin="0,4,16,4"
+                              Checked="TriggerCheck_Changed" Unchecked="TriggerCheck_Changed" />
+                    <CheckBox x:Name="TriggerStyleGuideCheck" Style="{StaticResource AppCheckBox}"
+                              Content="スタイルガイド生成" IsChecked="True" Margin="0,4,0,4"
+                              Checked="TriggerCheck_Changed" Unchecked="TriggerCheck_Changed" />
+                </StackPanel>
+
+                <!-- ===== 入力エラー ===== -->
+                <TextBlock x:Name="ValidationErrorText"
+                           Grid.Row="2"
+                           Margin="0,0,0,8"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SubtleTextBrush}"
+                           Visibility="Collapsed" />
+
+                <!-- ===== 集計ヘッダ ===== -->
+                <TextBlock x:Name="SummaryHeaderText"
+                           Grid.Row="3"
+                           Margin="0,0,0,8"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextBrush}" />
+
+                <!-- ===== 明細一覧 ===== -->
+                <ListView x:Name="ResultsList"
+                          Grid.Row="4"
+                          Background="{DynamicResource ControlBackgroundBrush}"
+                          Foreground="{DynamicResource TextBrush}"
+                          BorderBrush="{DynamicResource BorderBrush}"
+                          ItemContainerStyle="{StaticResource AppListViewItem}">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="日時" Width="150" DisplayMemberBinding="{Binding CalledAt}" />
+                            <GridViewColumn Header="種別" Width="115" DisplayMemberBinding="{Binding Trigger}" />
+                            <GridViewColumn Header="モデル" Width="175" DisplayMemberBinding="{Binding Model}" />
+                            <GridViewColumn Header="入力トークン" Width="95">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding PromptTokens}" TextAlignment="Right" HorizontalAlignment="Stretch" />
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="出力トークン" Width="95">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding OutputTokens}" TextAlignment="Right" HorizontalAlignment="Stretch" />
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="USD" Width="90">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Usd}" TextAlignment="Right" HorizontalAlignment="Stretch" />
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="JPY" Width="80">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Jpy}" TextAlignment="Right" HorizontalAlignment="Stretch" />
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="レート基準日" Width="95" DisplayMemberBinding="{Binding RateDate}" />
+                            <GridViewColumn Header="所要時間" Width="80">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Duration}" TextAlignment="Right" HorizontalAlignment="Stretch" />
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="成否" Width="90">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Status}" ToolTip="{Binding ErrorMessage}" />
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="提案" Width="55">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding SuggestionCount}" TextAlignment="Right" HorizontalAlignment="Stretch" />
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="破棄" Width="55">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding DiscardedCount}" TextAlignment="Right" HorizontalAlignment="Stretch" />
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
