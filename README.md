@@ -3,8 +3,9 @@
 WSL や一部アプリで日本語が打てないときに、**どこからでも 1 アクションで呼び出せてすぐ消える**常駐メモ帳。
 
 仕様は [requirements.md](requirements.md) を参照。現在 **v1（常駐エディタ）は実装済み、v2（Geminiによる校正）は実装中**。
-v2はAPIキー管理、Geminiクライアント、段落単位の送信計画、全文差分と編集追従、
-インライン波線と提案パネルまで完了している。
+v2はAPIキー管理、Geminiクライアント、段落単位の送信、自動校正、全文差分と編集追従、
+インライン波線と提案パネル、許可・拒否・理由つき別案、リアクション保存まで完了している。
+料金の永続ログ・常時表示、円換算、課金履歴・上限ガードは未実装。
 v3（文体の学習）は未着手。
 
 ---
@@ -20,6 +21,9 @@ v3（文体の学習）は未着手。
 | 検索 / 置換 | `Ctrl+F` / `Ctrl+H`、次・前は `F3` / `Shift+F3` |
 | 全タブ横断検索 | `Ctrl+Shift+F` |
 | `.txt` へエクスポート | `Ctrl+Shift+S` |
+| 変更段落または選択範囲を校正 | `Ctrl+Enter` |
+| 次 / 前の校正提案 | `F8` / `Shift+F8` |
+| 校正提案を許可 / 拒否 | `Ctrl+.` / `Ctrl+,` |
 | 隠す | `Esc` |
 | フォントサイズ | `Ctrl + マウスホイール` |
 
@@ -34,7 +38,8 @@ v3（文体の学習）は未着手。
 ```
 %APPDATA%\JpScratch\
 ├─ settings.json      設定
-├─ app.db             タブのメタ情報（SQLite）
+├─ credentials.dat   DPAPIで暗号化したGemini APIキー（アプリ保存時のみ）
+├─ app.db             タブのメタ情報・校正リアクション（SQLite）
 └─ tabs\
    ├─ {id}.txt        本文（UTF-8, BOM なし）
    └─ trash\{id}.txt  閉じたタブ（既定 30 日で自動削除）
@@ -89,9 +94,10 @@ DPAPI（現在のユーザー）で暗号化し、`%APPDATA%\JpScratch\credentia
 送信済み段落のハッシュが変わっていなければ再送しない。選択範囲がある状態の手動校正では
 その範囲だけを対象にする。通信待ちの間に本文やタブが変わった場合は、残りの送信と結果反映を中止する。
 
-### 校正プロンプトの検証
+### 校正機能の検証
 
-v2へ組み込む前の独立検証アプリは `PromptValidation/` にある。
+校正プロンプトの比較に使用し、現在は本体と実装を共有して回帰テストも行う検証アプリが
+`PromptValidation/` にある。
 
 ```powershell
 $env:GEMINI_API_KEY = "..."
@@ -124,12 +130,13 @@ powershell -File installer\build.ps1 -SelfContained   # ランタイム同梱 (�
 App.xaml.cs              起動・常駐・単一インスタンス・クラッシュ時の保存
 Assets/app.ico           アプリアイコン（小サイズは DIB。NotifyIcon が PNG を展開できないため）
 Controls/                検索・置換パネル
-Editor/                  AvalonEdit の拡張（検索ハイライト、全角スペース可視化、フォント解決）
+Editor/                  AvalonEdit の拡張（検索、不可視文字、フォント、校正提案の描画）
 Infrastructure/          Win32 相互運用、一時ファイル経由の安全なファイル書き込み、パス解決
 Models/                  設定・タブ・ホットキー
-Services/                設定・SQLite・タブ管理・ホットキー・ウィンドウ配置・テーマ・トレイ
+Proofreading/             Geminiクライアント、プロンプト、段落計画、差分、提案セッション
+Services/                設定・SQLite・資格情報・リアクション・タブ・ホットキー・配置・テーマ・トレイ
 Themes/                  ライト / ダーク / 共通スタイル
-Views/                   メインウィンドウ、設定、全タブ検索
+Views/                   メインウィンドウ、設定、全タブ検索、資格情報・拒否理由ダイアログ
 installer/               WiX による MSI
 ```
 
