@@ -61,6 +61,10 @@
              Link="Services\ReactionRepository.cs" />
     <Compile Include="..\Services\SettingsFieldFormatting.cs"
              Link="Services\SettingsFieldFormatting.cs" />
+    <!-- TrayIconService本体はWinFormsのNotifyIconに依存するため取り込めない。
+         状態の決定だけを純粋関数として切り出したこのファイルを検証する。 -->
+    <Compile Include="..\Services\TrayIconStateResolver.cs"
+             Link="Services\TrayIconStateResolver.cs" />
     <Compile Include="..\Services\UsageFormatting.cs"
              Link="Services\UsageFormatting.cs" />
     <Compile Include="..\Services\UsageLimitService.cs"

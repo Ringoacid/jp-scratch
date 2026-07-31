@@ -251,6 +251,7 @@ internal static class Program
         bool settingsFieldFormattingPass = SettingsFieldFormattingValidation.RunSelfTests();
         bool billingCsvPass = BillingCsvExporterValidation.RunSelfTests();
         bool apiLogCompactionPass = ApiLogCompactionValidation.RunSelfTests();
+        bool trayIconStatePass = TrayIconStateValidation.RunSelfTests();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
                credentialPass && pricingPass && apiCallPass && apiCallHistoryPass &&
                apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
@@ -258,7 +259,7 @@ internal static class Program
                migrationPass && fxRatePass && reactionPass && schedulePass &&
                geminiClientPass && appPathsPass && singleInstancePass &&
                billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&
-               apiLogCompactionPass ? 0 : 1;
+               apiLogCompactionPass && trayIconStatePass ? 0 : 1;
     }
 
     private static void PrintHelp()

@@ -46,7 +46,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- app.ico は手作りの正典。状態アイコン（要件 3.1.1）は tools/build-tray-icons.py が
+         そこから生成する派生物で、いずれも小サイズは DIB。NotifyIcon は PNG 圧縮エントリを
+         展開できないため、PNG にしてよいのは 256px だけ。 -->
     <Resource Include="Assets\app.ico" />
+    <Resource Include="Assets\app-proofreading.ico" />
+    <Resource Include="Assets\app-error.ico" />
+    <Resource Include="Assets\app-limit.ico" />
   </ItemGroup>
 
   <!-- 独立したプロンプト検証アプリのソースを WPF 本体へ取り込まない。 -->

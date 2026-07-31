@@ -96,6 +96,14 @@ public partial class MainWindow : Window
     private bool _alternativeInProgress;
     private bool _proofreadingRunInProgress;
 
+    /// <summary>
+    /// 直近の Gemini 呼び出しが失敗したまま復帰していないか（トレイアイコン用、要件 3.1.1）。
+    /// 次に 1 回でも成功したら解除する。キー未設定・確認ダイアログのキャンセル・本文変更による
+    /// 破棄はここに含めない。APIの異常ではなく、こちらの都合で呼ばなかった・捨てただけなので、
+    /// 「APIエラー」を出すと直しようのない警告を出し続けることになる。
+    /// </summary>
+    private bool _apiErrorSticky;
+
     internal MainWindow(SettingsService settings, ThemeService theme, TabManager tabs,
                          TabRepository repository, HotkeyService hotkeys,
                          CredentialService credentials,
@@ -843,6 +851,7 @@ public partial class MainWindow : Window
 
         _alternativeInProgress = true;
         SetProposalActionsEnabled(false);
+        UpdateTrayIconState();
         ApiUsageCost? failedApiCost = null;
         try
         {
@@ -856,12 +865,15 @@ public partial class MainWindow : Window
             catch (GeminiClientException ex)
             {
                 stopwatch.Stop();
+                _apiErrorSticky = true;
                 failedApiCost = RecordFailedApiCall(
                     ApiCallTrigger.Realternative,
                     ex,
                     stopwatch.Elapsed);
                 throw;
             }
+
+            _apiErrorSticky = false;
 
             if (!CanReactTo(proposal))
             {
@@ -925,6 +937,7 @@ public partial class MainWindow : Window
         {
             _alternativeInProgress = false;
             SetProposalActionsEnabled(true);
+            UpdateTrayIconState();
             ReleaseAutoHide();
             Activate();
             Editor.TextArea.Focus();
@@ -1067,6 +1080,19 @@ public partial class MainWindow : Window
     private void RunManualProofreading()
         => _ = RunProofreadingAsync(manual: true);
 
+    /// <summary>
+    /// トレイアイコンの状態を今の条件から計算し直す（要件 3.1.1）。
+    /// 条件が変わりうる箇所（校正の開始・終了、API の成否、当月累計・上限額の更新）から呼ぶ。
+    /// 状態が変わらなければ <see cref="TrayIconService.SetState"/> 側で握り潰されるので、
+    /// 呼びすぎても実害はない。MainWindow のコンストラクタはトレイ初期化より前に走るが、
+    /// その場合も状態は覚えられ、初期化時に反映される。
+    /// </summary>
+    private void UpdateTrayIconState()
+        => _tray.SetState(TrayIconStateResolver.Resolve(
+            proofreading: _proofreadingRunInProgress || _alternativeInProgress,
+            apiError: _apiErrorSticky,
+            limitReached: IsMonthlyLimitReached()));
+
     private async Task RunProofreadingAsync(bool manual)
     {
         if (_proofreadingRunInProgress ||
@@ -1143,6 +1169,7 @@ public partial class MainWindow : Window
         _proofreadingRunInProgress = true;
         _proofreadingTimer.Stop();
         SetProposalActionsEnabled(false);
+        UpdateTrayIconState();
 
         List<(ProofreadingRequest Request, GeminiProofreadingResult Result)> results = [];
         List<long> successfulApiCallIds = [];
@@ -1190,11 +1217,14 @@ public partial class MainWindow : Window
                 catch (GeminiClientException ex)
                 {
                     stopwatch.Stop();
+                    _apiErrorSticky = true;
                     ApiUsageCost? failedCost = RecordFailedApiCall(trigger, ex, stopwatch.Elapsed);
                     if (failedCost is not null)
                         responseCosts.Add(failedCost);
                     throw;
                 }
+
+                _apiErrorSticky = false;
 
                 RecordedApiCall recordedApiCall = RecordSuccessfulApiCall(
                     trigger,
@@ -1267,6 +1297,7 @@ public partial class MainWindow : Window
         {
             _proofreadingRunInProgress = false;
             SetProposalActionsEnabled(true);
+            UpdateTrayIconState();
             ScheduleAutomaticProofreading();
         }
     }
@@ -1567,6 +1598,9 @@ public partial class MainWindow : Window
                 "クリックで課金履歴");
 
             UpdateUsageLimitProgressBar(limit, limitState);
+            // 当月累計と上限額はここでしか更新されないので、トレイアイコンの再計算もここに置く
+            // （起動時・校正後・日付や月の切替・設定変更のいずれもこの経路を通る）。
+            UpdateTrayIconState();
             NotifyMonthlyLimitReachedIfNeeded(now, limitState, limit);
 
             _usageDisplayDate = LocalDate(now);
