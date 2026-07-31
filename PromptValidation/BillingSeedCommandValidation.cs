@@ -80,11 +80,26 @@ internal static class BillingSeedCommandValidation
         bool allowsWhenNotExists =
             !BillingSeedCommand.ShouldRefuseExistingDatabase(databaseExists: false, forceSpecified: false);
 
+        // ディレクトリを省いて --seed-billing --force と打つと、--force という名前の
+        // ディレクトリが作られてしまう（実際にリポジトリ直下へ作ってしまった）。
+        bool rejectsForceAsDirectory =
+            BillingSeedCommand.IsOptionLikeDirectoryArgument("--force");
+        bool rejectsBulkAsDirectory =
+            BillingSeedCommand.IsOptionLikeDirectoryArgument("--bulk");
+        bool rejectsShortOptionAsDirectory =
+            BillingSeedCommand.IsOptionLikeDirectoryArgument("-x");
+        bool acceptsRelativePath =
+            !BillingSeedCommand.IsOptionLikeDirectoryArgument(@"tmp\seed");
+        bool acceptsAbsolutePath =
+            !BillingSeedCommand.IsOptionLikeDirectoryArgument(@"C:\tmp\seed");
+
         bool passed = exactMatchIsProtected && trailingSlashIsProtected && caseInsensitiveIsProtected &&
             differentDirIsNotProtected && refusesWhenExistsWithoutForce && allowsWhenExistsWithForce &&
-            allowsWhenNotExists;
+            allowsWhenNotExists && rejectsForceAsDirectory && rejectsBulkAsDirectory &&
+            rejectsShortOptionAsDirectory && acceptsRelativePath && acceptsAbsolutePath;
 
-        Console.WriteLine("  保護ガードチェック（%APPDATA%\\JpScratch拒否・既存app.dbの上書き拒否）: " +
+        Console.WriteLine("  保護ガードチェック（%APPDATA%\\JpScratch拒否・既存app.dbの上書き拒否・" +
+            "オプションをディレクトリとして扱わない）: " +
             (passed ? "PASS" : "FAIL"));
         return passed;
     }

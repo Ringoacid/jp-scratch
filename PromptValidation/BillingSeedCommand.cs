@@ -212,6 +212,15 @@ internal static class BillingSeedCommand
         }
 
         string directoryArgument = args[0];
+        if (IsOptionLikeDirectoryArgument(directoryArgument))
+        {
+            Console.Error.WriteLine(
+                $"拒否: ディレクトリの指定が「{directoryArgument}」になっています。" +
+                "オプションだけを渡すと、その名前のディレクトリを作ってしまいます。" +
+                "--seed-billing <dir> [--bulk] [--force] の形式で指定してください。");
+            return 2;
+        }
+
         bool bulk = args.Skip(1).Any(a => a == "--bulk");
         bool force = args.Skip(1).Any(a => a == "--force");
         bool unknownArgs = args.Skip(1).Any(a => a is not ("--bulk" or "--force"));
@@ -341,6 +350,16 @@ internal static class BillingSeedCommand
             Normalize(targetFullPath),
             Normalize(appDataRootFullPath),
             StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 第1引数がディレクトリではなくオプションかどうかを判定する純粋関数。
+    /// ディレクトリを省いて <c>--seed-billing --force</c> のように実行すると、
+    /// <c>--force</c> という名前のディレクトリがカレントに作られ、そこへ app.db が
+    /// 投入されてしまう（実際にリポジトリ直下へ作ってしまった）。Windows のパスが
+    /// <c>-</c> で始まることは実用上ないため、先頭が <c>-</c> なら拒否する。
+    /// </summary>
+    internal static bool IsOptionLikeDirectoryArgument(string directoryArgument)
+        => directoryArgument.StartsWith('-');
 
     /// <summary>既存app.dbの上書きを拒否すべきかどうかを判定する純粋関数。</summary>
     internal static bool ShouldRefuseExistingDatabase(bool databaseExists, bool forceSpecified)
