@@ -97,6 +97,15 @@ public sealed class AppSettings
     /// </summary>
     public decimal MonthlyLimitWarningRatio { get; set; } = 0.80m;
 
+    // ---- 3.6.2 課金ログの保持 ----
+    /// <summary>
+    /// <c>api_calls</c> の明細を残す月数。要件 3.6.2 の既定は 12 か月。
+    /// これより古い月の明細は起動時に日次サマリ（<c>api_call_daily</c>）へ圧縮して削除する。
+    /// <c>0以下は無期限</c>として扱い、圧縮を一切行わない（<see cref="MonthlyLimitUsd"/> と同じ規約）。
+    /// 期間合計は圧縮後もサマリを合算するので変わらない。失われるのは1件ごとの明細だけ。
+    /// </summary>
+    public int ApiLogRetentionMonths { get; set; } = 12;
+
     // ---- その他 ----
     public bool StartWithWindows { get; set; } = true;
     /// <summary>タブ名の自動生成で使う最大文字数（要件 3.2.1）。</summary>

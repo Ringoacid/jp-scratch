@@ -222,8 +222,20 @@ public partial class BillingHistoryWindow : Window
             return;
         }
 
-        ValidationErrorText.Text =
-            $"{page.Rows.Count:N0}件を {dialog.FileName} へ書き出しました。";
+        string message = $"{page.Rows.Count:N0}件を {dialog.FileName} へ書き出しました。";
+
+        // 圧縮済みの分は明細が残っていないのでCSVにも出せない。黙って落とすと、
+        // CSVを合計した金額が画面のヘッダ合計と食い違う理由が分からなくなる。
+        ApiCallUsageSummary summary = _apiCalls.GetUsageSummary(
+            range.Value.From, range.Value.To, selectedTriggers);
+        if (summary.CompactedCalls > 0)
+        {
+            message +=
+                $"（この期間の {summary.CompactedCalls:N0}件は保持期限を過ぎて日次サマリへ" +
+                "圧縮済みのため、明細が無くCSVには含まれません）";
+        }
+
+        ValidationErrorText.Text = message;
         ValidationErrorText.Visibility = Visibility.Visible;
     }
 
@@ -351,6 +363,11 @@ public partial class BillingHistoryWindow : Window
 
         if (page is { Truncated: true })
             text += $"　※ {page.TotalCount:N0}件中 {page.Rows.Count:N0}件を表示";
+
+        // 合計には保持期限を過ぎて圧縮済みの分も入っているが、明細一覧には出せない
+        // （要件 3.6.2）。何も言わないと「件数と一覧の行数が合わない」という不可解な表示になる。
+        if (summary.CompactedCalls > 0)
+            text += $"　※ うち {summary.CompactedCalls:N0}件は保持期限を過ぎ日次サマリへ圧縮済み（明細なし）";
 
         SummaryHeaderText.Text = text;
         SummaryHeaderText.ToolTip = UsageFormatting.FormatSummaryRateReference(summary);

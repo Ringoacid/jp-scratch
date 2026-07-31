@@ -216,6 +216,25 @@
                                Margin="8,0,0,0" />
                 </Grid>
 
+                <Grid Margin="0,4,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="80" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="明細の保持期間"
+                               Style="{StaticResource FieldLabel}"
+                               ToolTip="これより古い月の課金明細は、起動時に日次サマリへ圧縮して削除します。期間合計は変わりません。0で無期限。" />
+                    <TextBox x:Name="ApiLogRetentionBox"
+                             Grid.Column="1"
+                             Style="{StaticResource AppTextBox}"
+                             TextAlignment="Right" />
+                    <TextBlock Grid.Column="2"
+                               Text="か月（0で無期限。合計は保持され、明細だけが消えます）"
+                               Style="{StaticResource FieldLabel}"
+                               Margin="8,0,0,0" />
+                </Grid>
+
                 <TextBlock Text="モデル単価" Style="{StaticResource SectionHeader}" />
                 <TextBlock Text="Gemini公式の価格が変わったときに更新します。1M tokensあたりのUSDです。"
                            TextWrapping="Wrap"

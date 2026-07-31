@@ -39,6 +39,8 @@
              Link="Proofreading\ProofreadingResultMerger.cs" />
     <Compile Include="..\Proofreading\ProofreadingSession.cs"
              Link="Proofreading\ProofreadingSession.cs" />
+    <Compile Include="..\Services\ApiLogRetention.cs"
+             Link="Services\ApiLogRetention.cs" />
     <Compile Include="..\Services\BillingCsvExporter.cs"
              Link="Services\BillingCsvExporter.cs" />
     <Compile Include="..\Services\CredentialService.cs"

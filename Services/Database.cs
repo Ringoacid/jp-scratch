@@ -133,6 +133,42 @@ internal sealed class Database : IDisposable
                 """);
             ExecuteInternal("PRAGMA user_version=3;");
         }
+
+        if (version < 4)
+        {
+            // 保持期限を過ぎた api_calls の明細を圧縮して置き換える日次サマリ（要件 3.6.2）。
+            //
+            // 粒度に usd_jpy_rate / rate_date を含めるのが要点。ここを落として日×種別×モデル×成否
+            // だけにすると、「その日に適用したレート」が失われ、期間合計の
+            // ApiCallUsageSummary.DistinctRateCount / SingleUsdJpyRate を明細と同じ規約で
+            // 再現できなくなる。レートまで粒度に含めれば、サマリ1行を「同じレートのN件」として
+            // 明細行と完全に同じように集計へ流し込める。1日あたり最大でも数行にしかならない。
+            //
+            // usd_jpy_rate を api_calls と同じ REAL にしてあるのは意図的。金額（usd_cost / jpy_cost）は
+            // decimal を壊さないよう TEXT のままだが、レートだけは両テーブルで同じ REAL → decimal の
+            // 変換経路を通さないと、同じレートが「別のレート」として二重に数えられうる。
+            // IF NOT EXISTS は v3 と同じ理由。DDLが通った直後に user_version の更新前で中断すると、
+            // 次回起動で同じ CREATE を踏む（PromptValidation の移行テストが再現している）。
+            ExecuteInternal("""
+                CREATE TABLE IF NOT EXISTS api_call_daily (
+                    day            TEXT    NOT NULL,       -- ローカル日 yyyy-MM-dd
+                    trigger_type   TEXT    NOT NULL,
+                    model          TEXT    NOT NULL,
+                    status         TEXT    NOT NULL,
+                    usd_jpy_rate   REAL,
+                    rate_date      TEXT,
+                    call_cnt       INTEGER NOT NULL,
+                    prompt_tokens  INTEGER NOT NULL,
+                    output_tokens  INTEGER NOT NULL,
+                    usd_cost       TEXT    NOT NULL,       -- decimal を文字列で保持
+                    jpy_cost       TEXT,
+                    suggestion_cnt INTEGER NOT NULL DEFAULT 0,
+                    discarded_cnt  INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_api_call_daily_day ON api_call_daily(day);
+                """);
+            ExecuteInternal("PRAGMA user_version=4;");
+        }
     }
 
     public SqliteCommand CreateCommand(string sql)

@@ -83,6 +83,7 @@ public partial class SettingsWindow : Window
         // 上限0（無制限）へ黙って壊れる（レビュー指摘の再現防止）。SettingsFieldFormattingを参照。
         MonthlyLimitBox.Text = SettingsFieldFormatting.FormatMonthlyLimitUsd(s.MonthlyLimitUsd);
         MonthlyLimitWarningBox.Text = SettingsFieldFormatting.FormatWarningPercent(s.MonthlyLimitWarningRatio);
+        ApiLogRetentionBox.Text = s.ApiLogRetentionMonths.ToString(CultureInfo.InvariantCulture);
 
         _loadingCredentialControls = true;
         CredentialSourceCombo.ItemsSource = new[]
@@ -143,6 +144,8 @@ public partial class SettingsWindow : Window
         decimal warningPercent = SettingsFieldFormatting.ParseDecimalOrDefault(
             MonthlyLimitWarningBox.Text, s.MonthlyLimitWarningRatio * 100m);
         s.MonthlyLimitWarningRatio = warningPercent / 100m;
+        s.ApiLogRetentionMonths = (int)ParseNumber(
+            ApiLogRetentionBox.Text, s.ApiLogRetentionMonths);
 
         s.GeminiApiKeySource = CredentialSourceCombo.SelectedIndex == 1
             ? GeminiApiKeySource.EnvironmentVariable

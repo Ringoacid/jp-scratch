@@ -250,13 +250,15 @@ internal static class Program
         bool billingSeedPass = BillingSeedCommandValidation.RunSelfTests();
         bool settingsFieldFormattingPass = SettingsFieldFormattingValidation.RunSelfTests();
         bool billingCsvPass = BillingCsvExporterValidation.RunSelfTests();
+        bool apiLogCompactionPass = ApiLogCompactionValidation.RunSelfTests();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
                credentialPass && pricingPass && apiCallPass && apiCallHistoryPass &&
                apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
                billingHistoryEmptyStatePass && usagePeriodPass && usageLimitPass &&
                migrationPass && fxRatePass && reactionPass && schedulePass &&
                geminiClientPass && appPathsPass && singleInstancePass &&
-               billingSeedPass && settingsFieldFormattingPass && billingCsvPass ? 0 : 1;
+               billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&
+               apiLogCompactionPass ? 0 : 1;
     }
 
     private static void PrintHelp()

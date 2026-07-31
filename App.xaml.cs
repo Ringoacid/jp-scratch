@@ -133,6 +133,10 @@ public partial class App : Application
         // 為替は補助情報なので、初期表示や校正操作をネットワーク待ちにしない。
         _ = _window.RefreshFxRateAsync();
 
+        // 保持期限を過ぎた課金明細の圧縮（要件 3.6.2）。ウィンドウを出した後に別スレッドで走らせる。
+        // 起動経路の同期処理に足すとコールドスタートの実測値（0.63秒）を落としかねない。
+        _ = Task.Run(CompactApiLogs);
+
         if (failures.Count > 0)
         {
             // 黙って効かないのが一番困るので、必ず知らせる（R-7）
@@ -140,6 +144,30 @@ public partial class App : Application
                 "ホットキーを登録できませんでした",
                 string.Join(Environment.NewLine, failures) + Environment.NewLine + "設定画面から変更できます。",
                 isWarning: true);
+        }
+    }
+
+    /// <summary>
+    /// 保持期限を過ぎた <c>api_calls</c> の明細を日次サマリへ圧縮する（要件 3.6.2）。
+    /// 期間合計は <see cref="ApiCallRepository.GetUsageSummary"/> が両テーブルを合算するため変わらない。
+    /// <see cref="Database"/> は内部で直列化しているので、UIスレッドの読み書きと競合しても壊れない。
+    /// 失敗しても本文編集・校正・課金表示は続けられるため、握りつぶして次回起動で再試行する。
+    /// </summary>
+    private void CompactApiLogs()
+    {
+        if (_apiCalls is null) return;
+
+        try
+        {
+            DateTimeOffset? cutoff = ApiLogRetention.ComputeCutoff(
+                DateTimeOffset.Now, _settings.Current.ApiLogRetentionMonths);
+            if (cutoff is null) return;
+
+            _apiCalls.Compact(cutoff.Value);
+        }
+        catch (Exception ex) when (
+            ex is Microsoft.Data.Sqlite.SqliteException or IOException or InvalidOperationException)
+        {
         }
     }
 

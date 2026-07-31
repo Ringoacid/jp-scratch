@@ -49,11 +49,25 @@ internal sealed record ApiCallUsageSummary(
     DateOnly? SingleRateDate,
     DateOnly? FirstRateDate,
     DateOnly? LastRateDate,
-    int DistinctRateCount)
+    int DistinctRateCount,
+    long CompactedCalls = 0)
 {
     internal static ApiCallUsageSummary Empty { get; } = new(
         0, 0, 0, 0, 0, 0, 0m, 0, 0, 0m, true,
-        null, null, null, null, 0);
+        null, null, null, null, 0, 0);
+}
+
+/// <summary>
+/// 保持期限を過ぎた明細を日次サマリへ圧縮した結果（要件 3.6.2）。
+/// </summary>
+internal sealed record ApiCallCompactionResult(
+    int CompactedCalls,
+    int CompactedDays,
+    int UnlinkedReactions)
+{
+    internal static ApiCallCompactionResult None { get; } = new(0, 0, 0);
+
+    internal bool DidCompact => CompactedCalls > 0;
 }
 
 /// <summary>表示用に取得する、直近1件の永続API呼び出しログ。</summary>
@@ -188,7 +202,9 @@ internal sealed class ApiCallRepository
             ? new HashSet<ApiCallTrigger>(triggers)
             : null;
 
-        return _database.Read(
+        var accumulator = new UsageAccumulator();
+
+        _database.Read(
             """
             SELECT called_at, status, prompt_tokens, output_tokens, usd_cost, jpy_cost,
                    usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type
@@ -196,19 +212,6 @@ internal sealed class ApiCallRepository
             """,
             reader =>
         {
-            long totalCalls = 0;
-            long okCalls = 0;
-            long errorCalls = 0;
-            long timeoutCalls = 0;
-            long promptTokens = 0;
-            long outputTokens = 0;
-            decimal usdCost = 0m;
-            decimal jpyCost = 0m;
-            bool isJpyComplete = true;
-            var distinctRates = new HashSet<(decimal Rate, DateOnly Date)>();
-            long suggestionCount = 0;
-            long discardedCount = 0;
-
             while (reader.Read())
             {
                 // ISO文字列の辞書順はDSTの重複時刻で実時間順にならないため、
@@ -239,55 +242,168 @@ internal sealed class ApiCallRepository
                     continue;
                 }
 
-                bool hasJpyCost = TryReadDecimal(reader, 5, out decimal rowJpyCost);
-
-                totalCalls++;
-                switch (reader.GetString(1))
-                {
-                    case "ok": okCalls++; break;
-                    case "error": errorCalls++; break;
-                    case "timeout": timeoutCalls++; break;
-                    default:
-                        // 旧版や手動編集で壊れた状態値も表示を壊さないよう除外する。
-                        totalCalls--;
-                        continue;
-                }
-
-                promptTokens += reader.GetInt32(2);
-                outputTokens += reader.GetInt32(3);
-                usdCost += rowUsdCost;
-                if (hasJpyCost)
-                {
-                    jpyCost += rowJpyCost;
-                    if (TryReadDecimal(reader, 6, out decimal rowRate) &&
-                        TryReadDateOnly(reader, 7, out DateOnly rowRateDate))
-                    {
-                        distinctRates.Add((rowRate, rowRateDate));
-                    }
-                }
-                else if (rowUsdCost != 0m)
-                    isJpyComplete = false;
-                suggestionCount += reader.GetInt32(8);
-                discardedCount += reader.GetInt32(9);
+                accumulator.Add(
+                    reader.GetString(1),
+                    calls: 1,
+                    promptTokens: reader.GetInt32(2),
+                    outputTokens: reader.GetInt32(3),
+                    usdCost: rowUsdCost,
+                    jpyCost: TryReadDecimal(reader, 5, out decimal rowJpyCost) ? rowJpyCost : null,
+                    rate: TryReadDecimal(reader, 6, out decimal rowRate) ? rowRate : null,
+                    rateDate: TryReadDateOnly(reader, 7, out DateOnly rowRateDate) ? rowRateDate : null,
+                    suggestionCount: reader.GetInt32(8),
+                    discardedCount: reader.GetInt32(9),
+                    compacted: false);
             }
 
-            (decimal Rate, DateOnly Date)? singleRate = distinctRates.Count == 1
-                ? distinctRates.Single()
+            return 0;
+        });
+
+        // 保持期限を過ぎて圧縮済みの日次サマリを合算する。ここを読まないと、
+        // 圧縮した瞬間に「全期間」や過去月の合計が黙って減る。
+        _database.Read(
+            """
+            SELECT day, status, prompt_tokens, output_tokens, usd_cost, jpy_cost,
+                   usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type, call_cnt
+            FROM api_call_daily;
+            """,
+            reader =>
+        {
+            while (reader.Read())
+            {
+                // サマリ1行はローカル1日ぶんなので、期間の判定はその日の0時で行う。
+                // 画面が渡す範囲（当日/当週/当月/全期間/カスタム）はすべて日境界に揃っているため、
+                // 明細行を1件ずつ判定した場合と同じ結果になる。
+                if (!DateOnly.TryParseExact(
+                        reader.GetString(0), "yyyy-MM-dd",
+                        CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly day))
+                {
+                    continue;
+                }
+
+                var dayStart = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Local));
+                if ((from is not null && dayStart < from.Value) ||
+                    (to is not null && dayStart >= to.Value))
+                {
+                    continue;
+                }
+
+                if (!TryFromStorageTrigger(reader.GetString(10), out ApiCallTrigger rowTrigger) ||
+                    (triggerFilter is not null && !triggerFilter.Contains(rowTrigger)))
+                {
+                    continue;
+                }
+
+                if (!decimal.TryParse(
+                        reader.GetString(4),
+                        NumberStyles.Number,
+                        CultureInfo.InvariantCulture,
+                        out decimal rowUsdCost))
+                {
+                    continue;
+                }
+
+                accumulator.Add(
+                    reader.GetString(1),
+                    calls: reader.GetInt64(11),
+                    promptTokens: reader.GetInt64(2),
+                    outputTokens: reader.GetInt64(3),
+                    usdCost: rowUsdCost,
+                    jpyCost: TryReadDecimal(reader, 5, out decimal rowJpyCost) ? rowJpyCost : null,
+                    rate: TryReadDecimal(reader, 6, out decimal rowRate) ? rowRate : null,
+                    rateDate: TryReadDateOnly(reader, 7, out DateOnly rowRateDate) ? rowRateDate : null,
+                    suggestionCount: reader.GetInt64(8),
+                    discardedCount: reader.GetInt64(9),
+                    compacted: true);
+            }
+
+            return 0;
+        });
+
+        return accumulator.Build();
+    }
+
+    /// <summary>
+    /// <c>api_calls</c> の明細と <c>api_call_daily</c> の日次サマリを、同じ規約で1つの集計へ畳み込む。
+    /// サマリ行は「同じ日・同じ種別・同じモデル・同じ成否・同じレートの <c>call_cnt</c> 件」なので、
+    /// 件数を伴う点を除けば明細1行とまったく同じ扱いができる。
+    /// </summary>
+    private sealed class UsageAccumulator
+    {
+        private readonly HashSet<(decimal Rate, DateOnly Date)> _distinctRates = [];
+        private long _totalCalls;
+        private long _okCalls;
+        private long _errorCalls;
+        private long _timeoutCalls;
+        private long _promptTokens;
+        private long _outputTokens;
+        private decimal _usdCost;
+        private decimal _jpyCost;
+        private bool _isJpyComplete = true;
+        private long _suggestionCount;
+        private long _discardedCount;
+        private long _compactedCalls;
+
+        internal void Add(
+            string statusText,
+            long calls,
+            long promptTokens,
+            long outputTokens,
+            decimal usdCost,
+            decimal? jpyCost,
+            decimal? rate,
+            DateOnly? rateDate,
+            long suggestionCount,
+            long discardedCount,
+            bool compacted)
+        {
+            switch (statusText)
+            {
+                case "ok": _okCalls += calls; break;
+                case "error": _errorCalls += calls; break;
+                case "timeout": _timeoutCalls += calls; break;
+                // 旧版や手動編集で壊れた状態値も表示を壊さないよう除外する。
+                default: return;
+            }
+
+            _totalCalls += calls;
+            _promptTokens += promptTokens;
+            _outputTokens += outputTokens;
+            _usdCost += usdCost;
+
+            if (jpyCost is decimal jpy)
+            {
+                _jpyCost += jpy;
+                if (rate is decimal rateValue && rateDate is DateOnly date)
+                    _distinctRates.Add((rateValue, date));
+            }
+            else if (usdCost != 0m)
+                _isJpyComplete = false;
+
+            _suggestionCount += suggestionCount;
+            _discardedCount += discardedCount;
+            if (compacted) _compactedCalls += calls;
+        }
+
+        internal ApiCallUsageSummary Build()
+        {
+            (decimal Rate, DateOnly Date)? singleRate = _distinctRates.Count == 1
+                ? _distinctRates.Single()
                 : null;
-            DateOnly? firstRateDate = distinctRates.Count == 0
+            DateOnly? firstRateDate = _distinctRates.Count == 0
                 ? null
-                : distinctRates.MinBy(value => value.Date).Date;
-            DateOnly? lastRateDate = distinctRates.Count == 0
+                : _distinctRates.MinBy(value => value.Date).Date;
+            DateOnly? lastRateDate = _distinctRates.Count == 0
                 ? null
-                : distinctRates.MaxBy(value => value.Date).Date;
+                : _distinctRates.MaxBy(value => value.Date).Date;
 
             return new ApiCallUsageSummary(
-                totalCalls, okCalls, errorCalls, timeoutCalls,
-                promptTokens, outputTokens, usdCost,
-                suggestionCount, discardedCount, jpyCost, isJpyComplete,
+                _totalCalls, _okCalls, _errorCalls, _timeoutCalls,
+                _promptTokens, _outputTokens, _usdCost,
+                _suggestionCount, _discardedCount, _jpyCost, _isJpyComplete,
                 singleRate?.Rate, singleRate?.Date, firstRateDate, lastRateDate,
-                distinctRates.Count);
-        });
+                _distinctRates.Count, _compactedCalls);
+        }
     }
 
     /// <summary>
@@ -427,6 +543,254 @@ internal sealed class ApiCallRepository
 
                 return null;
             });
+
+    /// <summary>
+    /// <paramref name="cutoff"/> より前の明細を日次サマリ（<c>api_call_daily</c>）へ畳み込み、
+    /// 元の明細行を削除する（要件 3.6.2）。境界の決め方は <see cref="ApiLogRetention.ComputeCutoff"/>。
+    ///
+    /// 集計値は失わない。<see cref="GetUsageSummary"/> は両テーブルを合算するため、圧縮の前後で
+    /// 期間合計・件数・トークン数・提案/破棄数はすべて一致する。失われるのは
+    /// <see cref="GetHistory"/> が返す1件ごとの明細（時刻・所要時間・エラー文）だけ。
+    ///
+    /// <c>reactions.api_call_id</c> は <c>api_calls(id)</c> への外部キーで、<c>PRAGMA foreign_keys=ON</c>
+    /// のため参照が残ったままでは削除できない。学習データそのもの（原文・修正案・拒否理由）は
+    /// 消してはならないので、**リアクション行は残したまま <c>api_call_id</c> だけを NULL にする**。
+    ///
+    /// 解釈できない行（<c>called_at</c> / <c>usd_cost</c> / 種別 / 成否が壊れている）は対象にしない。
+    /// 集計にも出てこない行を、圧縮のついでに黙って消さないため。
+    /// </summary>
+    internal ApiCallCompactionResult Compact(DateTimeOffset cutoff)
+    {
+        var totals = new Dictionary<DailyKey, DailyTotals>();
+        List<long> idsToRemove = [];
+
+        _database.Read(
+            """
+            SELECT id, called_at, trigger_type, model, status, prompt_tokens, output_tokens,
+                   usd_cost, usd_jpy_rate, rate_date, jpy_cost, suggestion_cnt, discarded_cnt
+            FROM api_calls;
+            """,
+            reader =>
+        {
+            while (reader.Read())
+            {
+                if (!DateTimeOffset.TryParse(
+                        reader.GetString(1),
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind,
+                        out DateTimeOffset calledAt) ||
+                    calledAt >= cutoff)
+                {
+                    continue;
+                }
+
+                if (!TryFromStorageTrigger(reader.GetString(2), out ApiCallTrigger trigger) ||
+                    !TryFromStorageStatus(reader.GetString(4), out ApiCallStatus status) ||
+                    !decimal.TryParse(
+                        reader.GetString(7),
+                        NumberStyles.Number,
+                        CultureInfo.InvariantCulture,
+                        out decimal usdCost))
+                {
+                    continue;
+                }
+
+                DailyKey key = new(
+                    DateOnly.FromDateTime(calledAt.LocalDateTime),
+                    trigger,
+                    reader.GetString(3),
+                    status,
+                    TryReadDecimal(reader, 8, out decimal rate) ? rate : null,
+                    TryReadDateOnly(reader, 9, out DateOnly rateDate) ? rateDate : null);
+
+                Accumulate(
+                    totals, key,
+                    calls: 1,
+                    promptTokens: reader.GetInt32(5),
+                    outputTokens: reader.GetInt32(6),
+                    usdCost: usdCost,
+                    jpyCost: TryReadDecimal(reader, 10, out decimal jpyCost) ? jpyCost : null,
+                    suggestionCount: reader.GetInt32(11),
+                    discardedCount: reader.GetInt32(12));
+
+                idsToRemove.Add(reader.GetInt64(0));
+            }
+
+            return 0;
+        });
+
+        if (idsToRemove.Count == 0) return ApiCallCompactionResult.None;
+
+        HashSet<DateOnly> affectedDays = [.. totals.Keys.Select(key => key.Day)];
+        int unlinkedReactions = 0;
+
+        _database.InTransaction(db =>
+        {
+            // 既存のサマリを取り込んでから書き直す。同じ日を二度圧縮しても（保持期間を
+            // 短くして再実行した場合など）合算が壊れず、何度実行しても結果が同じになる。
+            // トランザクションの内側で読むことで、読み込みと書き戻しの間に割り込まれない。
+            db.Read(
+                """
+                SELECT day, trigger_type, model, status, usd_jpy_rate, rate_date,
+                       call_cnt, prompt_tokens, output_tokens, usd_cost, jpy_cost,
+                       suggestion_cnt, discarded_cnt
+                FROM api_call_daily;
+                """,
+                reader =>
+            {
+                while (reader.Read())
+                {
+                    if (!DateOnly.TryParseExact(
+                            reader.GetString(0), "yyyy-MM-dd",
+                            CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly day) ||
+                        !affectedDays.Contains(day) ||
+                        !TryFromStorageTrigger(reader.GetString(1), out ApiCallTrigger trigger) ||
+                        !TryFromStorageStatus(reader.GetString(3), out ApiCallStatus status) ||
+                        !decimal.TryParse(
+                            reader.GetString(9),
+                            NumberStyles.Number,
+                            CultureInfo.InvariantCulture,
+                            out decimal usdCost))
+                    {
+                        continue;
+                    }
+
+                    DailyKey key = new(
+                        day, trigger, reader.GetString(2), status,
+                        TryReadDecimal(reader, 4, out decimal rate) ? rate : null,
+                        TryReadDateOnly(reader, 5, out DateOnly rateDate) ? rateDate : null);
+
+                    Accumulate(
+                        totals, key,
+                        calls: reader.GetInt64(6),
+                        promptTokens: reader.GetInt64(7),
+                        outputTokens: reader.GetInt64(8),
+                        usdCost: usdCost,
+                        jpyCost: TryReadDecimal(reader, 10, out decimal jpyCost) ? jpyCost : null,
+                        suggestionCount: reader.GetInt64(11),
+                        discardedCount: reader.GetInt64(12));
+                }
+
+                return 0;
+            });
+
+            foreach (DateOnly day in affectedDays)
+            {
+                db.Execute(
+                    "DELETE FROM api_call_daily WHERE day = $day;",
+                    ("$day", day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+            }
+
+            foreach ((DailyKey key, DailyTotals value) in totals)
+            {
+                db.Execute(
+                    """
+                    INSERT INTO api_call_daily (
+                        day, trigger_type, model, status, usd_jpy_rate, rate_date,
+                        call_cnt, prompt_tokens, output_tokens, usd_cost, jpy_cost,
+                        suggestion_cnt, discarded_cnt)
+                    VALUES (
+                        $day, $trigger_type, $model, $status, $usd_jpy_rate, $rate_date,
+                        $call_cnt, $prompt_tokens, $output_tokens, $usd_cost, $jpy_cost,
+                        $suggestion_cnt, $discarded_cnt);
+                    """,
+                    ("$day", key.Day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                    ("$trigger_type", ToStorageValue(key.Trigger)),
+                    ("$model", key.Model),
+                    ("$status", ToStorageValue(key.Status)),
+                    ("$usd_jpy_rate", key.Rate is decimal rate ? (double)rate : null),
+                    ("$rate_date", key.RateDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                    ("$call_cnt", value.Calls),
+                    ("$prompt_tokens", value.PromptTokens),
+                    ("$output_tokens", value.OutputTokens),
+                    ("$usd_cost", value.UsdCost.ToString(CultureInfo.InvariantCulture)),
+                    ("$jpy_cost", value.JpyMissing
+                        ? null
+                        : value.JpyCost.ToString(CultureInfo.InvariantCulture)),
+                    ("$suggestion_cnt", value.SuggestionCount),
+                    ("$discarded_cnt", value.DiscardedCount));
+            }
+
+            // SQLite のパラメータ上限（既定999）に収まるよう分割する。
+            foreach (long[] chunk in idsToRemove.Chunk(400))
+            {
+                (string inClause, (string Name, object? Value)[] parameters) = BuildIdInClause(chunk);
+                unlinkedReactions += db.Execute(
+                    $"UPDATE reactions SET api_call_id = NULL WHERE api_call_id IN {inClause};",
+                    parameters);
+                db.Execute($"DELETE FROM api_calls WHERE id IN {inClause};", parameters);
+            }
+        });
+
+        return new ApiCallCompactionResult(idsToRemove.Count, affectedDays.Count, unlinkedReactions);
+    }
+
+    private static void Accumulate(
+        Dictionary<DailyKey, DailyTotals> totals,
+        DailyKey key,
+        long calls,
+        long promptTokens,
+        long outputTokens,
+        decimal usdCost,
+        decimal? jpyCost,
+        long suggestionCount,
+        long discardedCount)
+    {
+        if (!totals.TryGetValue(key, out DailyTotals? value))
+        {
+            value = new DailyTotals();
+            totals[key] = value;
+        }
+
+        value.Calls += calls;
+        value.PromptTokens += promptTokens;
+        value.OutputTokens += outputTokens;
+        value.UsdCost += usdCost;
+        value.SuggestionCount += suggestionCount;
+        value.DiscardedCount += discardedCount;
+
+        // 粒度にレートを含めているので、レート有りのグループは全行が円を持ち、
+        // レート無しのグループは全行が円を持たない。理屈の上で混在しうるのは手で壊した
+        // 旧ログだけで、その場合は「円合計が欠けている」として NULL にする。
+        // 誤った円合計を出すより、集計側で ¥— と表示させるほうが安全（既存の IsJpyComplete と同じ判断）。
+        if (jpyCost is decimal jpy) value.JpyCost += jpy;
+        else value.JpyMissing = true;
+    }
+
+    private static (string InClause, (string Name, object? Value)[] Parameters) BuildIdInClause(
+        IReadOnlyList<long> ids)
+    {
+        var names = new string[ids.Count];
+        var parameters = new (string Name, object? Value)[ids.Count];
+        for (int i = 0; i < ids.Count; i++)
+        {
+            names[i] = "$id" + i.ToString(CultureInfo.InvariantCulture);
+            parameters[i] = (names[i], ids[i]);
+        }
+
+        return ("(" + string.Join(",", names) + ")", parameters);
+    }
+
+    /// <summary>日次サマリの粒度。レートまで含める理由は DB v4 の移行コメントを参照。</summary>
+    private readonly record struct DailyKey(
+        DateOnly Day,
+        ApiCallTrigger Trigger,
+        string Model,
+        ApiCallStatus Status,
+        decimal? Rate,
+        DateOnly? RateDate);
+
+    private sealed class DailyTotals
+    {
+        internal long Calls;
+        internal long PromptTokens;
+        internal long OutputTokens;
+        internal decimal UsdCost;
+        internal decimal JpyCost;
+        internal bool JpyMissing;
+        internal long SuggestionCount;
+        internal long DiscardedCount;
+    }
 
     private static string ToStorageValue(DateTimeOffset value)
         => value.ToString("O", CultureInfo.InvariantCulture);

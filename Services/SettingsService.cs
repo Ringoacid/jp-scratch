@@ -125,6 +125,12 @@ internal sealed class SettingsService
         // 閾値は (0, 1] の割合。範囲外・壊れた値は既定の80%へ戻す。
         if (s.MonthlyLimitWarningRatio <= 0m || s.MonthlyLimitWarningRatio > 1m)
             s.MonthlyLimitWarningRatio = 0.80m;
+
+        // 0 は「無期限（圧縮しない）」という正当な値。負値だけを 0 へ倒す。
+        // 上限は 1200 か月（100年）。これ以上は事実上の無期限であり、
+        // cutoff 計算の AddMonths が DateTime の範囲外へ出ないための歯止めでもある。
+        if (s.ApiLogRetentionMonths < 0) s.ApiLogRetentionMonths = 0;
+        if (s.ApiLogRetentionMonths > 1200) s.ApiLogRetentionMonths = 1200;
     }
 
     private static void QuarantineBrokenFile()
