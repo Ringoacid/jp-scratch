@@ -18,6 +18,11 @@ internal static class Program
 
         try
         {
+            // --seed-billing はケース選択やAPI呼び出しの土台となる Options.Parse と形が異なるため、
+            // ここで先に分岐する（既存フローの解析ロジックには一切触れない）。
+            if (args.Length > 0 && args[0] == "--seed-billing")
+                return BillingSeedCommand.Run(args.Skip(1).ToArray());
+
             Options options = Options.Parse(args);
             if (options.ShowHelp)
             {
@@ -239,12 +244,16 @@ internal static class Program
         bool reactionPass = ReactionRepositoryValidation.RunSelfTests();
         bool schedulePass = ProofreadingScheduleValidation.RunSelfTests();
         bool geminiClientPass = await GeminiProofreadingClientValidation.RunSelfTestsAsync();
+        bool appPathsPass = AppPathsValidation.RunSelfTests();
+        bool singleInstancePass = SingleInstanceValidation.RunSelfTests();
+        bool billingSeedPass = BillingSeedCommandValidation.RunSelfTests();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
                credentialPass && pricingPass && apiCallPass && apiCallHistoryPass &&
                apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
                billingHistoryEmptyStatePass && usagePeriodPass &&
                migrationPass && fxRatePass && reactionPass && schedulePass &&
-               geminiClientPass ? 0 : 1;
+               geminiClientPass && appPathsPass && singleInstancePass &&
+               billingSeedPass ? 0 : 1;
     }
 
     private static void PrintHelp()
@@ -276,6 +285,11 @@ internal static class Program
               --self-test        APIを呼ばず位置解決ロジックを検査
               --analyze-results PATH
                                  保存済み全文応答の差分抽出を検査（APIは呼ばない）
+              --seed-billing DIR [--bulk] [--force]
+                                 隔離ディレクトリへ検証用app.dbを作り、課金履歴画面の
+                                 目視確認用データを投入する（APIは呼ばない）。
+                                 --bulk は2000件を超える大量データ（Truncated確認用）。
+                                 --force は既存app.dbの上書きを明示的に許可する。
               --help             このヘルプを表示
 
             APIキーは環境変数 GEMINI_API_KEY からのみ読み取ります。

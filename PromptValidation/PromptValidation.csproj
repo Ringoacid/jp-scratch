@@ -20,6 +20,8 @@
              Link="Infrastructure\AppPaths.cs" />
     <Compile Include="..\Infrastructure\AtomicFile.cs"
              Link="Infrastructure\AtomicFile.cs" />
+    <Compile Include="..\Infrastructure\SingleInstance.cs"
+             Link="Infrastructure\SingleInstance.cs" />
     <Compile Include="..\Models\GeminiApiKeySource.cs"
              Link="Models\GeminiApiKeySource.cs" />
     <Compile Include="..\Proofreading\DocumentDiff.cs" Link="Proofreading\DocumentDiff.cs" />

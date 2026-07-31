@@ -1,3 +1,7 @@
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+
 namespace JpScratch.Infrastructure;
 
 /// <summary>
@@ -10,8 +14,62 @@ namespace JpScratch.Infrastructure;
 /// </summary>
 internal sealed class SingleInstance : IDisposable
 {
-    private const string MutexName = @"Local\JpScratch.SingleInstance";
-    private const string ActivateEventName = @"Local\JpScratch.Activate";
+    private const string BaseMutexName = @"Local\JpScratch.SingleInstance";
+    private const string BaseActivateEventName = @"Local\JpScratch.Activate";
+
+    /// <summary>
+    /// <see cref="AppPaths.DataDirEnvironmentVariable"/> と同じ環境変数。設定されている隔離実行時だけ
+    /// Mutex/イベント名にサフィックスを付け、実データの常駐インスタンスと取り合わないようにする。
+    /// 未設定なら従来どおり固定名のまま（1バイトも挙動を変えない）。
+    /// </summary>
+    private static readonly (string Mutex, string ActivateEvent) Names = ResolveNames(
+        Environment.GetEnvironmentVariable(AppPaths.DataDirEnvironmentVariable));
+
+    private static string MutexName => Names.Mutex;
+    private static string ActivateEventName => Names.ActivateEvent;
+
+    /// <summary>
+    /// Mutex/イベント名を決定する純粋関数。<paramref name="dataDirEnvironmentValue"/> が
+    /// 空・空白のみなら従来の固定名をそのまま返す。値があれば、そのディレクトリパスから
+    /// 決定的に導出したサフィックスを固定名へ付与する（同じ値なら常に同じ名前、異なる値なら異なる名前）。
+    /// </summary>
+    internal static (string MutexName, string ActivateEventName) ResolveNames(
+        string? dataDirEnvironmentValue)
+    {
+        if (string.IsNullOrWhiteSpace(dataDirEnvironmentValue))
+            return (BaseMutexName, BaseActivateEventName);
+
+        string suffix = ComputeSuffix(dataDirEnvironmentValue);
+        return ($"{BaseMutexName}.{suffix}", $"{BaseActivateEventName}.{suffix}");
+    }
+
+    /// <summary>
+    /// ディレクトリパスから、カーネルオブジェクト名に使える16進文字列のサフィックスを決定的に導出する。
+    /// Windows のパスは大文字小文字を区別しないため正規化してからハッシュ化し、
+    /// 同じディレクトリを指す表記ゆれ（末尾区切り文字・相対/絶対）をできる範囲で吸収する。
+    /// </summary>
+    private static string ComputeSuffix(string dataDirEnvironmentValue)
+    {
+        string trimmed = dataDirEnvironmentValue.Trim();
+        string normalized;
+        try
+        {
+            normalized = Path.GetFullPath(trimmed);
+        }
+        catch (Exception)
+        {
+            // パスとして解決できない値でも、名前導出自体は失敗させない（決定的でありさえすればよい）。
+            normalized = trimmed;
+        }
+
+        normalized = normalized
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .ToUpperInvariant();
+
+        byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
+        // 16進16桁（64ビット）で衝突確率は無視できる水準にしつつ、名前長を短く保つ。
+        return Convert.ToHexString(hash)[..16];
+    }
 
     private Mutex? _mutex;
     private EventWaitHandle? _activateEvent;
