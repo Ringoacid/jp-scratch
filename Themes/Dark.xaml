@@ -39,4 +39,10 @@
     <SolidColorBrush x:Key="ProofreadingUnderlineBrush" Color="#F0A43A" />
     <SolidColorBrush x:Key="ProofreadingSelectionBrush" Color="#335B3A12" />
 
+    <!-- 課金ガード（要件 3.6.3）: ステータスバーの月間上限進捗バー -->
+    <SolidColorBrush x:Key="UsageProgressTrackBrush" Color="#3A3A3A" />
+    <SolidColorBrush x:Key="UsageProgressNormalBrush" Color="#4285F4" />
+    <SolidColorBrush x:Key="UsageProgressWarningBrush" Color="#F0A43A" />
+    <SolidColorBrush x:Key="UsageProgressReachedBrush" Color="#E06C6C" />
+
 </ResourceDictionary>

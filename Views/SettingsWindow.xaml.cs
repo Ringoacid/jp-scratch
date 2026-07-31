@@ -68,6 +68,11 @@ public partial class SettingsWindow : Window
             s.ProofreadingDebounceMs.ToString(CultureInfo.InvariantCulture);
         ProofreadingIntervalBox.Text =
             s.ProofreadingMinimumIntervalSeconds.ToString(CultureInfo.InvariantCulture);
+        // 表示は往復不変（表示→パースで値が変わらない）書式にする。"0.##" 等の低精度書式だと、
+        // 0.0032 のような細かい上限額が "0" に丸まって表示され、その状態で保存すると
+        // 上限0（無制限）へ黙って壊れる（レビュー指摘の再現防止）。SettingsFieldFormattingを参照。
+        MonthlyLimitBox.Text = SettingsFieldFormatting.FormatMonthlyLimitUsd(s.MonthlyLimitUsd);
+        MonthlyLimitWarningBox.Text = SettingsFieldFormatting.FormatWarningPercent(s.MonthlyLimitWarningRatio);
 
         _loadingCredentialControls = true;
         CredentialSourceCombo.ItemsSource = new[]
@@ -121,6 +126,11 @@ public partial class SettingsWindow : Window
             (int)ParseNumber(
                 ProofreadingIntervalBox.Text,
                 s.ProofreadingMinimumIntervalSeconds);
+        s.MonthlyLimitUsd = SettingsFieldFormatting.ParseDecimalOrDefault(
+            MonthlyLimitBox.Text, s.MonthlyLimitUsd);
+        decimal warningPercent = SettingsFieldFormatting.ParseDecimalOrDefault(
+            MonthlyLimitWarningBox.Text, s.MonthlyLimitWarningRatio * 100m);
+        s.MonthlyLimitWarningRatio = warningPercent / 100m;
 
         s.GeminiApiKeySource = CredentialSourceCombo.SelectedIndex == 1
             ? GeminiApiKeySource.EnvironmentVariable

@@ -295,6 +295,36 @@
         <Setter Property="Margin" Value="0,0,8,0" />
     </Style>
 
+    <!--
+        課金ガード（要件 3.6.3）: ステータスバーの月間上限進捗バー。
+        既定テンプレート（Aero2）は ComboBox / CheckBox と同じく内部固定色で描くため、
+        Background / Foreground を設定してもダークテーマで正しく出ない。テンプレートごと差し替える。
+        PART_Track と PART_Indicator という名前さえ合わせれば、Value に応じた幅の追従は
+        ProgressBar 自身のロジックに任せられる（インジケータの実体が Border でも成立する）。
+        警告色・到達色への切り替えは Foreground を SetResourceReference で動的に差し替える
+        （コードビハインド側。StaticResource で固定すると配色がテーマ切替に追従しない）。
+    -->
+    <Style x:Key="UsageProgressBar" TargetType="ProgressBar">
+        <Setter Property="Background" Value="{DynamicResource UsageProgressTrackBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource UsageProgressNormalBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ProgressBar">
+                    <Grid SnapsToDevicePixels="True">
+                        <Border x:Name="PART_Track"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="2" />
+                        <Border x:Name="PART_Indicator"
+                                Background="{TemplateBinding Foreground}"
+                                CornerRadius="2"
+                                HorizontalAlignment="Left" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- ================= スクロールバー =================
          暗黙スタイルにして、設定画面・全タブ検索・ドロップダウン・AvalonEdit まで一括で揃える。
          矢印ボタンは置かない（Windows 11 の細身のスクロールバーに合わせる）。 -->

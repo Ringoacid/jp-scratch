@@ -83,6 +83,20 @@ public sealed class AppSettings
     public int ProofreadingDebounceMs { get; set; } = 2000;
     public int ProofreadingMinimumIntervalSeconds { get; set; } = 10;
 
+    // ---- 3.6.3 課金ガード ----
+    /// <summary>
+    /// 月間上限額（USD）。要件 3.6.3 の既定は $2.00。
+    /// <c>0以下は無制限</c>として扱う（自動チェックのガード・進捗バーとも無効になる）。
+    /// 負値は不正な入力として <see cref="SettingsService"/> の正規化で 0（無制限）へ倒す。
+    /// </summary>
+    public decimal MonthlyLimitUsd { get; set; } = 2.00m;
+
+    /// <summary>
+    /// 上限接近の警告閾値。0〜1の割合で、既定 0.80（＝80%）。
+    /// 不正な値（0以下または1超）は <see cref="SettingsService"/> の正規化で既定へ戻す。
+    /// </summary>
+    public decimal MonthlyLimitWarningRatio { get; set; } = 0.80m;
+
     // ---- その他 ----
     public bool StartWithWindows { get; set; } = true;
     /// <summary>タブ名の自動生成で使う最大文字数（要件 3.2.1）。</summary>

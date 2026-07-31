@@ -239,6 +239,7 @@ internal static class Program
         bool customDateRangePass = CustomDateRangeParserValidation.RunSelfTests();
         bool billingHistoryEmptyStatePass = BillingHistoryEmptyStateValidation.RunSelfTests();
         bool usagePeriodPass = UsagePeriodValidation.RunSelfTests();
+        bool usageLimitPass = UsageLimitServiceValidation.RunSelfTests();
         bool migrationPass = DatabaseMigrationValidation.RunSelfTests();
         bool fxRatePass = await FxRateServiceValidation.RunSelfTestsAsync();
         bool reactionPass = ReactionRepositoryValidation.RunSelfTests();
@@ -247,13 +248,14 @@ internal static class Program
         bool appPathsPass = AppPathsValidation.RunSelfTests();
         bool singleInstancePass = SingleInstanceValidation.RunSelfTests();
         bool billingSeedPass = BillingSeedCommandValidation.RunSelfTests();
+        bool settingsFieldFormattingPass = SettingsFieldFormattingValidation.RunSelfTests();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
                credentialPass && pricingPass && apiCallPass && apiCallHistoryPass &&
                apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
-               billingHistoryEmptyStatePass && usagePeriodPass &&
+               billingHistoryEmptyStatePass && usagePeriodPass && usageLimitPass &&
                migrationPass && fxRatePass && reactionPass && schedulePass &&
                geminiClientPass && appPathsPass && singleInstancePass &&
-               billingSeedPass ? 0 : 1;
+               billingSeedPass && settingsFieldFormattingPass ? 0 : 1;
     }
 
     private static void PrintHelp()

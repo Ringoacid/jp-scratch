@@ -119,6 +119,12 @@ internal sealed class SettingsService
             600);
         s.TrashRetentionDays = Math.Clamp(s.TrashRetentionDays, 1, 365);
         s.AutoTitleMaxLength = Math.Clamp(s.AutoTitleMaxLength, 4, 60);
+
+        // 0 は「無制限」という正当な値なので Math.Clamp の下限にする（負値だけを無制限へ倒す）。
+        if (s.MonthlyLimitUsd < 0m) s.MonthlyLimitUsd = 0m;
+        // 閾値は (0, 1] の割合。範囲外・壊れた値は既定の80%へ戻す。
+        if (s.MonthlyLimitWarningRatio <= 0m || s.MonthlyLimitWarningRatio > 1m)
+            s.MonthlyLimitWarningRatio = 0.80m;
     }
 
     private static void QuarantineBrokenFile()

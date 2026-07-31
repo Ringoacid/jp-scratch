@@ -301,14 +301,40 @@
                                    TextTrimming="CharacterEllipsis"
                                    Foreground="{DynamicResource SubtleTextBrush}" />
                     </DockPanel>
-                    <TextBlock x:Name="StatusUsage"
-                               Grid.Row="1"
-                               Margin="0,1,0,0"
-                               FontSize="10"
-                               TextTrimming="CharacterEllipsis"
-                               Cursor="Hand"
-                               MouseLeftButtonUp="StatusUsage_MouseLeftButtonUp"
-                               Foreground="{DynamicResource SubtleTextBrush}" />
+                    <DockPanel Grid.Row="1" Margin="0,1,0,0">
+                        <!-- 上限0（無制限）のときは Visibility="Collapsed" で潰れ、レイアウトは崩れない -->
+                        <ProgressBar x:Name="UsageLimitProgressBar"
+                                     DockPanel.Dock="Right"
+                                     Style="{StaticResource UsageProgressBar}"
+                                     Width="54"
+                                     Height="5"
+                                     Margin="8,0,0,0"
+                                     VerticalAlignment="Center"
+                                     Visibility="Collapsed" />
+                        <!--
+                            上限到達の警告は、可変幅の StatusUsage とは別の固定要素として
+                            DockPanel.Dock="Right" 側に置く。狭いウィンドウで StatusUsage が
+                            CharacterEllipsis で省略されても、この要素自体はトリミングされず、
+                            「自動停止」の理由が読めなくなることがない（実機で幅480px程度のとき発生）。
+                            未到達・無制限のときは Collapsed で潰れ、レイアウトは崩れない。
+                        -->
+                        <TextBlock x:Name="StatusUsageLimitWarning"
+                                   DockPanel.Dock="Right"
+                                   FontSize="10"
+                                   Margin="6,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="⚠自動停止(上限)"
+                                   Cursor="Hand"
+                                   MouseLeftButtonUp="StatusUsage_MouseLeftButtonUp"
+                                   Foreground="{DynamicResource UsageProgressReachedBrush}"
+                                   Visibility="Collapsed" />
+                        <TextBlock x:Name="StatusUsage"
+                                   FontSize="10"
+                                   TextTrimming="CharacterEllipsis"
+                                   Cursor="Hand"
+                                   MouseLeftButtonUp="StatusUsage_MouseLeftButtonUp"
+                                   Foreground="{DynamicResource SubtleTextBrush}" />
+                    </DockPanel>
                 </Grid>
             </Border>
         </Grid>

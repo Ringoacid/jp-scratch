@@ -54,11 +54,18 @@ internal sealed class TrayIconService : IDisposable
         _notifyIcon.Text = text.Length <= 63 ? text : text[..60] + "...";
     }
 
-    public void ShowMessage(string title, string body, bool isWarning = false)
+    /// <summary>
+    /// バルーン通知を出す。<see cref="Initialize"/> より前（tray未初期化）に呼ばれた場合は
+    /// 何もせず <c>false</c> を返す。呼び出し側はこれを見て「通知を実際に発行できたか」を判定し、
+    /// できていないなら「発行済み」を記録してはいけない（さもないと機会を静かに失う）。
+    /// </summary>
+    public bool ShowMessage(string title, string body, bool isWarning = false)
     {
-        _notifyIcon?.ShowBalloonTip(
+        if (_notifyIcon is null) return false;
+        _notifyIcon.ShowBalloonTip(
             5000, title, body,
             isWarning ? ToolTipIcon.Warning : ToolTipIcon.Info);
+        return true;
     }
 
     /// <summary>

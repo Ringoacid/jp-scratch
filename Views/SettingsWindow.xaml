@@ -161,7 +161,7 @@
                                Margin="8,0,0,0" />
                 </Grid>
 
-                <Grid Margin="0,4,0,8">
+                <Grid Margin="0,4,0,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="150" />
                         <ColumnDefinition Width="80" />
@@ -174,6 +174,44 @@
                              TextAlignment="Right" />
                     <TextBlock Grid.Column="2"
                                Text="秒"
+                               Style="{StaticResource FieldLabel}"
+                               Margin="8,0,0,0" />
+                </Grid>
+
+                <Grid Margin="0,4,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="80" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="月間上限額"
+                               Style="{StaticResource FieldLabel}"
+                               ToolTip="当月の累計がこの額以上になると自動校正を停止します。0で無制限。" />
+                    <TextBox x:Name="MonthlyLimitBox"
+                             Grid.Column="1"
+                             Style="{StaticResource AppTextBox}"
+                             TextAlignment="Right" />
+                    <TextBlock Grid.Column="2"
+                               Text="USD（0で無制限）"
+                               Style="{StaticResource FieldLabel}"
+                               Margin="8,0,0,0" />
+                </Grid>
+
+                <Grid Margin="0,4,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="80" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="上限接近の警告"
+                               Style="{StaticResource FieldLabel}"
+                               ToolTip="当月の累計がこの割合を超えたら、ステータスバーの進捗バーを警告色にします。" />
+                    <TextBox x:Name="MonthlyLimitWarningBox"
+                             Grid.Column="1"
+                             Style="{StaticResource AppTextBox}"
+                             TextAlignment="Right" />
+                    <TextBlock Grid.Column="2"
+                               Text="%"
                                Style="{StaticResource FieldLabel}"
                                Margin="8,0,0,0" />
                 </Grid>

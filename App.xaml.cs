@@ -89,7 +89,8 @@ public partial class App : Application
             _apiCalls,
             _fxRates,
             _reactions,
-            _proofreadingClient);
+            _proofreadingClient,
+            _tray);
 
         // ホットキーはウィンドウの HWND に紐づける。
         // EnsureHandle なら「表示せずに HWND だけ作る」ができるので、常駐開始が速い。
@@ -105,6 +106,12 @@ public partial class App : Application
         _tray.ExitRequested += ExitApplication;
         _tray.Initialize();
         _tray.SetTooltip($"JP Scratch — {_settings.Current.ToggleHotkey} で表示");
+
+        // MainWindowのコンストラクタはtray初期化より前に走るため、起動時点で月間上限に
+        // 既に到達していても、その時点ではトレイ通知を発行できない（TrayIconService.ShowMessage
+        // は未初期化なら黙ってfalseを返し、MainWindow側もそれを見て「通知済み」を記録していない）。
+        // tray が使えるようになった直後にもう一度だけ評価し直し、取りこぼしを防ぐ。
+        _window.RecheckUsageLimitNotificationAfterTrayReady();
 
         // 後から起動された自分自身に呼び戻してもらうための受け口
         _singleInstance.ListenForActivation(

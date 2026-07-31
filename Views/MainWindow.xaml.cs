@@ -32,6 +32,7 @@ public partial class MainWindow : Window
     private readonly FxRateService _fxRates;
     private readonly ReactionRepository _reactions;
     private readonly GeminiProofreadingClient _proofreadingClient;
+    private readonly TrayIconService _tray;
     private readonly DateTimeOffset _sessionStartedAt;
 
     /// <summary>1回のGemini応答で固定するUSD額と、その時点の為替スナップショット。</summary>
@@ -53,6 +54,15 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _usageRolloverTimer;
     private readonly DispatcherTimer _proofreadingTimer;
     private readonly ProofreadingSchedule _proofreadingSchedule = new();
+
+    /// <summary>
+    /// 最後に <see cref="RefreshUsageDisplay"/> が読み取った当月累計USD。発火条件5（月間上限）の
+    /// 判定・進捗バー・確認ダイアログの表示が、それぞれ別にDBを読みに行かずこれを共有する。
+    /// </summary>
+    private decimal _monthUsageUsd;
+
+    /// <summary>月間上限到達のトレイ通知を「年月＋上限額」単位で一度だけに抑える状態。</summary>
+    private readonly UsageLimitNotificationTracker _usageLimitNotifications = new();
 
     private IntPtr _handle;
 
@@ -93,7 +103,8 @@ public partial class MainWindow : Window
                          ApiCallRepository apiCalls,
                          FxRateService fxRates,
                          ReactionRepository reactions,
-                        GeminiProofreadingClient proofreadingClient)
+                        GeminiProofreadingClient proofreadingClient,
+                        TrayIconService tray)
     {
         _settings = settings;
         _theme = theme;
@@ -106,6 +117,7 @@ public partial class MainWindow : Window
         _fxRates = fxRates;
         _reactions = reactions;
         _proofreadingClient = proofreadingClient;
+        _tray = tray;
         _sessionStartedAt = DateTimeOffset.Now;
 
         InitializeComponent();
@@ -366,6 +378,9 @@ public partial class MainWindow : Window
         ApplyEditorSettings();
         _tabs.ReloadAutoSaveInterval();
         ConfigureProofreadingSchedule();
+        // 上限額・警告閾値が変わった直後に進捗バー・ツールチップ・自動停止表示を反映する
+        // （UsageLimitNotificationTrackerの鍵は上限額を含むため、変更後は再び通知できる）。
+        RefreshUsageDisplay();
         ScheduleAutomaticProofreading();
         StartupRegistration.Sync(settings.StartWithWindows);
 
@@ -1029,6 +1044,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 発火条件5（月間上限）。ここでタイマーの再開始そのものを止めないと、
+        // NotifyChanged 済みの変更が残ったまま「タイマー発火→ガードで却下→
+        // ScheduleAutomaticProofreadingを再度呼ぶ」を100ms間隔で繰り返すビジーループになる。
+        if (IsMonthlyLimitReached())
+            return;
+
         DateTimeOffset? due = _proofreadingSchedule.GetAutomaticDueAt(tab.Id);
         if (due is null)
             return;
@@ -1054,8 +1075,11 @@ public partial class MainWindow : Window
 
         if (!manual &&
             (!_settings.Current.AutoProofreadingEnabled ||
-             !_proofreadingSchedule.IsAutomaticDue(tab.Id, DateTimeOffset.Now)))
+             !_proofreadingSchedule.IsAutomaticDue(tab.Id, DateTimeOffset.Now) ||
+             IsMonthlyLimitReached()))
         {
+            // 発火条件5（月間上限）を含め、ここで弾かれた場合もScheduleAutomaticProofreadingを
+            // 呼ぶが、そちら側も同じ判定を持つため、上限到達中はタイマーが再始動しない。
             ScheduleAutomaticProofreading();
             return;
         }
@@ -1250,9 +1274,18 @@ public partial class MainWindow : Window
         try
         {
             string trigger = manual ? "手動校正" : "自動校正";
+            decimal limit = _settings.Current.MonthlyLimitUsd;
+            // 自動実行はScheduleAutomaticProofreading/RunProofreadingAsyncの発火条件5で
+            // 到達時点で既に止めてあるため、ここまで到達するのは基本的に手動実行のときだけ。
+            string limitWarning = IsMonthlyLimitReached()
+                ? $"月間上限（${UsageFormatting.FormatUsd(limit)}）に達しています" +
+                  $"（当月累計 ${UsageFormatting.FormatUsd(_monthUsageUsd)}）。" +
+                  "このまま実行すると上限を超えます。\n\n"
+                : "";
             MessageBoxResult result = MessageBox.Show(
                 this,
                 $"{trigger}でGemini APIを{requestCount}回呼び出します。料金が発生します。\n\n" +
+                limitWarning +
                 BuildPricingSummary() + "\n" +
                 "複数回の場合は各送信の間隔を空け、実行後に合計料金を表示します。\n\n" +
                 "実行しますか？",
@@ -1499,6 +1532,11 @@ public partial class MainWindow : Window
             ApiCallUsageSummary month = _apiCalls.GetUsageSummary(
                 monthStart, LocalStartOfNextMonth(now));
 
+            _monthUsageUsd = month.UsdCost;
+            decimal limit = _settings.Current.MonthlyLimitUsd;
+            UsageLimitState limitState = UsageLimitService.Evaluate(
+                _monthUsageUsd, limit, _settings.Current.MonthlyLimitWarningRatio);
+
             string latestText = latest is null
                 ? "直—"
                 : $"直↑{latest.PromptTokens:N0}↓{latest.OutputTokens:N0}" +
@@ -1508,6 +1546,13 @@ public partial class MainWindow : Window
                 $"{latestText}｜起${UsageFormatting.FormatUsd(session.UsdCost)} ({UsageFormatting.FormatJpy(session)})｜" +
                 $"日${UsageFormatting.FormatUsd(today.UsdCost)} ({UsageFormatting.FormatJpy(today)})｜" +
                 $"月${UsageFormatting.FormatUsd(month.UsdCost)} ({UsageFormatting.FormatJpy(month)})";
+            // 上限到達の警告は StatusUsage とは別の固定要素に出す。狭いウィンドウで StatusUsage が
+            // CharacterEllipsis により省略されても、「自動停止」の理由が読めなくなることがないように
+            // するため（実機で幅480px程度のとき、末尾に連結した文言ごと消えていた）。
+            bool limitReached =
+                limitState == UsageLimitState.Reached && _settings.Current.AutoProofreadingEnabled;
+            StatusUsageLimitWarning.Visibility = limitReached ? Visibility.Visible : Visibility.Collapsed;
+            StatusUsageLimitWarning.ToolTip = limitReached ? FormatUsageLimitTooltip(limit, limitState) : null;
             StatusUsage.ToolTip = string.Join(
                 Environment.NewLine,
                 FormatUsageTooltip("直近", latest),
@@ -1515,7 +1560,12 @@ public partial class MainWindow : Window
                 FormatUsageTooltip("今日", today),
                 FormatUsageTooltip("今月", month),
                 FormatCachedRateTooltip(),
+                FormatUsageLimitTooltip(limit, limitState),
                 "クリックで課金履歴");
+
+            UpdateUsageLimitProgressBar(limit, limitState);
+            NotifyMonthlyLimitReachedIfNeeded(now, limitState, limit);
+
             _usageDisplayDate = LocalDate(now);
             return true;
         }
@@ -1526,6 +1576,91 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>発火条件5（月間上限）: 送信前の当月累計が上限以上かどうか。事前見積りはしない。</summary>
+    private bool IsMonthlyLimitReached()
+        => UsageLimitService.IsReached(_monthUsageUsd, _settings.Current.MonthlyLimitUsd);
+
+    /// <summary>
+    /// ステータスバーの進捗バーへ反映する。上限が無制限（0以下）ならバーごと隠す
+    /// （<c>Visibility="Collapsed"</c> なのでレイアウトは崩れない）。
+    /// 色は SetResourceReference で動的に差し替える。StaticResource 相当の固定値にすると、
+    /// 状態が変わらないままテーマだけ切り替わったときに古い色のまま固まってしまう。
+    /// </summary>
+    private void UpdateUsageLimitProgressBar(decimal limit, UsageLimitState state)
+    {
+        double? percent = UsageLimitService.ProgressPercent(_monthUsageUsd, limit);
+        if (percent is null)
+        {
+            UsageLimitProgressBar.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        UsageLimitProgressBar.Visibility = Visibility.Visible;
+        UsageLimitProgressBar.Value = percent.Value;
+        UsageLimitProgressBar.SetResourceReference(
+            ForegroundProperty,
+            state switch
+            {
+                UsageLimitState.Reached => "UsageProgressReachedBrush",
+                UsageLimitState.Warning => "UsageProgressWarningBrush",
+                _ => "UsageProgressNormalBrush",
+            });
+        UsageLimitProgressBar.ToolTip = FormatUsageLimitTooltip(limit, state);
+    }
+
+    private string FormatUsageLimitTooltip(decimal limit, UsageLimitState state)
+    {
+        if (limit <= 0m)
+            return "月間上限: 無制限";
+
+        decimal remaining = Math.Max(0m, limit - _monthUsageUsd);
+        string stateText = state switch
+        {
+            UsageLimitState.Reached => "（到達 — 自動校正を停止中。手動は確認のうえ実行可）",
+            UsageLimitState.Warning => "（接近中）",
+            _ => "",
+        };
+        return $"月間上限: ${UsageFormatting.FormatUsd(limit)}　" +
+               $"残り ${UsageFormatting.FormatUsd(remaining)}{stateText}";
+    }
+
+    /// <summary>
+    /// 上限到達をトレイ通知する。「年月＋上限額」単位で一度だけに抑え、入力停止のたびに
+    /// 自動チェックのガードへ引っかかっても通知が繰り返されないようにする。
+    /// 月が変わるか上限額の設定が変わればまた通知できる（<see cref="UsageLimitNotificationTracker"/>）。
+    /// <para>
+    /// <see cref="TrayIconService.ShowMessage"/> が実際に発行できた（<c>true</c>）ときだけ
+    /// <see cref="UsageLimitNotificationTracker.MarkNotified"/> を呼ぶ。先にマークしてから撃つ順序だと、
+    /// tray が未初期化（起動直後）で黙って失敗した場合に「通知済み」だけが記録され、その月は
+    /// 二度と通知されなくなる（実機で踏んだ不具合）。<see cref="RecheckUsageLimitNotificationAfterTrayReady"/>
+    /// と組み合わせて、発行できなかった回はここで記録を残さず後で再試行できるようにする。
+    /// </para>
+    /// </summary>
+    private void NotifyMonthlyLimitReachedIfNeeded(DateTimeOffset now, UsageLimitState state, decimal limit)
+    {
+        if (state != UsageLimitState.Reached)
+            return;
+        if (!_usageLimitNotifications.ShouldNotify(now, limit))
+            return;
+
+        bool delivered = _tray.ShowMessage(
+            "月間上限に達しました",
+            $"当月の利用額が上限 ${UsageFormatting.FormatUsd(limit)} に達したため、自動校正を停止しました。" +
+            "手動実行は確認のうえ可能です。",
+            isWarning: true);
+        if (delivered)
+            _usageLimitNotifications.MarkNotified(now, limit);
+    }
+
+    /// <summary>
+    /// App.OnStartup が tray アイコンを初期化した直後に呼ぶ。<c>MainWindow</c> のコンストラクタは
+    /// <c>TrayIconService.Initialize()</c>（<c>App.xaml.cs</c>）より先に走るため、起動時点で
+    /// 月間上限に既に到達していても、コンストラクタ内の初回 <see cref="RefreshUsageDisplay"/> では
+    /// 通知を発行できない。上のコメントの通り未発行なら通知済みとして記録していないので、
+    /// ここでもう一度評価し直すだけで「tray が使えるようになった後に必ず1回通知される」を満たせる。
+    /// </summary>
+    internal void RecheckUsageLimitNotificationAfterTrayReady() => RefreshUsageDisplay();
+
     /// <summary>日付が変わったときだけ永続ログを再集計し、毎分のDB読取を避ける。</summary>
     private void RefreshUsageForRollover()
     {
@@ -1535,6 +1670,13 @@ public partial class MainWindow : Window
 
         if (RefreshUsageDisplay(now))
             _usageDisplayDate = LocalDate(now);
+
+        // 上限到達中はScheduleAutomaticProofreadingがタイマーの再始動そのものを止めているため、
+        // 月替りで上限が解除されても、次のキー入力（NotifyChanged）が来るまで自動校正が
+        // 再開しない。ロールオーバーのついでに再評価し、未送信の変更を取りこぼさないようにする。
+        // ScheduleAutomaticProofreading自体は幂等（現在のタブの状態から再計算するだけ）なので、
+        // 月替りでない日次ロールオーバーで呼んでも副作用はない。
+        ScheduleAutomaticProofreading();
 
         // 日次判定はサービス側に任せ、通信失敗時も既存表示と校正をそのまま続ける。
         _ = RefreshFxRateAsync();
