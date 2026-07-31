@@ -219,7 +219,9 @@ API失敗・キャンセル・生成中の本文変更では旧提案を残す�
 入力途中の値をモデルごとの生テキストとして保持し、検証はOK押下時にまとめて行う
 （コンボ切替のたびに巻き戻さない）。表示・パースの純粋関数は `Services/SettingsFieldFormatting.cs` の
 `FormatUnitPrice` / `TryParseUnitPrice` / `TryParseUpdatedAt` / `TryBuildPricing` に集約し、
-本体・`PromptValidation` の双方から使う。
+本体・`PromptValidation` の双方から使う。`OkButton_Click` は副作用のない検証（単価表の構築）を
+`credentials.dat` / `pricing.json` への書き込みより前にすべて済ませる。そうしないと、単価欄の
+入力ミスで後段が失敗したときに「APIキーだけ書き込み済み」のような中途半端な状態でダイアログへ戻る。
 
 API呼び出しログは 2026-07-30 に `Services/ApiCallRepository.cs` へ実装した。段落・分割ごとの
 校正と別案生成を、成功・失敗・タイムアウトを含めて `api_calls` へ1行ずつ保存する。出力トークンは

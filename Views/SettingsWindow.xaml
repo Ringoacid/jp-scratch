@@ -290,7 +290,7 @@
                            Margin="150,2,0,8"
                            TextWrapping="Wrap"
                            FontSize="11"
-                           Foreground="{DynamicResource SubtleTextBrush}"
+                           Foreground="{DynamicResource DangerBrush}"
                            Visibility="Collapsed" />
 
                 <Grid Margin="0,0,0,4">

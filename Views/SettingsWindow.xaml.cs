@@ -202,8 +202,13 @@ public partial class SettingsWindow : Window
         // 現在値のコピーに書き込んでから差し替える。途中で例外が出ても設定が半端に壊れない。
         var updated = _service.Current.Clone();
         ApplyTo(updated);
+
+        // 副作用（credentials.dat / pricing.json への書き込み）より前に、入力の検証をすべて済ませる。
+        // 検証エラーで戻るときに「片方だけ書き込み済み」という中途半端な状態を作らない
+        // （例: 単価欄の入力ミスで戻る前にAPIキーだけ credentials.dat へ書き込まれてしまう、等）。
+        if (!TryBuildPricingTable(out Dictionary<string, ModelPricing> pricingTable)) return;
         if (!TryApplyCredentialChanges(updated)) return;
-        if (!TryApplyPricingChanges()) return;
+        if (!TrySavePricing(pricingTable)) return;
         _service.Replace(updated);
 
         DialogResult = true;
@@ -323,35 +328,46 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// 全モデルの生テキストを検証し、<see cref="_pricing"/> へ保存する。失敗したらエラーを表示し、
+    /// 全モデルの生テキストを検証する（副作用なし・ファイルには触らない）。失敗したらエラーを表示し、
     /// 該当モデルをコンボで選択し直して該当欄へフォーカスを当ててから false を返す
     /// （ウィンドウは閉じない）。
     /// </summary>
-    private bool TryApplyPricingChanges()
+    private bool TryBuildPricingTable(out Dictionary<string, ModelPricing> table)
     {
         StashCurrentPricingModel();
 
-        var updated = new Dictionary<string, ModelPricing>(StringComparer.Ordinal);
+        var built = new Dictionary<string, ModelPricing>(StringComparer.Ordinal);
         foreach ((string model, (string input, string output, string updatedAt)) in _pricingText)
         {
             ModelPricing original = _pricingOriginal[model];
             if (!SettingsFieldFormatting.TryBuildPricing(
-                    input, output, updatedAt, original, out ModelPricing built, out string error))
+                    input, output, updatedAt, original, out ModelPricing pricing, out string error))
             {
                 ShowPricingError(model, error);
+                table = built;
                 return false;
             }
 
-            updated[model] = built;
+            built[model] = pricing;
         }
 
+        table = built;
+        return true;
+    }
+
+    /// <summary>
+    /// 検証済みの単価表を <see cref="_pricing"/> へ保存する。IO失敗・検証二重チェック失敗は
+    /// <see cref="TryApplyCredentialChanges"/> と同じ体裁の <see cref="MessageBox"/> で伝える。
+    /// </summary>
+    private bool TrySavePricing(Dictionary<string, ModelPricing> table)
+    {
         try
         {
-            _pricing.Replace(updated);
+            _pricing.Replace(table);
         }
         catch (InvalidDataException ex)
         {
-            // TryBuildPricingを個別に通した後の二重チェック（Replace側のValidate）で弾かれるのは、
+            // TryBuildPricingTableを個別に通した後の二重チェック（Replace側のValidate）で弾かれるのは、
             // 既定モデルのエントリを丸ごと削除した場合など、UIの操作だけでは起きにくいケース。
             MessageBox.Show(
                 this,
