@@ -21,7 +21,9 @@ public partial class SettingsWindow : Window
     private readonly CredentialService _credentials;
     private readonly PricingService _pricing;
     private bool _deleteStoredKey;
+    private bool _deleteOpenAiStoredKey;
     private bool _loadingCredentialControls;
+    private bool _loadingOpenAiCredentialControls;
 
     // モデル単価編集用。入力途中の値はモデルごとに「生テキスト」で保持し、検証はOK押下時にまとめて
     // 行う（コンボを切り替えるたびに検証して選択を巻き戻すような作りにしない）。
@@ -74,6 +76,7 @@ public partial class SettingsWindow : Window
         WhitespaceCheck.IsChecked = s.ShowWhitespace;
         EndOfLineCheck.IsChecked = s.ShowEndOfLine;
         AutoProofreadingCheck.IsChecked = s.AutoProofreadingEnabled;
+        ConfirmPaidApiCallsCheck.IsChecked = s.ConfirmPaidApiCalls;
         ProofreadingDebounceBox.Text =
             s.ProofreadingDebounceMs.ToString(CultureInfo.InvariantCulture);
         ProofreadingIntervalBox.Text =
@@ -96,7 +99,23 @@ public partial class SettingsWindow : Window
         _loadingCredentialControls = false;
         RefreshCredentialStatus();
 
+        _loadingOpenAiCredentialControls = true;
+        OpenAiCredentialSourceCombo.ItemsSource = new[]
+        {
+            "アプリに保存したキー",
+            $"環境変数 {CredentialService.OpenAiEnvironmentVariableName}",
+        };
+        OpenAiCredentialSourceCombo.SelectedIndex =
+            s.OpenAiApiKeySource == GeminiApiKeySource.EnvironmentVariable ? 1 : 0;
+        _loadingOpenAiCredentialControls = false;
+        RefreshOpenAiCredentialStatus();
+
         LoadPricingControls();
+        ProofreadingModelCombo.ItemsSource = ProofreadingModelCatalog.SupportedModels
+            .Select(ProofreadingModelCatalog.DisplayName)
+            .ToArray();
+        ProofreadingModelCombo.SelectedItem =
+            ProofreadingModelCatalog.DisplayName(s.ProofreadingModel);
 
         AutoSaveBox.Text = s.AutoSaveDebounceMs.ToString(CultureInfo.InvariantCulture);
         TrashDaysBox.Text = s.TrashRetentionDays.ToString(CultureInfo.InvariantCulture);
@@ -131,6 +150,14 @@ public partial class SettingsWindow : Window
         s.ShowWhitespace = WhitespaceCheck.IsChecked == true;
         s.ShowEndOfLine = EndOfLineCheck.IsChecked == true;
         s.AutoProofreadingEnabled = AutoProofreadingCheck.IsChecked == true;
+        s.ConfirmPaidApiCalls = ConfirmPaidApiCallsCheck.IsChecked == true;
+        string? selectedModelName = ProofreadingModelCombo.SelectedItem as string;
+        if (selectedModelName is not null)
+        {
+            s.ProofreadingModel = ProofreadingModelCatalog.SupportedModels
+                .FirstOrDefault(model => ProofreadingModelCatalog.DisplayName(model) == selectedModelName)
+                ?? s.ProofreadingModel;
+        }
         s.ProofreadingDebounceMs =
             (int)ParseNumber(
                 ProofreadingDebounceBox.Text,
@@ -148,6 +175,9 @@ public partial class SettingsWindow : Window
             ApiLogRetentionBox.Text, s.ApiLogRetentionMonths);
 
         s.GeminiApiKeySource = CredentialSourceCombo.SelectedIndex == 1
+            ? GeminiApiKeySource.EnvironmentVariable
+            : GeminiApiKeySource.Stored;
+        s.OpenAiApiKeySource = OpenAiCredentialSourceCombo.SelectedIndex == 1
             ? GeminiApiKeySource.EnvironmentVariable
             : GeminiApiKeySource.Stored;
 
@@ -233,6 +263,24 @@ public partial class SettingsWindow : Window
         RefreshCredentialStatus();
     }
 
+    private void OpenAiCredentialSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_loadingOpenAiCredentialControls) RefreshOpenAiCredentialStatus();
+    }
+
+    private void OpenAiApiKeyBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (OpenAiApiKeyBox.Password.Length > 0) _deleteOpenAiStoredKey = false;
+        RefreshOpenAiCredentialStatus();
+    }
+
+    private void DeleteOpenAiStoredKeyButton_Click(object sender, RoutedEventArgs e)
+    {
+        _deleteOpenAiStoredKey = true;
+        OpenAiApiKeyBox.Clear();
+        RefreshOpenAiCredentialStatus();
+    }
+
     private void DeleteStoredKeyButton_Click(object sender, RoutedEventArgs e)
     {
         _deleteStoredKey = true;
@@ -262,6 +310,30 @@ public partial class SettingsWindow : Window
             : "";
 
         CredentialStatusText.Text = $"{stored}\n{environment}{pending}";
+    }
+
+    private void RefreshOpenAiCredentialStatus()
+    {
+        if (OpenAiCredentialStatusText is null) return;
+
+        string stored = _deleteOpenAiStoredKey
+            ? "保存済みキー: OKを押すと削除"
+            : _credentials.OpenAiStoredKeyState switch
+            {
+                StoredCredentialState.Available => "保存済みキー: あり（値は表示しません）",
+                StoredCredentialState.Unreadable => "保存済みキー: 読み取れません（削除または置き換えが必要です）",
+                _ => "保存済みキー: なし",
+            };
+
+        string environment = _credentials.OpenAiEnvironmentKeyAvailable
+            ? $"環境変数 {CredentialService.OpenAiEnvironmentVariableName}: 検出済み"
+            : $"環境変数 {CredentialService.OpenAiEnvironmentVariableName}: 見つかりません";
+
+        string pending = OpenAiApiKeyBox?.Password.Length > 0
+            ? "\n新しいキー: OKを押すと暗号化して保存"
+            : "";
+
+        OpenAiCredentialStatusText.Text = $"{stored}\n{environment}{pending}";
     }
 
     /// <summary>
@@ -432,6 +504,18 @@ public partial class SettingsWindow : Window
             return false;
         }
 
+        if (updated.OpenAiApiKeySource == GeminiApiKeySource.EnvironmentVariable &&
+            !_credentials.OpenAiEnvironmentKeyAvailable)
+        {
+            MessageBox.Show(
+                this,
+                $"環境変数 {CredentialService.OpenAiEnvironmentVariableName} が見つかりません。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
+
         try
         {
             if (ApiKeyBox.Password.Length > 0)
@@ -441,6 +525,15 @@ public partial class SettingsWindow : Window
             else if (_deleteStoredKey)
             {
                 _credentials.DeleteStoredApiKey();
+            }
+
+            if (OpenAiApiKeyBox.Password.Length > 0)
+            {
+                _credentials.SaveStoredOpenAiApiKey(OpenAiApiKeyBox.Password);
+            }
+            else if (_deleteOpenAiStoredKey)
+            {
+                _credentials.DeleteStoredOpenAiApiKey();
             }
 
             return true;

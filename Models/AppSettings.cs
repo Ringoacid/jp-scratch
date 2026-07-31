@@ -77,11 +77,19 @@ public sealed class AppSettings
     // ---- 3.5.5 API キー ----
     /// <summary>キー本体は settings.json に入れず、取得元の選択だけを記録する。</summary>
     public GeminiApiKeySource GeminiApiKeySource { get; set; } = GeminiApiKeySource.Unspecified;
+    /// <summary>OpenAI APIキーの取得元。Geminiとは別のキーを管理する。</summary>
+    public GeminiApiKeySource OpenAiApiKeySource { get; set; } = GeminiApiKeySource.Unspecified;
+
+    // ---- 校正モデル ----
+    /// <summary>実際に校正へ使うモデルID。料金表のキーと一致させる。</summary>
+    public string ProofreadingModel { get; set; } = ProofreadingModelCatalog.GeminiModel;
 
     // ---- 3.3.1 自動校正 ----
     public bool AutoProofreadingEnabled { get; set; } = true;
     public int ProofreadingDebounceMs { get; set; } = 2000;
     public int ProofreadingMinimumIntervalSeconds { get; set; } = 10;
+    /// <summary>課金APIを実行する前に確認ダイアログを表示するか。</summary>
+    public bool ConfirmPaidApiCalls { get; set; } = true;
 
     // ---- 3.6.3 課金ガード ----
     /// <summary>

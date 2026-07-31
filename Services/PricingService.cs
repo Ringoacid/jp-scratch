@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using JpScratch.Infrastructure;
+using JpScratch.Models;
 
 namespace JpScratch.Services;
 
@@ -31,7 +32,9 @@ internal sealed record PricingQuote(
 /// </summary>
 internal sealed class PricingService
 {
-    internal const string DefaultModel = "gemini-3.5-flash-lite";
+    // 既存コード・検証との互換性を保つため、Geminiを既定モデルとして残す。
+    internal const string DefaultModel = ProofreadingModelCatalog.GeminiModel;
+    internal const string OpenAiModel = ProofreadingModelCatalog.OpenAiModel;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -128,13 +131,26 @@ internal sealed class PricingService
                     JsonOptions);
             _models = Validate(loaded);
 
-            // 現在の既定モデルは常に計算可能にする。ユーザーが他モデルだけを
-            // 追加したファイルでも、既定エントリを消しただけで校正を止めない。
+            // サポート対象モデルは常に計算可能にする。既存ユーザーの pricing.json に
+            // 新モデルが無くても、起動時に既定単価を追加して選択できるようにする。
+            bool addedDefault = false;
             if (!_models.ContainsKey(DefaultModel))
             {
                 _models[DefaultModel] = CreateDefaultPricing();
-                TrySave();
+                addedDefault = true;
             }
+            if (!_models.ContainsKey(OpenAiModel))
+            {
+                _models[OpenAiModel] = CreateDefaultOpenAiPricing();
+                addedDefault = true;
+            }
+            else if (IsPreviousOpenAiDefaultPricing(_models[OpenAiModel]))
+            {
+                // 前回のリリースで登録した値だけを公式価格へ更新し、ユーザーが編集した価格は保持する。
+                _models[OpenAiModel] = CreateDefaultOpenAiPricing();
+                addedDefault = true;
+            }
+            if (addedDefault) TrySave();
         }
         catch (Exception ex) when (
             ex is JsonException or IOException or UnauthorizedAccessException
@@ -181,6 +197,7 @@ internal sealed class PricingService
         => new(StringComparer.Ordinal)
         {
             [DefaultModel] = CreateDefaultPricing(),
+            [OpenAiModel] = CreateDefaultOpenAiPricing(),
         };
 
     private static ModelPricing CreateDefaultPricing()
@@ -190,6 +207,19 @@ internal sealed class PricingService
             OutputUsdPerMillion = 2.50m,
             UpdatedAt = "2026-07-29",
         };
+
+    private static ModelPricing CreateDefaultOpenAiPricing()
+        => new()
+        {
+            InputUsdPerMillion = 0.20m,
+            OutputUsdPerMillion = 1.20m,
+            UpdatedAt = "2026-07-31",
+        };
+
+    private static bool IsPreviousOpenAiDefaultPricing(ModelPricing pricing)
+        => pricing.InputUsdPerMillion == 1.00m &&
+           pricing.OutputUsdPerMillion == 6.00m &&
+           pricing.UpdatedAt == "2026-07-31";
 
     private void TrySave()
     {

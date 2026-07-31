@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 
 namespace JpScratch.Views;
 
@@ -9,7 +10,7 @@ public partial class ProofreadingReasonDialog : Window
         bool generatesAlternative)
     {
         InitializeComponent();
-        ReasonBox.ItemsSource = suggestions.ToArray();
+        ReasonSuggestionBox.ItemsSource = suggestions.ToArray();
         DescriptionText.Text = generatesAlternative
             ? "この案を採用しない理由を入力してください。理由を反映した別案を生成します。"
             : "この案を採用しない理由を入力してください。";
@@ -20,6 +21,17 @@ public partial class ProofreadingReasonDialog : Window
     }
 
     internal string Reason => ReasonBox.Text.Trim();
+
+    private void ReasonSuggestionBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ReasonSuggestionBox.SelectedItem is string suggestion)
+        {
+            ReasonBox.Text = suggestion;
+            ReasonBox.CaretIndex = ReasonBox.Text.Length;
+            ReasonBox.Focus();
+            ReasonSuggestionBox.SelectedIndex = -1;
+        }
+    }
 
     private void ConfirmButton_Click(object sender, RoutedEventArgs e)
     {

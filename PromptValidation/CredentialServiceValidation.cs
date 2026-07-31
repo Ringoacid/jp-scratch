@@ -23,19 +23,27 @@ internal static class CredentialServiceValidation
             bool missingPass = service.StoredKeyState == StoredCredentialState.Missing;
 
             service.SaveStoredApiKey(" stored-test-key ");
+            service.SaveStoredOpenAiApiKey(" openai-test-key ");
 
             byte[] encrypted = File.ReadAllBytes(path);
             bool encryptedPass =
                 service.StoredKeyState == StoredCredentialState.Available &&
+                service.OpenAiStoredKeyState == StoredCredentialState.Available &&
                 service.GetApiKey(GeminiApiKeySource.Stored) == "stored-test-key" &&
                 service.GetApiKey(GeminiApiKeySource.Unspecified) == "stored-test-key" &&
+                service.GetOpenAiApiKey(GeminiApiKeySource.Stored) == "openai-test-key" &&
                 !Encoding.UTF8.GetString(encrypted).Contains("stored-test-key", StringComparison.Ordinal);
 
             var reloaded = new CredentialService(path, () => null);
             bool reloadPass =
                 !reloaded.EnvironmentKeyAvailable &&
-                reloaded.GetApiKey(GeminiApiKeySource.Stored) == "stored-test-key";
+                reloaded.GetApiKey(GeminiApiKeySource.Stored) == "stored-test-key" &&
+                reloaded.GetOpenAiApiKey(GeminiApiKeySource.Stored) == "openai-test-key";
 
+            reloaded.DeleteStoredOpenAiApiKey();
+            bool openAiDeletePass =
+                reloaded.OpenAiStoredKeyState == StoredCredentialState.Missing &&
+                reloaded.GetApiKey(GeminiApiKeySource.Stored) == "stored-test-key";
             reloaded.DeleteStoredApiKey();
             bool deletePass =
                 reloaded.StoredKeyState == StoredCredentialState.Missing &&
@@ -51,11 +59,12 @@ internal static class CredentialServiceValidation
             Console.WriteLine($"資格情報（未保存）: {(missingPass ? "PASS" : "FAIL")}");
             Console.WriteLine($"資格情報（DPAPI暗号化）: {(encryptedPass ? "PASS" : "FAIL")}");
             Console.WriteLine($"資格情報（再読込）: {(reloadPass ? "PASS" : "FAIL")}");
+            Console.WriteLine($"資格情報（Gemini/OpenAI別保存）: {(openAiDeletePass ? "PASS" : "FAIL")}");
             Console.WriteLine($"資格情報（削除）: {(deletePass ? "PASS" : "FAIL")}");
             Console.WriteLine($"資格情報（破損検出）: {(corruptPass ? "PASS" : "FAIL")}");
 
             return environmentPass && missingPass && encryptedPass &&
-                   reloadPass && deletePass && corruptPass;
+                   reloadPass && openAiDeletePass && deletePass && corruptPass;
         }
         finally
         {

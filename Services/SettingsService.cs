@@ -117,6 +117,8 @@ internal sealed class SettingsService
             s.ProofreadingMinimumIntervalSeconds,
             1,
             600);
+        if (!ProofreadingModelCatalog.IsSupported(s.ProofreadingModel))
+            s.ProofreadingModel = ProofreadingModelCatalog.GeminiModel;
         s.TrashRetentionDays = Math.Clamp(s.TrashRetentionDays, 1, 365);
         s.AutoTitleMaxLength = Math.Clamp(s.AutoTitleMaxLength, 4, 60);
 

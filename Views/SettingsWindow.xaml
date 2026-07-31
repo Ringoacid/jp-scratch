@@ -145,11 +145,27 @@
                 <CheckBox x:Name="EndOfLineCheck" Style="{StaticResource AppCheckBox}" Content="改行記号を表示する" />
 
                 <!-- ===== 校正 ===== -->
-                <TextBlock Text="校正（Gemini）" Style="{StaticResource SectionHeader}" />
+                <TextBlock Text="校正" Style="{StaticResource SectionHeader}" />
+
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="使用モデル" Style="{StaticResource FieldLabel}" />
+                    <ComboBox x:Name="ProofreadingModelCombo"
+                              Grid.Column="1"
+                              Style="{StaticResource AppComboBox}" />
+                </Grid>
 
                 <CheckBox x:Name="AutoProofreadingCheck"
                           Style="{StaticResource AppCheckBox}"
                           Content="入力停止後に自動で校正する" />
+
+                <CheckBox x:Name="ConfirmPaidApiCallsCheck"
+                          Style="{StaticResource AppCheckBox}"
+                          Content="課金API実行前の確認を表示する"
+                          ToolTip="オフにすると、校正・別案生成の前に確認せず実行します。" />
 
                 <Grid Margin="0,4,0,4">
                     <Grid.ColumnDefinitions>
@@ -248,7 +264,7 @@
                 </Grid>
 
                 <TextBlock Text="モデル単価" Style="{StaticResource SectionHeader}" />
-                <TextBlock Text="Gemini公式の価格が変わったときに更新します。1M tokensあたりのUSDです。"
+                <TextBlock Text="各サービス公式の価格が変わったときに更新します。1M tokensあたりのUSDです。"
                            TextWrapping="Wrap"
                            Foreground="{DynamicResource SubtleTextBrush}"
                            FontSize="11"
@@ -329,7 +345,7 @@
                         <ColumnDefinition Width="150" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="API キーの取得元" Style="{StaticResource FieldLabel}" />
+                    <TextBlock Text="Gemini APIキーの取得元" Style="{StaticResource FieldLabel}" />
                     <ComboBox x:Name="CredentialSourceCombo"
                               Grid.Column="1"
                               Style="{StaticResource AppComboBox}"
@@ -358,6 +374,45 @@
                 </Grid>
 
                 <TextBlock x:Name="CredentialStatusText"
+                           Margin="150,2,0,2"
+                           TextWrapping="Wrap"
+                           FontSize="11"
+                           Foreground="{DynamicResource SubtleTextBrush}" />
+
+                <Grid Margin="0,4,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="OpenAI APIキーの取得元" Style="{StaticResource FieldLabel}" />
+                    <ComboBox x:Name="OpenAiCredentialSourceCombo"
+                              Grid.Column="1"
+                              Style="{StaticResource AppComboBox}"
+                              SelectionChanged="OpenAiCredentialSourceCombo_SelectionChanged" />
+                </Grid>
+
+                <Grid Margin="0,4,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="新しいOpenAIキー" Style="{StaticResource FieldLabel}" />
+                    <PasswordBox x:Name="OpenAiApiKeyBox"
+                                 Grid.Column="1"
+                                 Style="{StaticResource AppPasswordBox}"
+                                 PasswordChar="●"
+                                 PasswordChanged="OpenAiApiKeyBox_PasswordChanged"
+                                 ToolTip="既存のキーは表示しません。未入力のままなら変更しません。" />
+                    <Button x:Name="DeleteOpenAiStoredKeyButton"
+                            Grid.Column="2"
+                            Margin="8,0,0,0"
+                            Style="{StaticResource AppButton}"
+                            Content="保存済みキーを削除"
+                            Click="DeleteOpenAiStoredKeyButton_Click" />
+                </Grid>
+
+                <TextBlock x:Name="OpenAiCredentialStatusText"
                            Margin="150,2,0,2"
                            TextWrapping="Wrap"
                            FontSize="11"

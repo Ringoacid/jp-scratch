@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using JpScratch.Models;
@@ -8,87 +10,17 @@ using JpScratch.Services;
 
 namespace JpScratch.Proofreading;
 
-internal enum GeminiClientError
-{
-    MissingApiKey,
-    Timeout,
-    RequestFailed,
-    InvalidResponse,
-}
-
-internal sealed class GeminiClientException : Exception
-{
-    internal GeminiClientError Error { get; }
-    internal HttpStatusCode? StatusCode { get; }
-    /// <summary>HTTP成功後に判明した使用量。応答を安全に採用できない場合だけ任意で保持する。</summary>
-    internal GeminiUsage? Usage { get; }
-    internal TimeSpan? Elapsed { get; }
-
-    internal GeminiClientException(
-        GeminiClientError error,
-        string message,
-        HttpStatusCode? statusCode = null,
-        Exception? innerException = null,
-        GeminiUsage? usage = null,
-        TimeSpan? elapsed = null)
-        : base(message, innerException)
-    {
-        Error = error;
-        StatusCode = statusCode;
-        Usage = usage;
-        Elapsed = elapsed;
-    }
-}
-
-internal sealed record GeminiUsage(
-    int PromptTokens,
-    int CandidateTokens,
-    int ThoughtsTokens,
-    int CachedContentTokens,
-    int TotalTokens)
-{
-    internal int BillableOutputTokens => CandidateTokens + ThoughtsTokens;
-}
-
-internal sealed record GeminiProofreadingResult(
-    string CorrectedText,
-    DocumentDiffResult Diff,
-    GeminiUsage Usage,
-    TimeSpan Elapsed,
-    int Attempts);
-
-internal sealed record GeminiAlternativeResult(
-    string Alternative,
-    GeminiUsage Usage,
-    TimeSpan Elapsed,
-    int Attempts);
-
-/// <summary>プロバイダーに依存しない校正クライアントの呼び出し口。</summary>
-internal interface IProofreadingClient : IDisposable
-{
-    string Model { get; }
-
-    Task<GeminiProofreadingResult> ProofreadAsync(
-        ProofreadingRequest request,
-        CancellationToken cancellationToken = default);
-
-    Task<GeminiAlternativeResult> GenerateAlternativeAsync(
-        ProofreadingProposal proposal,
-        string reason,
-        CancellationToken cancellationToken = default);
-}
-
 /// <summary>
-/// 文脈込み全文を Gemini へ送り、修正版全文を安全な局所提案へ変換する。
-/// APIキーはリクエストヘッダーにだけ設定し、例外へ含めない。
+/// OpenAI Responses API を使う校正クライアント。
+/// Geminiクライアントと同じ全文校正・差分検査の契約を使うため、UIと課金ログは共通化できる。
 /// </summary>
-internal sealed class GeminiProofreadingClient : IProofreadingClient
+internal sealed class OpenAiProofreadingClient : IProofreadingClient
 {
-    internal const string DefaultModel = "gemini-3.5-flash-lite";
+    internal const string DefaultModel = ProofreadingModelCatalog.OpenAiModel;
     internal static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
 
     private static readonly Uri DefaultBaseAddress =
-        new("https://generativelanguage.googleapis.com/");
+        new("https://api.openai.com/");
 
     private readonly Func<string?> _apiKeyProvider;
     private readonly HttpClient _httpClient;
@@ -99,19 +31,19 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
 
     public string Model => _model;
 
-    internal GeminiProofreadingClient(
+    internal OpenAiProofreadingClient(
         CredentialService credentials,
         Func<GeminiApiKeySource> sourceProvider,
         string model = DefaultModel)
         : this(
-            () => credentials.GetApiKey(sourceProvider()),
+            () => credentials.GetOpenAiApiKey(sourceProvider()),
             CreateHttpClient(),
             model,
             ownsHttpClient: true)
     {
     }
 
-    internal GeminiProofreadingClient(
+    internal OpenAiProofreadingClient(
         Func<string?> apiKeyProvider,
         HttpClient httpClient,
         string model = DefaultModel,
@@ -128,25 +60,18 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
         _ownsHttpClient = ownsHttpClient;
     }
 
-    internal async Task<GeminiProofreadingResult> ProofreadAsync(
-        string sourceText,
-        CancellationToken cancellationToken = default)
-        => await ProofreadAsync(
-            sourceText,
-            ProofreadingPrompt.BuildUserMessage(sourceText),
-            cancellationToken);
-
     public async Task<GeminiProofreadingResult> ProofreadAsync(
         ProofreadingRequest request,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return await ProofreadAsync(
+        return await GenerateAsync(
             request.SourceText,
             ProofreadingPrompt.BuildUserMessage(
                 request.SourceText,
                 request.BeforeContext,
                 request.AfterContext),
+            ProofreadingPrompt.SystemInstruction,
             cancellationToken);
     }
 
@@ -178,7 +103,7 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
         {
             throw new GeminiClientException(
                 GeminiClientError.InvalidResponse,
-                "Gemini APIから有効な別案が返されませんでした。",
+                "OpenAI APIから有効な別案が返されませんでした。",
                 usage: generated.Usage,
                 elapsed: generated.Elapsed);
         }
@@ -190,15 +115,17 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
             generated.Attempts);
     }
 
-    private async Task<GeminiProofreadingResult> ProofreadAsync(
-        string sourceText,
-        string userMessage,
-        CancellationToken cancellationToken)
-        => await GenerateAsync(
-            sourceText,
-            userMessage,
-            ProofreadingPrompt.SystemInstruction,
-            cancellationToken);
+    public void Dispose()
+    {
+        if (_ownsHttpClient) _httpClient.Dispose();
+    }
+
+    private static HttpClient CreateHttpClient()
+        => new()
+        {
+            BaseAddress = DefaultBaseAddress,
+            Timeout = System.Threading.Timeout.InfiniteTimeSpan,
+        };
 
     private async Task<GeminiProofreadingResult> GenerateAsync(
         string sourceText,
@@ -215,10 +142,9 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
         {
             throw new GeminiClientException(
                 GeminiClientError.MissingApiKey,
-                "Gemini APIキーが設定されていません。設定画面で登録または取得元を選択してください。");
+                "OpenAI APIキーが設定されていません。設定画面で登録または取得元を選択してください。");
         }
 
-        apiKey = apiKey.Trim();
         string requestJson = BuildRequestJson(systemInstruction, userMessage);
         Stopwatch stopwatch = Stopwatch.StartNew();
 
@@ -229,18 +155,21 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
             try
             {
                 using HttpResponseMessage response =
-                    await SendOnceAsync(requestJson, apiKey, cancellationToken);
+                    await SendOnceAsync(requestJson, apiKey.Trim(), cancellationToken);
                 string body = await response.Content.ReadAsStringAsync(cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
                 {
                     if (attempt == 1 && IsTransient(response.StatusCode))
                     {
-                        await BackoffAsync(cancellationToken);
+                        await _delay(TimeSpan.FromSeconds(1), cancellationToken);
                         continue;
                     }
 
-                    throw CreateRequestFailedException(response);
+                    throw new GeminiClientException(
+                        GeminiClientError.RequestFailed,
+                        $"OpenAI APIがHTTP {(int)response.StatusCode}を返しました。",
+                        response.StatusCode);
                 }
 
                 GeminiProofreadingResult result =
@@ -252,44 +181,32 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
             {
                 if (attempt == 1)
                 {
-                    await BackoffAsync(cancellationToken);
+                    await _delay(TimeSpan.FromSeconds(1), cancellationToken);
                     continue;
                 }
 
                 throw new GeminiClientException(
                     GeminiClientError.Timeout,
-                    "Gemini APIへの接続が15秒以内に完了しませんでした。",
+                    "OpenAI APIへの接続が15秒以内に完了しませんでした。",
                     innerException: ex);
             }
             catch (HttpRequestException ex)
             {
                 if (attempt == 1)
                 {
-                    await BackoffAsync(cancellationToken);
+                    await _delay(TimeSpan.FromSeconds(1), cancellationToken);
                     continue;
                 }
 
                 throw new GeminiClientException(
                     GeminiClientError.RequestFailed,
-                    "Gemini APIへ接続できませんでした。",
+                    "OpenAI APIへ接続できませんでした。",
                     innerException: ex);
             }
         }
 
         throw new UnreachableException();
     }
-
-    public void Dispose()
-    {
-        if (_ownsHttpClient) _httpClient.Dispose();
-    }
-
-    private static HttpClient CreateHttpClient()
-        => new()
-        {
-            BaseAddress = DefaultBaseAddress,
-            Timeout = System.Threading.Timeout.InfiniteTimeSpan,
-        };
 
     private async Task<HttpResponseMessage> SendOnceAsync(
         string requestJson,
@@ -299,12 +216,9 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
         using CancellationTokenSource timeout = new(_requestTimeout);
         using CancellationTokenSource linked =
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
-        using HttpRequestMessage request = new(
-            HttpMethod.Post,
-            $"v1beta/models/{Uri.EscapeDataString(_model)}:generateContent");
-
-        request.Headers.Add("x-goog-api-key", apiKey);
-        request.Content = new StringContent(requestJson, System.Text.Encoding.UTF8, "application/json");
+        using HttpRequestMessage request = new(HttpMethod.Post, "v1/responses");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        request.Content = new StringContent(requestJson, Encoding.UTF8, "application/json");
 
         return await _httpClient.SendAsync(
             request,
@@ -312,21 +226,9 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
             linked.Token);
     }
 
-    private async Task BackoffAsync(CancellationToken cancellationToken)
-        => await _delay(TimeSpan.FromSeconds(1), cancellationToken);
-
     private static bool IsTransient(HttpStatusCode statusCode)
         => statusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests ||
            (int)statusCode >= 500;
-
-    private static GeminiClientException CreateRequestFailedException(
-        HttpResponseMessage response)
-    {
-        return new GeminiClientException(
-            GeminiClientError.RequestFailed,
-            $"Gemini APIがHTTP {(int)response.StatusCode}を返しました。",
-            response.StatusCode);
-    }
 
     private static GeminiProofreadingResult ParseSuccess(
         string body,
@@ -338,10 +240,9 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
         {
             using JsonDocument document = JsonDocument.Parse(body);
             JsonElement root = document.RootElement;
-            string correctedText = ExtractCandidateText(root);
+            string correctedText = ExtractOutputText(root);
             GeminiUsage usage = ExtractUsage(root);
             DocumentDiffResult diff = DocumentDiff.Create(sourceText, correctedText);
-
             return new GeminiProofreadingResult(
                 correctedText,
                 diff,
@@ -353,61 +254,72 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
         {
             throw;
         }
-        catch (Exception ex) when (ex is JsonException
-                                   or InvalidOperationException
-                                   or KeyNotFoundException)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
             throw new GeminiClientException(
                 GeminiClientError.InvalidResponse,
-                "Gemini APIのレスポンスを読み取れませんでした。",
+                "OpenAI APIのレスポンスを読み取れませんでした。",
                 innerException: ex);
         }
     }
 
-    private static string ExtractCandidateText(JsonElement root)
+    private static string ExtractOutputText(JsonElement root)
     {
-        if (!root.TryGetProperty("candidates", out JsonElement candidates) ||
-            candidates.ValueKind != JsonValueKind.Array ||
-            candidates.GetArrayLength() == 0)
+        if (root.TryGetProperty("output_text", out JsonElement outputText) &&
+            outputText.ValueKind == JsonValueKind.String &&
+            !string.IsNullOrWhiteSpace(outputText.GetString()))
         {
-            throw new GeminiClientException(
-                GeminiClientError.InvalidResponse,
-                "Gemini APIから校正結果が返されませんでした。");
+            return outputText.GetString()!;
         }
 
-        JsonElement first = candidates[0];
-        if (!first.TryGetProperty("content", out JsonElement content) ||
-            !content.TryGetProperty("parts", out JsonElement parts) ||
-            parts.ValueKind != JsonValueKind.Array)
+        if (!root.TryGetProperty("output", out JsonElement output) ||
+            output.ValueKind != JsonValueKind.Array)
         {
             throw new GeminiClientException(
                 GeminiClientError.InvalidResponse,
-                "Gemini APIの校正結果に本文がありません。");
+                "OpenAI APIから校正結果が返されませんでした。");
         }
 
         string text = string.Concat(
-            parts.EnumerateArray()
-                .Where(part => part.TryGetProperty("text", out _))
-                .Select(part => part.GetProperty("text").GetString()));
+            output.EnumerateArray().Where(item =>
+                    item.TryGetProperty("type", out JsonElement type) &&
+                    type.GetString() == "message" &&
+                    item.TryGetProperty("content", out _))
+                .SelectMany(item => item.GetProperty("content").EnumerateArray())
+                .Where(content =>
+                    content.TryGetProperty("type", out JsonElement type) &&
+                    type.GetString() == "output_text" &&
+                    content.TryGetProperty("text", out _))
+                .Select(content => content.GetProperty("text").GetString()));
 
         return string.IsNullOrWhiteSpace(text)
             ? throw new GeminiClientException(
                 GeminiClientError.InvalidResponse,
-                "Gemini APIの校正結果が空でした。")
+                "OpenAI APIの校正結果が空でした。")
             : text;
     }
 
     private static GeminiUsage ExtractUsage(JsonElement root)
     {
-        if (!root.TryGetProperty("usageMetadata", out JsonElement usage))
+        if (!root.TryGetProperty("usage", out JsonElement usage))
             return new GeminiUsage(0, 0, 0, 0, 0);
 
+        int promptTokens = ReadInt(usage, "input_tokens");
+        int outputTokens = ReadInt(usage, "output_tokens");
+        int thoughtsTokens = usage.TryGetProperty("output_tokens_details", out JsonElement details)
+            ? ReadInt(details, "reasoning_tokens")
+            : 0;
+        int candidateTokens = Math.Max(0, outputTokens - thoughtsTokens);
+        int cachedTokens = usage.TryGetProperty("input_tokens_details", out JsonElement inputDetails)
+            ? ReadInt(inputDetails, "cached_tokens")
+            : 0;
+        int totalTokens = ReadInt(usage, "total_tokens");
         return new GeminiUsage(
-            ReadInt(usage, "promptTokenCount"),
-            ReadInt(usage, "candidatesTokenCount"),
-            ReadInt(usage, "thoughtsTokenCount"),
-            ReadInt(usage, "cachedContentTokenCount"),
-            ReadInt(usage, "totalTokenCount"));
+            promptTokens,
+            candidateTokens,
+            thoughtsTokens,
+            cachedTokens,
+            totalTokens);
     }
 
     private static int ReadInt(JsonElement element, string property)
@@ -416,38 +328,16 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
             ? count
             : 0;
 
-    private static string BuildRequestJson(
-        string systemInstruction,
-        string userMessage)
+    private string BuildRequestJson(string systemInstruction, string userMessage)
     {
-        // raw文字列リテラルの改行はソースの改行コードに依存する。
-        // 検証済みプロンプトを環境にかかわらず同じバイト列で送るためLFへ統一する。
-        string normalizedSystemInstruction =
-            systemInstruction.ReplaceLineEndings("\n");
         JsonObject request = new()
         {
-            ["systemInstruction"] = new JsonObject
-            {
-                ["parts"] = new JsonArray(new JsonObject
-                {
-                    ["text"] = normalizedSystemInstruction
-                })
-            },
-            ["contents"] = new JsonArray(new JsonObject
-            {
-                ["role"] = "user",
-                ["parts"] = new JsonArray(new JsonObject
-                {
-                    ["text"] = userMessage
-                })
-            }),
-            ["generationConfig"] = new JsonObject
-            {
-                ["temperature"] = 1.0,
-                ["responseMimeType"] = "text/plain"
-            }
+            ["model"] = _model,
+            ["instructions"] = systemInstruction.ReplaceLineEndings("\n"),
+            ["input"] = userMessage,
+            ["reasoning"] = new JsonObject { ["effort"] = "low" },
+            ["store"] = false,
         };
-
         return request.ToJsonString();
     }
 }

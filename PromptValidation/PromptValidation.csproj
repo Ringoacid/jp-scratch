@@ -24,9 +24,13 @@
              Link="Infrastructure\SingleInstance.cs" />
     <Compile Include="..\Models\GeminiApiKeySource.cs"
              Link="Models\GeminiApiKeySource.cs" />
+    <Compile Include="..\Models\ProofreadingModelCatalog.cs"
+             Link="Models\ProofreadingModelCatalog.cs" />
     <Compile Include="..\Proofreading\DocumentDiff.cs" Link="Proofreading\DocumentDiff.cs" />
     <Compile Include="..\Proofreading\GeminiProofreadingClient.cs"
              Link="Proofreading\GeminiProofreadingClient.cs" />
+    <Compile Include="..\Proofreading\OpenAiProofreadingClient.cs"
+             Link="Proofreading\OpenAiProofreadingClient.cs" />
     <Compile Include="..\Proofreading\ParagraphProofreadingPlanner.cs"
              Link="Proofreading\ParagraphProofreadingPlanner.cs" />
     <Compile Include="..\Proofreading\ProofreadingProposal.cs"

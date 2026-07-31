@@ -21,6 +21,13 @@ internal static class PricingServiceValidation
                 File.Exists(pricingFile) &&
                 defaultQuote.UsdCost == 2.80m &&
                 defaultQuote.Pricing.UpdatedAt == "2026-07-29";
+            PricingQuote openAiQuote =
+                created.Calculate(PricingService.OpenAiModel, 1_000_000, 1_000_000);
+            bool openAiDefaultPass =
+                openAiQuote.UsdCost == 1.40m &&
+                openAiQuote.Pricing.InputUsdPerMillion == 0.20m &&
+                openAiQuote.Pricing.OutputUsdPerMillion == 1.20m &&
+                openAiQuote.Pricing.UpdatedAt == "2026-07-31";
 
             File.WriteAllText(
                 pricingFile,
@@ -61,8 +68,10 @@ internal static class PricingServiceValidation
 
             bool replacePass = RunReplaceTests(pricingFile);
 
+            bool migrationPass = RunOpenAiPricingMigrationTest(root);
             bool pass =
-                defaultPass && customPass && recoveryPass && unknownPass && replacePass;
+                defaultPass && openAiDefaultPass && customPass && recoveryPass &&
+                unknownPass && replacePass && migrationPass;
             Console.WriteLine(
                 "料金設定（作成・モデル別計算・破損復旧・設定画面からの編集API）: " +
                 (pass ? "PASS" : "FAIL"));
@@ -82,6 +91,33 @@ internal static class PricingServiceValidation
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
+    }
+
+    private static bool RunOpenAiPricingMigrationTest(string root)
+    {
+        string pricingFile = Path.Combine(root, "legacy-openai-pricing.json");
+        File.WriteAllText(
+            pricingFile,
+            """
+            {
+              "gemini-3.5-flash-lite": {
+                "input_usd_per_1m": 0.30,
+                "output_usd_per_1m": 2.50,
+                "updated_at": "2026-07-29"
+              },
+              "gpt-5.6-luna": {
+                "input_usd_per_1m": 1.00,
+                "output_usd_per_1m": 6.00,
+                "updated_at": "2026-07-31"
+              }
+            }
+            """);
+
+        var migrated = new PricingService(pricingFile);
+        ModelPricing pricing = migrated.GetPricing(PricingService.OpenAiModel);
+        return pricing.InputUsdPerMillion == 0.20m &&
+               pricing.OutputUsdPerMillion == 1.20m &&
+               pricing.UpdatedAt == "2026-07-31";
     }
 
     /// <summary>

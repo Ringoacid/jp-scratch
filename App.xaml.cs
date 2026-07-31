@@ -27,7 +27,7 @@ public partial class App : Application
     private ApiCallRepository? _apiCalls;
     private FxRateService? _fxRates;
     private ReactionRepository? _reactions;
-    private Proofreading.GeminiProofreadingClient? _proofreadingClient;
+    private Proofreading.ProofreadingClientRouter? _proofreadingClient;
     private TabManager? _tabs;
     private MainWindow? _window;
 
@@ -71,9 +71,9 @@ public partial class App : Application
         _apiCalls = new ApiCallRepository(_database);
         _fxRates = new FxRateService(_database);
         _reactions = new ReactionRepository(_database);
-        _proofreadingClient = new Proofreading.GeminiProofreadingClient(
-            _credentials,
-            () => _settings.Current.GeminiApiKeySource);
+        _proofreadingClient = new Proofreading.ProofreadingClientRouter(
+            _settings,
+            _credentials);
         var repository = new TabRepository(_database);
         _tabs = new TabManager(repository, _settings);
         _tabs.Initialize();

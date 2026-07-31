@@ -29,13 +29,27 @@
                        TextWrapping="Wrap"
                        Margin="0,0,0,12" />
 
-            <ComboBox x:Name="ReasonBox"
-                      Grid.Row="1"
-                      Style="{StaticResource AppComboBox}"
-                      IsEditable="True"
-                      IsTextSearchEnabled="False"
-                      MinWidth="380"
-                      MaxDropDownHeight="180" />
+            <Grid Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBox x:Name="ReasonBox"
+                         Style="{StaticResource AppTextBox}"
+                         MinWidth="380"
+                         MinHeight="52"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         ToolTip="AI提案を採用しない理由を入力してください" />
+                <ComboBox x:Name="ReasonSuggestionBox"
+                          Grid.Row="1"
+                          Style="{StaticResource AppComboBox}"
+                          Margin="0,6,0,0"
+                          IsTextSearchEnabled="False"
+                          MaxDropDownHeight="180"
+                          SelectionChanged="ReasonSuggestionBox_SelectionChanged" />
+            </Grid>
 
             <TextBlock x:Name="CostNoticeText"
                        Grid.Row="2"

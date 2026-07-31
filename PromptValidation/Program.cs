@@ -245,6 +245,7 @@ internal static class Program
         bool reactionPass = ReactionRepositoryValidation.RunSelfTests();
         bool schedulePass = ProofreadingScheduleValidation.RunSelfTests();
         bool geminiClientPass = await GeminiProofreadingClientValidation.RunSelfTestsAsync();
+        bool openAiClientPass = await OpenAiProofreadingClientValidation.RunSelfTestsAsync();
         bool appPathsPass = AppPathsValidation.RunSelfTests();
         bool singleInstancePass = SingleInstanceValidation.RunSelfTests();
         bool billingSeedPass = BillingSeedCommandValidation.RunSelfTests();
@@ -257,7 +258,7 @@ internal static class Program
                apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
                billingHistoryEmptyStatePass && usagePeriodPass && usageLimitPass &&
                migrationPass && fxRatePass && reactionPass && schedulePass &&
-               geminiClientPass && appPathsPass && singleInstancePass &&
+               geminiClientPass && openAiClientPass && appPathsPass && singleInstancePass &&
                billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&
                apiLogCompactionPass && trayIconStatePass ? 0 : 1;
     }

@@ -31,7 +31,7 @@ public partial class MainWindow : Window
     private readonly ApiCallRepository _apiCalls;
     private readonly FxRateService _fxRates;
     private readonly ReactionRepository _reactions;
-    private readonly GeminiProofreadingClient _proofreadingClient;
+    private readonly IProofreadingClient _proofreadingClient;
     private readonly TrayIconService _tray;
     private readonly DateTimeOffset _sessionStartedAt;
 
@@ -111,7 +111,7 @@ public partial class MainWindow : Window
                          ApiCallRepository apiCalls,
                          FxRateService fxRates,
                          ReactionRepository reactions,
-                        GeminiProofreadingClient proofreadingClient,
+                        IProofreadingClient proofreadingClient,
                         TrayIconService tray)
     {
         _settings = settings;
@@ -820,13 +820,12 @@ public partial class MainWindow : Window
         }
 
         SuppressAutoHide();
-        string? apiKey = _credentials.GetApiKey(
-            _settings.Current.GeminiApiKeySource);
+        string? apiKey = GetActiveApiKey();
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             MessageBox.Show(
                 this,
-                "Gemini APIキーが設定されていません。設定画面で登録してください。",
+                $"{ActiveProviderName()} APIキーが設定されていません。設定画面で登録してください。",
                 "JP Scratch",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -834,19 +833,22 @@ public partial class MainWindow : Window
             return;
         }
 
-        MessageBoxResult confirmation = MessageBox.Show(
-            this,
-            "別案生成のためGemini APIを1回呼び出します。料金が発生します。\n\n" +
-            BuildPricingSummary() + "\n" +
-            "実行後に使用トークン数と料金を表示します。\n\n実行しますか？",
-            "API料金の確認",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning,
-            MessageBoxResult.No);
-        if (confirmation != MessageBoxResult.Yes)
+        if (_settings.Current.ConfirmPaidApiCalls)
         {
-            ReleaseAutoHide();
-            return;
+            MessageBoxResult confirmation = MessageBox.Show(
+                this,
+                $"別案生成のため{ActiveProviderName()} APIを1回呼び出します。料金が発生します。\n\n" +
+                BuildPricingSummary() + "\n" +
+                "実行後に使用トークン数と料金を表示します。\n\n実行しますか？",
+                "API料金の確認",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            if (confirmation != MessageBoxResult.Yes)
+            {
+                ReleaseAutoHide();
+                return;
+            }
         }
 
         _alternativeInProgress = true;
@@ -855,7 +857,7 @@ public partial class MainWindow : Window
         ApiUsageCost? failedApiCost = null;
         try
         {
-            SetTransientStatus("別案を生成しています…");
+            SetProofreadingStatus("別案を生成しています…");
             var stopwatch = Stopwatch.StartNew();
             GeminiAlternativeResult result;
             try
@@ -928,10 +930,11 @@ public partial class MainWindow : Window
                 "別案を生成できませんでした",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-            SetTransientStatus(ex.Usage is null
+            SetProofreadingStatus(ex.Usage is null
                 ? "別案生成に失敗しました（使用量・料金は未確認）"
                 : "別案生成に失敗しました " +
-                  (failedApiCost is null ? "（料金未確認）" : FormatCostWithJpy(failedApiCost)));
+                  (failedApiCost is null ? "（料金未確認）" : FormatCostWithJpy(failedApiCost)),
+                force: true);
         }
         finally
         {
@@ -1031,10 +1034,11 @@ public partial class MainWindow : Window
             "別案生成の使用量",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
-        SetTransientStatus(
+        SetProofreadingStatus(
             $"別案 ↑{result.Usage.PromptTokens:N0} " +
             $"↓{result.Usage.BillableOutputTokens:N0} tok  " +
-            FormatCostWithJpy(cost));
+            FormatCostWithJpy(cost),
+            force: true);
     }
 
     // ================= 校正の実行制御 =================
@@ -1115,7 +1119,7 @@ public partial class MainWindow : Window
 
         if (NativeMethods.HasImeComposition(_handle))
         {
-            SetTransientStatus("IME変換の確定後に校正します");
+            SetProofreadingStatus("IME変換の確定後に校正します", force: true);
             if (!manual)
             {
                 _proofreadingTimer.Interval = TimeSpan.FromMilliseconds(500);
@@ -1144,17 +1148,18 @@ public partial class MainWindow : Window
         {
             if (!manual)
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
-            SetTransientStatus("校正が必要な変更はありません");
+            SetProofreadingStatus("校正が必要な変更はありません", force: true);
             return;
         }
 
-        string? apiKey = _credentials.GetApiKey(
-            _settings.Current.GeminiApiKeySource);
+        string? apiKey = GetActiveApiKey();
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             if (!manual)
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
-            SetTransientStatus("Gemini APIキーを設定してください");
+            SetProofreadingStatus(
+                $"{ActiveProviderName()} APIキーを設定してください",
+                force: true);
             return;
         }
 
@@ -1162,7 +1167,7 @@ public partial class MainWindow : Window
         {
             if (!manual)
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
-            SetTransientStatus("校正をキャンセルしました");
+            SetProofreadingStatus("校正をキャンセルしました", force: true);
             return;
         }
 
@@ -1184,7 +1189,7 @@ public partial class MainWindow : Window
                     !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
                 {
                     MarkApiCallsDiscarded(successfulApiCallIds);
-                    SetTransientStatus("本文が変更されたため校正結果を破棄しました");
+                    SetProofreadingStatus("本文が変更されたため校正結果を破棄しました", force: true);
                     return;
                 }
 
@@ -1192,7 +1197,7 @@ public partial class MainWindow : Window
                     _proofreadingSchedule.GetDelayBeforeSend(DateTimeOffset.Now);
                 if (intervalDelay > TimeSpan.Zero)
                 {
-                    SetTransientStatus(
+                    SetProofreadingStatus(
                         $"次の校正送信まで {Math.Ceiling(intervalDelay.TotalSeconds):0} 秒");
                     await Task.Delay(intervalDelay);
                 }
@@ -1201,11 +1206,11 @@ public partial class MainWindow : Window
                     !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
                 {
                     MarkApiCallsDiscarded(successfulApiCallIds);
-                    SetTransientStatus("本文が変更されたため残りの校正を中止しました");
+                    SetProofreadingStatus("本文が変更されたため残りの校正を中止しました", force: true);
                     return;
                 }
 
-                SetTransientStatus(
+                SetProofreadingStatus(
                     $"校正しています… {index + 1}/{plan.Requests.Count}");
                 ProofreadingRequest request = plan.Requests[index];
                 var stopwatch = Stopwatch.StartNew();
@@ -1249,7 +1254,7 @@ public partial class MainWindow : Window
                 !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
             {
                 MarkApiCallsDiscarded(successfulApiCallIds);
-                SetTransientStatus("本文が変更されたため校正結果を破棄しました");
+                SetProofreadingStatus("本文が変更されたため校正結果を破棄しました", force: true);
                 return;
             }
 
@@ -1259,7 +1264,7 @@ public partial class MainWindow : Window
             if (!loaded.Accepted)
             {
                 MarkApiCallsDiscarded(successfulApiCallIds);
-                SetTransientStatus("安全検査に失敗したため校正結果を破棄しました");
+                SetProofreadingStatus("安全検査に失敗したため校正結果を破棄しました", force: true);
                 return;
             }
 
@@ -1283,9 +1288,10 @@ public partial class MainWindow : Window
                 "校正できませんでした",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-            SetTransientStatus(responseCosts.Count == 0
+            SetProofreadingStatus(responseCosts.Count == 0
                 ? "校正に失敗しました（使用量・料金は未確認）"
-                : "校正に失敗しました " + FormatCostWithJpy(responseCosts));
+                : "校正に失敗しました " + FormatCostWithJpy(responseCosts),
+                force: true);
         }
         catch
         {
@@ -1304,6 +1310,9 @@ public partial class MainWindow : Window
 
     private bool ConfirmProofreadingApiUse(int requestCount, bool manual)
     {
+        if (!_settings.Current.ConfirmPaidApiCalls)
+            return true;
+
         SuppressAutoHide();
         try
         {
@@ -1318,7 +1327,7 @@ public partial class MainWindow : Window
                 : "";
             MessageBoxResult result = MessageBox.Show(
                 this,
-                $"{trigger}でGemini APIを{requestCount}回呼び出します。料金が発生します。\n\n" +
+                $"{trigger}で{ActiveProviderName()} APIを{requestCount}回呼び出します。料金が発生します。\n\n" +
                 limitWarning +
                 BuildPricingSummary() + "\n" +
                 "複数回の場合は各送信の間隔を空け、実行後に合計料金を表示します。\n\n" +
@@ -1349,7 +1358,7 @@ public partial class MainWindow : Window
             usage.PromptTokens, usage.BillableOutputTokens);
         return new RecordedApiCall(RecordApiCall(new ApiCallLogEntry(
             trigger,
-            PricingService.DefaultModel,
+            _proofreadingClient.Model,
             usage.PromptTokens,
             usage.BillableOutputTokens,
             cost.UsdCost,
@@ -1391,7 +1400,7 @@ public partial class MainWindow : Window
 
         RecordApiCall(new ApiCallLogEntry(
             trigger,
-            PricingService.DefaultModel,
+            _proofreadingClient.Model,
             promptTokens,
             outputTokens,
             cost.UsdCost,
@@ -1451,9 +1460,10 @@ public partial class MainWindow : Window
         string compactUsage = usage == "使用量・料金は未確認"
             ? usage
             : usage[(usage.LastIndexOf('$'))..];
-        SetTransientStatus(
+        SetProofreadingStatus(
             $"提案 {proposals}件  " +
-            compactUsage);
+            compactUsage,
+            force: true);
     }
 
     private static string BuildUsageText(IReadOnlyList<ApiUsageCost> costs)
@@ -1473,7 +1483,7 @@ public partial class MainWindow : Window
     private ApiUsageCost CreateUsageCost(int promptTokens, int outputTokens)
     {
         PricingQuote quote = _pricing.Calculate(
-            PricingService.DefaultModel, promptTokens, outputTokens);
+            _proofreadingClient.Model, promptTokens, outputTokens);
         // 応答単位で一度だけキャッシュを読む。このsnapshotをログと全ての応答表示で共有する。
         FxRate? fxRate = _fxRates.GetCachedRate();
         if (fxRate is null)
@@ -1484,9 +1494,9 @@ public partial class MainWindow : Window
     private string BuildPricingSummary()
     {
         ModelPricing pricing =
-            _pricing.GetPricing(PricingService.DefaultModel);
+            _pricing.GetPricing(_proofreadingClient.Model);
         return
-            $"{PricingService.DefaultModel} 単価（{pricing.UpdatedAt}）: " +
+            $"{ProofreadingModelCatalog.DisplayName(_proofreadingClient.Model)} 単価（{pricing.UpdatedAt}）: " +
             $"入力 ${pricing.InputUsdPerMillion:0.####}／100万トークン、" +
             $"出力・推論 ${pricing.OutputUsdPerMillion:0.####}／100万トークン";
     }
@@ -1980,6 +1990,20 @@ public partial class MainWindow : Window
         StatusRight.Text = message;
         _statusMessageUntil = DateTime.UtcNow.AddSeconds(4);
     }
+
+    /// <summary>校正処理中の一時的な状態をステータスバーへ表示する。</summary>
+    private void SetProofreadingStatus(string message, bool force = false)
+        => SetTransientStatus(message);
+
+    private string? GetActiveApiKey()
+        => ProofreadingModelCatalog.IsOpenAi(_proofreadingClient.Model)
+            ? _credentials.GetOpenAiApiKey(_settings.Current.OpenAiApiKeySource)
+            : _credentials.GetApiKey(_settings.Current.GeminiApiKeySource);
+
+    private string ActiveProviderName()
+        => ProofreadingModelCatalog.IsOpenAi(_proofreadingClient.Model)
+            ? "OpenAI"
+            : "Gemini";
 
     private void ScheduleStatusUpdate()
     {

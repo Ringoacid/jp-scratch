@@ -14,7 +14,9 @@ $env:GEMINI_API_KEY = "..."
 dotnet run --project PromptValidation
 ```
 
-API キーは環境変数からのみ読み、引数・ログ・レポートには出力しない。
+API キーは環境変数からのみ読み、引数・ログ・レポートには出力しない。精度比較のライブ実行は
+現在 Gemini (`GEMINI_API_KEY`) を対象とし、OpenAI (`OPENAI_API_KEY`) の Responses API クライアントは
+`--self-test` のローカルHTTPスタブで回帰検査する。
 
 主な実行例:
 
@@ -80,9 +82,9 @@ AvalonEdit と同じ UTF-16 オフセットの局所置換へ変換する。絵�
 `ProofreadingSession` も同じ方法でリンクし、`--self-test` で TextAnchor の前方編集追従、
 範囲編集時の失効、境界挿入、複数提案の順次適用を検査する。
 複数提案については、本文オフセットからの個別選択と前後への循環移動も検査する。
-本体の `CredentialService` もリンクし、DPAPI暗号化、再読込、削除、破損ファイルの検出を
-一時ディレクトリだけで検査する。実際のAPIキーやGemini APIは使用しない。
-`PricingService` もリンクし、`pricing.json` の初回生成、モデル別 `decimal` 料金計算、既定モデルの補完、
+本体の `CredentialService` もリンクし、Gemini / OpenAI のキーの別保存、DPAPI暗号化、再読込、削除、
+破損ファイルの検出を一時ディレクトリだけで検査する。実際のAPIキーや外部APIは使用しない。
+`PricingService` もリンクし、`pricing.json` の初回生成、Gemini / GPT-5.6 Luna のモデル別 `decimal` 料金計算、既定モデルの補完、
 破損ファイルの隔離を一時ディレクトリだけで検査する。
 `ApiCallRepository` もリンクし、`api_calls` の全列、Invariant CultureによるUSD/JPY文字列、既存JPY列のNULL、
 成功・error・timeout・破棄済みを含む精密decimal集計、全期間・セッション相当・当日・当月の日時境界、
@@ -94,7 +96,7 @@ HTTP/timeout/不正JSONの古いキャッシュへのfallback、空キャッシ�
 `DatabaseMigrationValidation` はDB v3の`app_metadata`を含む移行を一時SQLiteだけで検査する。したがって
 `--self-test` は、料金・ログ・為替を含めて外部APIを一切呼ばない全オフライン検証である。
 採用したシステム指示は本体の `ProofreadingPrompt` を共有し、検証版とのずれを防ぐ。
-本体の `GeminiProofreadingClient` もリンクし、ローカルHTTPスタブでリクエスト形式、
+本体の `GeminiProofreadingClient` と `OpenAiProofreadingClient` もリンクし、ローカルHTTPスタブでリクエスト形式、
 前後文脈タグ、`usageMetadata`、差分生成、1回だけの再試行、恒久エラー、タイムアウト、
 キー未設定を検査する。`ParagraphProofreadingPlanner` の段落境界、変更検出、選択範囲、
 書記素を壊さない2,000文字分割もAPIを呼ばずに検査する。
