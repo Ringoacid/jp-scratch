@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -163,6 +164,68 @@ public partial class BillingHistoryWindow : Window
     }
 
     private void RefreshButton_Click(object sender, RoutedEventArgs e) => LoadHistory();
+
+    /// <summary>
+    /// 現在のフィルタに合致する明細をCSVへ書き出す（要件 3.6.2）。
+    /// 一覧は <see cref="ApiCallRepository.GetHistory"/> の既定 limit で切り詰めるが、CSVは
+    /// <see cref="int.MaxValue"/> を渡して全件を書く。ここで一覧と同じ上限を掛けると、
+    /// 「2000件を超えた分が黙って落ちたCSV」ができあがり、再集計の結果が静かに狂う。
+    /// </summary>
+    private void ExportCsvButton_Click(object sender, RoutedEventArgs e)
+    {
+        ValidationErrorText.Visibility = Visibility.Collapsed;
+
+        (DateTimeOffset? From, DateTimeOffset? To)? range = ComputeRange(out string? error, out _);
+        if (range is null)
+        {
+            ValidationErrorText.Text = error;
+            ValidationErrorText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        List<ApiCallTrigger> selectedTriggers = CollectSelectedTriggers();
+        if (selectedTriggers.Count == 0)
+        {
+            ValidationErrorText.Text = "種別を1つ以上選択してください（該当なしのためCSVを出力しません）。";
+            ValidationErrorText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        ApiCallHistoryPage page = _apiCalls.GetHistory(
+            range.Value.From, range.Value.To, selectedTriggers, limit: int.MaxValue);
+
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "CSV ファイル (*.csv)|*.csv|すべてのファイル (*.*)|*.*",
+            DefaultExt = ".csv",
+            FileName = BillingCsvExporter.BuildDefaultFileName(DateTimeOffset.Now),
+        };
+
+        if (dialog.ShowDialog(this) != true) return;
+
+        try
+        {
+            File.WriteAllText(
+                dialog.FileName,
+                BillingCsvExporter.BuildCsv(page.Rows),
+                BillingCsvExporter.CsvEncoding);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                      or System.Security.SecurityException)
+        {
+            MessageBox.Show(
+                this,
+                "CSVを書き出せませんでした。" + Environment.NewLine + ex.Message,
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        ValidationErrorText.Text =
+            $"{page.Rows.Count:N0}件を {dialog.FileName} へ書き出しました。";
+        ValidationErrorText.Visibility = Visibility.Visible;
+    }
 
     private void LoadHistory()
     {

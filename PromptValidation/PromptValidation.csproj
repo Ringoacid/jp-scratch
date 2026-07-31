@@ -39,6 +39,8 @@
              Link="Proofreading\ProofreadingResultMerger.cs" />
     <Compile Include="..\Proofreading\ProofreadingSession.cs"
              Link="Proofreading\ProofreadingSession.cs" />
+    <Compile Include="..\Services\BillingCsvExporter.cs"
+             Link="Services\BillingCsvExporter.cs" />
     <Compile Include="..\Services\CredentialService.cs"
              Link="Services\CredentialService.cs" />
     <Compile Include="..\Services\CustomDateRangeParser.cs"

@@ -61,6 +61,13 @@
                             Style="{StaticResource AppButton}"
                             Content="更新"
                             Click="RefreshButton_Click" />
+                    <Button x:Name="ExportCsvButton"
+                            DockPanel.Dock="Right"
+                            Margin="0,0,8,0"
+                            Style="{StaticResource AppButton}"
+                            Content="CSV出力"
+                            ToolTip="現在の期間・種別フィルタに合致する明細をすべてCSVへ書き出す（一覧の表示上限は適用しない）"
+                            Click="ExportCsvButton_Click" />
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="期間" Style="{StaticResource FieldLabel}" />
                         <ComboBox x:Name="PeriodCombo"
