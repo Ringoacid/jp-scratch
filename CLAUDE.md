@@ -12,7 +12,7 @@ WSL や一部アプリで日本語が打てない問題を解消するための�
 | 段階 | 内容 | 状態 |
 |---|---|---|
 | v1 | 常駐エディタ（P-1 の解決） | **完了**（2026-07-28） |
-| v2 | Gemini による校正（P-2 の解決） | **実装中**（校正・料金ログ・表示・課金履歴画面まで完了。価格設定UI・上限ガード・実画面検証が残る） |
+| v2 | Gemini による校正（P-2 の解決） | **実装中**（校正・料金ログ・表示・課金履歴画面・月額上限ガード・実機確認まで完了。`pricing.json` 設定UI・CSVエクスポートが残る） |
 | v3 | 文体の学習（P-3 の解決） | 未着手 |
 
 v1 の実測値: コールドスタート 0.63 秒 / 常駐時メモリ 21.9 MB / MSI 1.8 MB（いずれも目標クリア）。
@@ -24,6 +24,8 @@ dotnet build                                            # ビルド
 dotnet run                                              # 実行
 powershell -File tools\smoke-test.ps1 publish\fdd\JpScratch.exe   # 煙テスト
 powershell -File installer\build.ps1                    # MSI（要 WiX v5）
+dotnet run --project PromptValidation -- --seed-billing <隔離用dir> [--bulk] [--force]
+                                                         # 課金履歴画面の目視確認用データを隔離DBへ投入
 ```
 
 `tools\smoke-test.ps1` は **`%APPDATA%\JpScratch` を消してから走る**。実データがある状態で流さない。
@@ -58,9 +60,13 @@ installer/         WiX v5 による MSI
   メッセージのフックではなく、必要な瞬間に `ImmGetCompositionString` で問い合わせている。
 - **テーマ辞書は `ThemeService` だけが差し込む。** App.xaml で読み込むと二重マージで切り替えが効かない。
 - **既定テンプレートのコントロールは色指定を無視する。** `ComboBox` `CheckBox` `ScrollBar`
-  `GridViewColumnHeader` `ListViewItem` は WPF 既定（Aero2）が内部の固定色で描くため、`Background` /
+  `GridViewColumnHeader` `ListViewItem` `ProgressBar` は WPF 既定（Aero2）が内部の固定色で描くため、`Background` /
   `Foreground` を設定してもダークテーマで「暗い背景に暗い文字」「白地に白文字」になる。
   `Themes/Styles.xaml` でテンプレートごと差し替えてある。新しい種類のコントロールを置くときは同じ確認をすること。
+  `ProgressBar`（`UsageProgressBar` スタイル、月間上限の進捗バー）は `PART_Track` / `PART_Indicator` という
+  名前さえ合わせれば幅の追従は `ProgressBar` 自身のロジックに任せられるが、色は `SetResourceReference` で
+  動的に差し替える必要がある。`StaticResource` で固定すると、状態（Normal/Warning/Reached）が変わらないまま
+  テーマだけ切り替わったときに古い色で固まる。
 - **`ListView` + `GridView` の行スタイルは `ItemContainerStyle` で明示する**（`AppListViewItem`）。
   暗黙の `ListViewItem` スタイルは `GridView` 側のコンテナスタイルに負けて効かない。
 - **初期化ガードは `InitializeComponent()` より前に立てる**（`Views/BillingHistoryWindow.xaml.cs`）。
@@ -77,6 +83,26 @@ installer/         WiX v5 による MSI
 - **アプリアイコンの小サイズは DIB で格納する**（`Assets/app.ico`）。`System.Drawing.Icon`（= NotifyIcon）は
   PNG 圧縮エントリを展開できない。生成し直すときは 256px のみ PNG にすること。
 - **`Assets/app.ico` は自動生成物ではない。** 作り直す手順は README を参照。
+- **`MainWindow` のコンストラクタは `TrayIconService.Initialize()` より前に走る**（`App.xaml.cs`）。
+  コンストラクタ内の初回 `RefreshUsageDisplay` の時点ではトレイへ通知を発行できない。
+  `TrayIconService.ShowMessage` は未初期化なら黙って何もしなかったため、月間上限到達状態で
+  起動すると通知が一度も出ないまま「通知済み」だけが記録され、その月は二度と通知されなくなった
+  （実機で踏んだ）。修正: `ShowMessage` を `bool` 返しにして未初期化なら `false` を返し、
+  呼び出し側は**実際に発行できたときだけ**「通知済み」を記録する。加えて `App.xaml.cs` は
+  `_tray.Initialize()` の直後に `MainWindow.RecheckUsageLimitNotificationAfterTrayReady()` を
+  1回呼んで取りこぼしを防ぐ。起動経路の並び自体は変えていない（コールドスタート実測値を守るため）。
+  新しくトレイへ通知を出す処理を足すときは、同じ「発行できたかを確認してから記録する」順序を守ること。
+- **設定画面の数値入力欄は、表示書式が値を丸めて往復不変性を壊していないか確認する。**
+  `Views/SettingsWindow.xaml.cs` が月間上限額の表示に `"0.##"`（小数2桁）を使っていたため、
+  `0.0032` のような小さい値を保存すると、設定画面を開き直したときに `"0"` と表示された。そのまま
+  OK を押すと 0 = 無制限として保存され、上限ガードが黙って無効化されるデータ破壊バグだった
+  （実機で踏んだ）。修正: `Services/SettingsFieldFormatting.cs`（新規）へ書式・パースを集約し、
+  `FormatMonthlyLimitUsd` は `Services/UsageFormatting.cs` の `FormatUsd`（小数点以下最大8桁）を
+  再利用、`FormatWarningPercent` は `"0.########"`、`ParseDecimalOrDefault` は
+  `CultureInfo.InvariantCulture` 固定にした。`PromptValidation/SettingsFieldFormattingValidation.cs`
+  で「値 → 表示 → パース → 同じ値」の往復不変性を自己テストしている
+  （`2.00` / `0.0032` / `0.005` / `0.00000001` / `0` / `123456.5`）。同種の往復不変性テストは
+  `CustomDateRangeParser.FormatInclusive` にもある。新しい数値入力欄を足すときは同じ確認をすること。
 
 ## 環境の癖
 
@@ -89,6 +115,16 @@ installer/         WiX v5 による MSI
   コンストラクタ解決に失敗することがある。
 - **画面キャプチャはこの環境から使えない**（`CopyFromScreen` が "The handle is invalid" で失敗する）。
   見た目・実キー入力・IME 挙動は自動検証できないので、ユーザーに実機確認を依頼する。
+- **開発用のデータディレクトリ隔離**（`Infrastructure/AppPaths.cs`、`Infrastructure/SingleInstance.cs`）。
+  環境変数 `JPSCRATCH_DATA_DIR` を設定すると、データディレクトリが `%APPDATA%\JpScratch` の代わりに
+  指定パスへ切り替わる。**未設定なら現行と完全に同一。** 空・空白・不正パスは既定へ安全にフォールバックする
+  （`AppPaths.ResolveRoot` を純粋関数として切り出し、静的コンストラクタで例外を漏らして起動全体を
+  巻き込まないようにしてある）。この環境変数が設定されているときだけ、`SingleInstance` の
+  Mutex/イベント名にも正規化パスの SHA-256 先頭16桁を付ける（未設定時は従来の固定名のまま）。
+  こうしないと、隔離ディレクトリ向けに起動しても実データの常駐インスタンスへ呼び戻されて検証できない。
+  `PromptValidation --seed-billing <dir> [--bulk] [--force]` は、この隔離ディレクトリへ課金履歴画面の
+  目視確認用データを投入するコマンド。`%APPDATA%\JpScratch`（実パス含む）を渡すと拒否し、既存 `app.db` は
+  `--force` なしでは上書きしない。`credentials.dat` は作らないため、隔離環境から誤って課金APIを呼べない。
 
 ## v2 校正方式の検証と実装状況
 
@@ -136,7 +172,7 @@ Gemini クライアントも 2026-07-29 に `Proofreading/GeminiProofreadingClie
 `temperature=1.0`、15秒タイムアウト、過渡エラー時の1回だけの再試行を固定する。
 成功時は修正版全文、`usageMetadata`（thinkingを含む）、`DocumentDiff` の結果をまとめて返す。
 HTTPスタブの成功・429再試行・400非再試行・タイムアウト・キー未設定テストが合格済み。
-実際のGemini API疎通は、ユーザー確認を取るまで行っていない。
+実際のGemini API疎通は 2026-07-30 にユーザーが実機で自動校正を1回実行して成功済み（詳細はWIP引き継ぎ参照）。
 
 段落単位の送信計画は 2026-07-29 に `Proofreading/ParagraphProofreadingPlanner.cs` へ実装済み。
 空行区切り（空行がなければ改行単位）、SHA-256ハッシュの出現回数による線形時間の変更検出、
@@ -185,8 +221,8 @@ Frankfurter v2（ECB）のUSD/JPYは `https://api.frankfurter.dev/v2/rate/USD/JP
 各APIログには取得済みレート・基準日・円額を同一行へ固定保存し、
 古いNULL行を後から更新しない。直近表示はそのログの基準日を併記し、期間合計は保存済みの固定レートを
 用いる。複数レートでは日付範囲・件数を表示する。期間に非ゼロUSDかつJPY欠損行があれば円の合計は `¥—` と表示する。
-ログ書き込みや集計表示の失敗は、既に受け取った校正結果や既存のエラー処理を妨げない。月間上限ガード、
-CSVエクスポート、スタイルガイド生成はまだ実装していない。
+ログ書き込みや集計表示の失敗は、既に受け取った校正結果や既存のエラー処理を妨げない。月間上限ガードは
+2026-07-30 に実装済み（後述）。CSVエクスポート、スタイルガイド生成はまだ実装していない。
 
 課金履歴画面は2026-07-30に `Views/BillingHistoryWindow.xaml` / `.xaml.cs` へ実装した。
 `CrossTabSearchWindow` と同じ非モーダル・単一インスタンスキャッシュ方式で、トレイメニューの
@@ -201,7 +237,56 @@ USD/JPY/レートの表示書式は `Services/UsageFormatting.cs` へ集約し�
 `AppTextBox` に `yyyy-MM-dd` を入力させる（不変条件：既定テンプレートのダークテーマ崩れ）。
 所要時間は常にミリ秒表示（`1234 ms`）に統一した。
 
-## WIP 引き継ぎ（2026-07-30 更新）
+2026-07-30 に、プリセット選択時にカスタム欄の表示が実際のクエリ範囲とずれるバグを修正した
+（コンストラクタが期間選択に関係なく固定30日レンジを入れっぱなしで、「当月」を選んでいるのに
+別の日付が表示されていた。集計自体は正しく、表示だけの問題）。`UpdateCustomRangeDisplay` で、
+プリセット選択時に実際にクエリへ渡す範囲をカスタム欄へ書き戻す。クエリの終了日時は排他（翌日/翌月
+1日 00:00）だがカスタム欄は「終了日を含む」規約なので、`Services/CustomDateRangeParser.FormatInclusive`
+で変換してから書き戻す。この往復が一致しないと「当月→カスタムに切り替えただけで期間が1日ずれる」
+バグになるため、自己テストで往復一致を担保している。「全期間」は単一の範囲で表現できないので欄を
+空にし、空欄のまま「カスタム」へ切り替えたときは当月を初期値として入れる（いきなり入力エラーを
+出さないため）。
+
+## 月間上限の進捗表示・ガード（2026-07-30 実装）
+
+requirements.md §3.6.3・§3.3.1 発火条件5に対応する。
+
+- `Models/AppSettings.cs` に `MonthlyLimitUsd`（既定 $2.00）と `MonthlyLimitWarningRatio`（既定 0.80）を
+  追加。`Services/SettingsService.cs` の `Normalize` で負値・範囲外を正規化する。**上限 0 は無制限**として
+  扱う（0以下は `Math.Clamp` の下限にせず、負値だけを0へ倒す）。
+- `Services/UsageLimitService.cs`（新規）に、WPF・DBに依存しない純粋関数の判定
+  （`Evaluate` / `IsReached` / `ProgressPercent`）と、通知抑止用の `UsageLimitNotificationTracker` を置いた。
+  抑止の鍵は「年月＋上限額」なので、月替りでも上限額変更でも再通知できる。
+- 判定基準は**送信前の当月累計が上限以上かどうか**。今回の送信で超える見込みかの事前見積りは
+  実装していない（出力トークン数が送信前には分からないため）。
+- `Views/MainWindow.xaml.cs`: `ScheduleAutomaticProofreading` で発火条件5を判定してタイマーの
+  再始動そのものを止める（ここで止めないと「発火→却下→再スケジュール」の100msビジーループになる）。
+  `RunProofreadingAsync` の自動ゲートにも同じ判定を置いて多重防御する。当月累計は
+  `RefreshUsageDisplay` が読んだ値を `_monthUsageUsd` にキャッシュして共有し、DB読み取りを増やさない。
+  `RefreshUsageForRollover` から `ScheduleAutomaticProofreading()` を呼ぶよう修正した
+  （月替りで上限が解除されても、未送信の変更が残っていると次のキー入力までタイマーが再開しなかった）。
+  `ScheduleAutomaticProofreading` 自体は幂等（現在のタブの状態から再計算するだけ）なので、
+  月替りでない日次ロールオーバーで呼んでも副作用はない。
+- 手動実行は上限到達後もブロックせず、`ConfirmProofreadingApiUse` に当月累計と上限額を具体額で
+  示す警告を追加して実行可能にした。
+- ステータスバー下段に進捗バーを追加した（`UsageLimitProgressBar`）。`ProgressBar` の既定テンプレート
+  差し替えは上の「壊しやすい不変条件」参照。上限0ならバーごと `Visibility="Collapsed"`。
+- トレイ通知の取りこぼし修正は上の「壊しやすい不変条件」参照。
+- 設定画面（`Views/SettingsWindow.xaml` / `.xaml.cs`）に月間上限額・警告閾値の入力欄を追加した
+  （`MonthlyLimitBox` / `MonthlyLimitWarningBox`）。表示書式の往復不変性バグは上の「壊しやすい
+  不変条件」参照。`pricing.json` のモデル別単価編集とは別項目で、そちらは引き続き未実装。
+- 自動停止時のステータスバー表示 `⚠自動停止(上限)` は、当初は使用量テキストの末尾へ文字列連結して
+  いたため、狭いウィンドウ幅（480px）では `TextTrimming` で切り落とされ見えなかった。`Views/MainWindow.xaml`
+  で `StatusUsageLimitWarning` という独立した `TextBlock` として進捗バーと同じ `DockPanel.Dock="Right"`
+  側へ切り出し、可変長テキストに押し出されないようにした（実機で踏んだ）。上限未到達・上限0のときは
+  `Collapsed`。
+
+実機確認済み（2026-07-31、ダークテーマ）: 進捗バーの見え方、80%での警告色、上限到達色、上限0で
+バーが消えてレイアウトが崩れないこと、設定画面の新しい入力欄の見た目、上限到達時のトレイ通知
+（再通知されないこと、月替り・上限額変更で再通知されること）、上記修正後の自動停止のステータスバー
+表示、手動実行の確認ダイアログの文言。**ライトテーマでの進捗バーの見え方のみ未確認。**
+
+## WIP 引き継ぎ（2026-07-31 更新）
 
 このWIPまでに、requirements.md の v2 チェック項目のうち次を完了している:
 
@@ -219,29 +304,78 @@ USD/JPY/レートの表示書式は `Services/UsageFormatting.cs` へ集約し�
   明細一覧、集計ヘッダ。導線はトレイメニュー・ステータスバークリック・`Ctrl+Shift+B` の3つ
 - `ApiCallRepository.GetUsageSummary` への種別フィルタ引数の追加（`GetHistory` と規約を共有）
 - `Services/UsageFormatting.cs` への表示書式の集約（`MainWindow` と課金履歴画面が共有）
+- **月間上限の進捗表示・ガード**（`Services/UsageLimitService.cs`、`MainWindow`、`SettingsWindow`。
+  詳細は上の専用セクション）
+- トレイ通知の取りこぼし修正（`TrayIconService.ShowMessage` の `bool` 返し化、
+  `RecheckUsageLimitNotificationAfterTrayReady`。詳細は「壊しやすい不変条件」参照）
+- 課金履歴画面のカスタム期間表示のずれ修正（`UpdateCustomRangeDisplay`、
+  `CustomDateRangeParser.FormatInclusive`）
+- 開発用のデータディレクトリ隔離と `PromptValidation --seed-billing`（詳細は「環境の癖」参照）
+- 設定画面の数値表示の往復不変性バグ修正（`Services/SettingsFieldFormatting.cs`。詳細は
+  「壊しやすい不変条件」参照）
+- 自動停止のステータスバー表示 `⚠自動停止(上限)` が省略されて見えないバグの修正
+  （`StatusUsageLimitWarning` を独立 `TextBlock` へ切り出し。詳細は「月間上限の進捗表示・ガード」参照）
+- `PromptValidation/BillingSeedCommand.cs` へ複数レート専用範囲を追加し、シードデータを26行から30行へ
+  拡張（連続2日・円欠損行なし・レート2種類。複数レート混在時の期間合計を画面で確認するために必要だった）
 
-2026-07-30 の再確認では、本体ビルドは警告0・エラー0、`PromptValidation --self-test` は全件合格。
-WindowsのCRLFでraw文字列のプロンプト内容が変わる問題も、API送信時のLF正規化と
-OS非依存のテスト期待値で修正済み。自己テストはHTTPスタブと一時SQLiteだけを使い、
-実Gemini APIは呼んでいない。
-本体にはまだ校正提案を簡単に注入する開発用経路がないため、実画面での一連の操作と実API疎通は未確認。
+2026-07-31 の再確認では、本体ビルドは警告0・エラー0、`PromptValidation --self-test` は
+**トップレベル42項目 / 内訳を含めて78行すべて PASS、FAIL 0、exit code 0**
+（出力は「大項目 → その内訳」の2階層。過去に記録している「64件」は内訳を含めた行数の数え方で、
+同じ数え方だと今回は78）。自己テストはHTTPスタブと一時SQLiteだけを使い、実Gemini APIは
+呼んでいない。WindowsのCRLFでraw文字列のプロンプト内容が変わる問題も、API送信時のLF正規化と
+OS非依存のテスト期待値で修正済み。
+
+**実際のGemini API疎通は完了した。** 2026-07-30 にユーザーが実機で自動校正を1回実行し、成功している。
+実 `app.db` の `api_calls` に残っている値（読み取り専用で確認済み）:
+日時 `2026-07-30T19:50:51+09:00`、トリガー 自動、モデル `gemini-3.5-flash-lite`、
+入力 307 tokens / 出力 6 tokens、`$0.0001071`、`¥0.02`、レート基準日 `2026-07-29`、
+所要 907 ms、成功、提案 1 件 / 破棄 0 件。`pricing.json` の単価（入力 $0.30 / 出力 $2.50 per 1M）で
+`307/1M × 0.30 + 6/1M × 2.50 = 0.0001071` と計算し直すと表示と完全に一致する。
+
 課金履歴画面は 2026-07-30 にユーザーの実機で確認済み: ダークテーマでの表示、導線3つ（トレイ・
 ステータスバークリック・`Ctrl+Shift+B`）、`Esc` での閉じ、全タブ検索と同時に開いて片方を閉じても
 メインウィンドウが自動非表示にならないこと、カスタム期間の境界値（`9999-12-31` / `0001-01-01` /
-開始>終了）でクラッシュせずインラインエラーが出ることまで合格。
-**`api_calls` が空の状態でしか見ていない**ため、明細行のある表示（円欠損行の `¥—`、
-error/timeout 行のツールチップ、複数レート時の期間合計、合計とステータスバーの一致）は未確認。
-実データを作るには校正を1回実行する（＝課金が発生する）必要があり、ユーザー確認待ちで保留している。
-なお 1240px の既定幅で全12列が収まるかも、幅の合計で見積もっただけで実画面では未確認。
+開始>終了）でクラッシュせずインラインエラーが出ることに加え、上記の実 API 疎通で入った1行での
+明細・ヘッダ集計・全12列の表示（成功・円あり・単一レートのケース）まで合格。
+前セッションで指摘されていた「成否内訳の日英混在」は修正済みで、`Services/UsageFormatting.cs` の
+`FormatStatusCounts` を `MainWindow` と課金履歴画面の両方が共有している。
 
-次の WIP は **月額上限の進捗表示・ガード**。
-その後に、`pricing.json` の設定画面編集、CSV エクスポートと古い明細の圧縮、
-v3 の few-shot 選定・スタイルガイド生成へ進む。
+**2026-07-31 に、上記までに残っていた実機確認負債はすべて解消した。**
+
+- 月間上限まわりの実機確認一式（進捗バーの見え方・警告色・到達色・上限0のレイアウト・トレイ通知の
+  実発行と再通知抑止/再解禁・自動停止のステータスバー表示・手動実行の確認ダイアログの文言）は
+  ダークテーマで確認済み。詳細は「月間上限の進捗表示・ガード」節末尾参照。
+- 課金履歴画面の残り5ケースも確認済み: 円欠損行の `¥—`（ツールチップは「JPY換算に未記録ログあり」）、
+  error/timeout 行のツールチップ（行ごとに異なる文言）、複数レート混在時の期間合計
+  （カスタム期間 `2026-06-11`〜`2026-06-12` の4行、入力 534 / 出力 343 tokens、`$0.000942` /
+  `¥0.14`、レート基準日 `2026-06-11` と `2026-06-12` の2種類で明細合算と一致することを検算済み）、
+  明細複数件の並び順（`called_at` 降順）、ヘッダ合計とステータスバー月表示の一致。
+  シード投入経路（`--seed-billing`、30行版）で実機確認した。
+- 既定幅 1240px での全12列表示も、実機スクリーンショット（1218px 幅）で確認済み。算術上の見積り
+  （列幅合計 1175px）だけの状態は解消した。
+
+**未確認のまま残っていること**（実機確認済みと書かないこと）:
+
+- 月間上限の進捗バーの**ライトテーマ**での見え方のみ未確認（ダークテーマでは確認済み）。
+- この環境では画面キャプチャが使えない（`CopyFromScreen` が失敗する）ため、見た目・実キー入力・
+  IME 挙動は自動検証できない。実機確認は引き続きユーザーへ依頼する。
+
+## 次の WIP と、その判断理由
+
+次の WIP は **`pricing.json` の設定画面編集**。
+
+理由: v2 チェックリストの残りは (a) `pricing.json` 設定画面編集、(b) CSV エクスポートと明細圧縮、
+(c) トレイアイコンの4状態表示、の3つ（実機確認の負債は2026-07-31にすべて解消済みなので、もう
+「次点」の判断材料には含めない）。(a)(b) は元々この順で計画していた（コーディング作業として
+独立に進められ、ユーザーの実機を待たずに実装できる）。(c) は月間上限の実装中に「未実装だった」と
+判明したもので、通知（バルーン）とアイコンの出し分けは別物であり、影響範囲が3.1.1という別要件番号に
+閉じるため、月間上限のWIPには含めず独立WIPとして切り出した。(a) の次点は (b) CSV エクスポートと
+明細圧縮、(c) トレイアイコンの4状態表示を経て v3（few-shot 選定・スタイルガイド生成）へ進む。
 
 注意点:
 
-- `api_calls` はUSD/JPYログと直近・起動後・当日・当月の常時表示、および課金履歴画面での
-  期間・種別フィルタ表示を実装済み。月額上限・CSV/圧縮はまだない。
+- `api_calls` はUSD/JPYログと直近・起動後・当日・当月の常時表示、月額上限ガード、および課金履歴画面
+  での期間・種別フィルタ表示を実装済み。CSV エクスポート・古い明細の圧縮はまだない。
 - `api_calls` / `reactions` / `style_guides` / `fx_rates` と DB v3 の `app_metadata` は作成済みで、
   現時点で書き込んでいるのは `api_calls`、`reactions`、`fx_rates`、`app_metadata` である。
 - 自動校正を含む課金APIは実行単位で確認ダイアログを出す。開発中に実APIを呼ぶ場合も、
