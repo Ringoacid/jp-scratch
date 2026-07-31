@@ -71,7 +71,7 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
                 request.SourceText,
                 request.BeforeContext,
                 request.AfterContext),
-            ProofreadingPrompt.SystemInstruction,
+            request.SystemInstructionOverride ?? ProofreadingPrompt.SystemInstruction,
             cancellationToken);
     }
 
@@ -115,6 +115,31 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
             generated.Attempts);
     }
 
+    public async Task<GeminiStyleGuideResult> GenerateStyleGuideAsync(
+        IReadOnlyList<FewShotExample> reactionHistory,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reactionHistory);
+
+        GeminiRawTextResult raw = await SendWithRetryAsync(
+            ProofreadingPrompt.StyleGuideSystemInstruction,
+            ProofreadingPrompt.BuildStyleGuideUserMessage(reactionHistory),
+            ParseRawSuccess,
+            cancellationToken);
+
+        string content = raw.Text.Trim();
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            throw new GeminiClientException(
+                GeminiClientError.InvalidResponse,
+                "OpenAI APIから有効なスタイルガイドが返されませんでした。",
+                usage: raw.Usage,
+                elapsed: raw.Elapsed);
+        }
+
+        return new GeminiStyleGuideResult(content, raw.Usage, raw.Elapsed, raw.Attempts);
+    }
+
     public void Dispose()
     {
         if (_ownsHttpClient) _httpClient.Dispose();
@@ -137,6 +162,22 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
         if (sourceText.Length == 0)
             throw new ArgumentException("空の文書は校正できません。", nameof(sourceText));
 
+        return await SendWithRetryAsync(
+            systemInstruction,
+            userMessage,
+            (body, elapsed, attempt) => ParseSuccess(body, sourceText, elapsed, attempt),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// APIキー確認・リクエスト構築・タイムアウト15秒・1回だけの再試行を、校正とスタイルガイド生成で共有する。
+    /// </summary>
+    private async Task<T> SendWithRetryAsync<T>(
+        string systemInstruction,
+        string userMessage,
+        Func<string, TimeSpan, int, T> parseSuccess,
+        CancellationToken cancellationToken)
+    {
         string? apiKey = _apiKeyProvider();
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -172,10 +213,9 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
                         response.StatusCode);
                 }
 
-                GeminiProofreadingResult result =
-                    ParseSuccess(body, sourceText, stopwatch.Elapsed, attempt);
+                T result = parseSuccess(body, stopwatch.Elapsed, attempt);
                 stopwatch.Stop();
-                return result with { Elapsed = stopwatch.Elapsed };
+                return result;
             }
             catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
@@ -236,19 +276,29 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
         TimeSpan elapsed,
         int attempts)
     {
+        (string correctedText, GeminiUsage usage) = ParseRaw(body);
+        DocumentDiffResult diff = DocumentDiff.Create(sourceText, correctedText);
+        return new GeminiProofreadingResult(correctedText, diff, usage, elapsed, attempts);
+    }
+
+    private static GeminiRawTextResult ParseRawSuccess(
+        string body,
+        TimeSpan elapsed,
+        int attempts)
+    {
+        (string text, GeminiUsage usage) = ParseRaw(body);
+        return new GeminiRawTextResult(text, usage, elapsed, attempts);
+    }
+
+    private static (string Text, GeminiUsage Usage) ParseRaw(string body)
+    {
         try
         {
             using JsonDocument document = JsonDocument.Parse(body);
             JsonElement root = document.RootElement;
-            string correctedText = ExtractOutputText(root);
+            string text = ExtractOutputText(root);
             GeminiUsage usage = ExtractUsage(root);
-            DocumentDiffResult diff = DocumentDiff.Create(sourceText, correctedText);
-            return new GeminiProofreadingResult(
-                correctedText,
-                diff,
-                usage,
-                elapsed,
-                attempts);
+            return (text, usage);
         }
         catch (GeminiClientException)
         {

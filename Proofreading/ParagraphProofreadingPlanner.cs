@@ -20,7 +20,14 @@ internal sealed record ProofreadingRequest(
     string ContentHash,
     int ParagraphIndex,
     int PartIndex,
-    int PartCount);
+    int PartCount,
+    /// <summary>
+    /// 要件3.4.4の学習素材（スタイルガイド・カスタム指示・few-shot）を合成した
+    /// システム指示。null なら <see cref="ProofreadingPrompt.SystemInstruction"/> を使う。
+    /// プランナー自身は学習素材を知らないため既定 null とし、送信直前に呼び出し側が
+    /// <c>with</c> 式で差し込む。
+    /// </summary>
+    string? SystemInstructionOverride = null);
 
 internal sealed record ProofreadingPlan(
     string DocumentText,

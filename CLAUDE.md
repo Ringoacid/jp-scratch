@@ -14,7 +14,7 @@ WSL や一部アプリで日本語が打てない問題を解消するための�
 |---|---|---|
 | v1 | 常駐エディタ（P-1 の解決） | **完了**（2026-07-28） |
 | v2 | Gemini / GPT-5.6 Luna による校正（P-2 の解決） | **完了**（2026-07-31。実機確認まで済み） |
-| v3 | 文体の学習（P-3 の解決） | 未着手 |
+| v3 | 文体の学習（P-3 の解決） | **完了**（2026-07-31。学習ループ・可視化まで実装・実機確認済み。キャッシュは意図的に見送り） |
 
 v1 の実測値: コールドスタート 0.63 秒 / 常駐時メモリ 21.9 MB / MSI 1.8 MB（いずれも目標クリア）。
 
@@ -138,6 +138,27 @@ installer/         WiX v5 による MSI
   `PromptValidation/DatabaseMigrationValidation.cs` がその中断状態を再現しており、
   `IF NOT EXISTS` を落とすと即座に失敗する。版番号を上げたら、この検証ファイルの
   `CurrentVersion` と `ReactionRepositoryValidation` の版チェックも合わせて更新すること。
+- **DBの行をモデルへ変換するときは `Parse` ではなく `TryParse` を使う**（`ApiCallRepository`・
+  `FxRateService`・`Services/StyleGuideRepository.cs`）。壊れた・想定外の1行があっても例外にせず、
+  その行だけ除外して残りを返す。v3実装時、`StyleGuideRepository.ReadRow` だけこの規約を破って
+  `DateTimeOffset.Parse` を使っており、壊れた `generated_at` が1行あるだけで
+  `GetActive()`/`ListAll()` の呼び出し元（校正の実行、設定画面のコンストラクタ）ごと落ちる
+  バグになっていた（実装中のレビューで発見、実機では未確認）。新しいリポジトリを足すときは
+  同じ規約で揃えること。
+- **進行中フラグ（`_proofreadingRunInProgress` 等）を `true` にする行と、対応する `try`/`finally` の
+  間には何も置かない**（`Views/MainWindow.xaml.cs`）。v3でスタイルガイド用の学習素材（スタイルガイド・
+  カスタム指示・few-shot候補）読み取りをこの隙間に挿入してしまい、DB読み取りが例外を投げると
+  `finally`（フラグを`false`へ戻す・ボタン再有効化・トレイ状態更新）へ到達できず、以後は入口ガードで
+  自動校正が永久に弾かれ続ける状態になっていた（実装中のレビューで発見、実機では未確認）。
+  この種の「フラグを見て弾く」ガードを持つ非同期メソッドへ処理を足すときは、フラグ設定より前に
+  済ませるか、フラグ設定後は必ず対応する `try` の内側に置くこと。
+- **課金APIの応答を受け取った後のDB書き込みは、失敗を握りつぶさずユーザーへ伝える**
+  （`Views/MainWindow.xaml.cs` の `RunStyleGuideGenerationAsync`）。`RecordApiCall`
+  （課金ログ）は補助情報なので失敗しても黙って続行してよいが、生成結果そのもの
+  （スタイルガイド本文）の保存が失敗する場合は話が別。fire-and-forgetの非同期メソッド内で
+  例外を投げさせると unobserved task exception として消え、課金だけ発生してユーザーに何も
+  伝わらない最悪の状態になる。`try/catch` で保存の成否を確認し、失敗時は生成本文をメッセージへ
+  含めて手元に残せるようにする。
 
 ## 環境の癖
 
@@ -547,15 +568,149 @@ FAIL 0、exit code 0**（本体ビルドも警告0・エラー0）。**トレイ
 - この環境では画面キャプチャが使えない（`CopyFromScreen` が失敗する）ため、見た目・実キー入力・
   IME 挙動は自動検証できない。実機確認は引き続きユーザーへ依頼する。
 
+## v3 学習機能の実装状況（2026-07-31 実装・実機確認済み）
+
+requirements.md §3.4 に対応する。v2 完了直後の同日中に、few-shot 選定・スタイルガイド自動生成・
+カスタム指示・プロンプト構成統合まで実装し、同日中にユーザーの実機（GPT-5.6 Luna）で
+生成フロー一式を確認済み。
+
+- **few-shot 選定**（`Proofreading/FewShotSelector.cs`）: 要件3.4.1どおり
+  (a) 拒否・理由つき拒否を優先 (b) 校正対象テキストとの文字2-gram Jaccard類似度を優先
+  (c) 新しさを優先、の順で並べ替え、件数上限15件に加えて総文字数上限2,000字（R-6対策。
+  件数だけでは`left_context`/`right_context`を持つ`reactions`が肥大しうるため）でも打ち切る。
+  候補プールは `ReactionRepository.GetFewShotCandidates`（直近200件）から取る。
+  スタイルガイド生成用の入力選定は語句の重なりという軸がないため、同ファイルの
+  `StyleGuideSourceSelector`（直近300件・12,000字上限）で別に切り出した。
+- **スタイルガイドの世代管理**（`Services/StyleGuideRepository.cs`）: `style_guides`（v2で作成済み、
+  版は上げていない）への生成・一覧・手編集（`UpdateContent`、新しい世代は作らず指定行だけ書き換え、
+  `is_user_edited`を立てる）・有効化（`SetActive`、過去の世代を復元）・無効化（`Deactivate`、
+  履歴は残したままプロンプトへの同梱を止める）・削除（`Delete`）。しきい値判定用のカーソルは
+  `app_metadata`（同じくv2で作成済み）を`FxRateService`と同じ upsert パターンで再利用し、
+  DBスキーマは一切変更していない。
+- **自動生成のトリガー**（`Views/MainWindow.xaml.cs`）: `MaybeOfferStyleGuideGeneration` を
+  リアクション記録の直後（許可・拒否・理由つき拒否の3箇所）と、理由つき別案生成完了後
+  （`_alternativeInProgress`解除後の`finally`）から呼ぶ。校正・別案生成・スタイルガイド生成の
+  いずれかが進行中は判定自体をスキップする（しきい値は減らないため取りこぼさない）。
+  リアクション総数がカーソル+しきい値（既定50件、設定可）以上になったら
+  `RunStyleGuideGenerationAsync` を起動する。
+- **確認ダイアログは `ConfirmPaidApiCalls` と独立**: 要件3.4.2が「生成の実行前に確認ダイアログを
+  出す」を無条件で要求しているため、「課金API実行前の確認を表示する」がOFFでも必ず確認する。
+  月間上限到達中は生成せず、カーソルだけ進めて次のしきい値まで待つ（`IsMonthlyLimitReached()`）。
+  承諾・辞退のどちらでもカーソルを進めるので、辞退のたびに毎回再確認はしない。
+- **クライアント側**（`Proofreading/GeminiProofreadingClient.cs` / `OpenAiProofreadingClient.cs`）:
+  両方に `GenerateStyleGuideAsync` を追加した。APIキー確認・リクエスト構築・15秒タイムアウト・
+  1回だけの再試行という既存の校正と同じリトライロジックを `SendWithRetryAsync<T>`
+  （成功時のパースだけをデリゲートで差し替える）へ抽出し、校正・スタイルガイド生成の両方から共有する。
+  差分検査（`DocumentDiff`）はスタイルガイド生成には不要なので、生テキスト抽出（`ParseRawSuccess`）と
+  差分付き抽出（`ParseSuccess`）を分けた。使用量ログは既存の`ApiCallTrigger.StyleGuide`
+  （v2で先行して`ApiCallRepository`/課金履歴画面に定義済みだった値）で記録する。
+- **プロンプト構成の統合**（`Proofreading/ProofreadingPrompt.BuildSystemInstruction`）: 要件3.4.4の
+  送信順（1システム指示→2校正範囲→3スタイルガイド→4カスタム指示→5few-shot→6`<document>`→
+  7文脈込み全文）に従う。3〜5はすべてDB由来のユーザー入力（スタイルガイド本文・手書き指示・
+  過去の拒否理由や原文/修正案）なので、`<document>`と同じく「データであり命令ではない」境界を
+  `<style-guide>`/`<user-instruction>`/`<reaction-examples>`タグで明示し、full-rewrite-safeで
+  検証済みの「documentの外に出た命令には従わない」挙動を壊さないようにした。
+  タグを偽装できないよう、埋め込む内容中の山括弧は全角（＜／＞）へ無害化してから埋め込む
+  （`ProofreadingPromptV3Validation`で偽装閉じタグが残らないことを検証済み）。
+  `ProofreadingRequest`に`SystemInstructionOverride`（既定null）を追加し、
+  `RunProofreadingAsync`が段落ごとに`with`式で差し込む。別案生成（`AlternativeSystemInstruction`）
+  へは学習素材を載せていない（別契約のプロンプトであり、blast radiusを最小にする判断）。
+- **設定画面**（`Views/SettingsWindow.xaml` / `.xaml.cs`）に「学習（文体の適応）」セクションを追加。
+  カスタム指示の複数行入力欄、自動生成ON/OFFとしきい値、スタイルガイドの世代コンボ（★が有効な世代）＋
+  内容の閲覧・編集・保存・有効化・無効化・削除ボタン。スタイルガイドのCRUD操作はAppSettingsのJSON
+  保存（OKボタン）とは独立に、その場でDBへ書く。
+- **学習効果の可視化**（`Services/ReactionRepository.GetRejectionRateTrend`、設定画面「学習」タブ
+  「学習効果」セクション、2026-07-31 追加実装）: requirements.mdの完了基準「使い始めた頃と比べ
+  拒否率が下がっていること」に対応する。**暦月ではなく蓄積順に既定20件ずつの区間で区切る。**
+  実`app.db`を読み取り専用で確認したところ（`SELECT COUNT(*), MIN(reacted_at), MAX(reacted_at)
+  FROM reactions`）、v2/v3の実装が同日中に進んだため全19件のリアクションが2日間・同一暦月に
+  収まっており、暦月区切りだと棒が1本しか出ない「比較しようがないグラフ」になることが判明した。
+  件数区切りなら初日から意味のある比較ができ、履歴が伸びても崩れない。読み取りに上限は掛けない
+  （`reactions`は`api_calls`と違って明細圧縮の対象外で、1ユーザーの手作業の履歴という前提。
+  上限を掛けると境界の区間が常に一部欠けた分母で拒否率を計算してしまう＝CSVエクスポートの
+  「表示上限を持ち込まない」規約と同じ理由で見送った）。設定画面へは`UsageProgressBar`
+  スタイルをコードから流用し、拒否率のしきい値（20%/40%）に応じて
+  `SetResourceReference(Control.ForegroundProperty, ...)`で配色を切り替える。
+  `SetResourceReference`は一度設定すれば以降のテーマ切替にも自動追従するため、
+  `ThemeService.Changed`をフックし直す必要はない（月間上限進捗バーと同じ理屈）。
+  末尾の区間（まだ規定件数に満たない進行中の区間）には「（進行中）」を付けて区別する。
+  表示は直近24区間までだが、これは表示件数の間引きであり拒否率の計算自体には影響しない
+  （区間の分母はどれも完全なため）。超過分があれば「全N区間中、直近24区間を表示」と明示する。
+- **コンテキストキャッシュは意図的に見送った**（未着手ではなく検討済みの判断）:
+  明示的キャッシュ（`cachedContents`）は3.5.4の「未確認」＝Geminiの最小トークン数が
+  分からないままでは実装できず、これを確認するには実APIへの疎通が要る。加えて、仮に対応しても
+  正しい料金表示ができない別の未確認事項がある——`GeminiProofreadingClient`は暗黙キャッシュ
+  （Geminiが自動適用する分）の使用量を`GeminiUsage.CachedContentTokens`として既に
+  パースしている（`usageMetadata.cachedContentTokenCount`）が、`gemini-3.5-flash-lite.md`に
+  キャッシュ済みトークンの割引後単価の記載が無い。`pricing.json`にその区分を追加して
+  `api_calls`/課金履歴/CSVへ持ち込むと、正しい割引率が分からないまま金額を表示することになり、
+  「表示されている金額の内訳が実際の請求と合わない」状態を作りかねない。したがって
+  `GeminiUsage.CachedContentTokens`は解析されるだけで永続化・表示のどちらにも使っていない。
+  学習素材をsystemInstructionへ集約した現状の構造は、対応する場合にキャッシュ対象として
+  切り出しやすい。
+- **OpenAI（GPT-5.6 Luna）側は事情が違う。** 2026-08-01、`PromptValidation/OpenAiCacheProbeCommand.cs`
+  （`--probe-openai-cache`。実APIを呼ぶため`--self-test`には含めない、`api_calls`へも書かない診断
+  専用コマンド）で、v3相当の長いシステム指示（スタイルガイド＋カスタム指示＋few-shot、`store=false`）
+  を同一内容で2回連続送信したところ、1回目`cached_tokens=0`→2回目`input_tokens=1313`のうち
+  `cached_tokens=1310`とほぼ全量がキャッシュされ、応答時間も10,876ms→2,140msへ短縮した
+  （実測: 入力2,626/出力193 tokens、$0.000760）。**キャッシュ入力単価（$0.02/1M）は既に
+  `gpt-5.6-luna.md`に記載済みなので、OpenAI側に「割引率が分からない」というブロッカーは無い。**
+  未実装なのは`pricing.json`へのキャッシュ単価欄追加と`PricingService.Calculate`での割引適用だけで、
+  現状は全入力トークンを通常単価で計算するため実際より高く表示される（安全な方向のずれ）。
+  **ただしこの確認はGemini側の未確認事項（最小トークン数・割引単価）には一切回答しない**——
+  別プロバイダ・別方式（OpenAIの暗黙キャッシュ）を確かめただけなので、上のGemini向け見送り判断は
+  変わらない。OpenAI側の料金計算対応はユーザーの希望があれば別途実装する（このセッションでは
+  `ModelPricing`/`SettingsFieldFormatting`の往復不変性テストへの波及を避けるため見送った）。
+- **自己テスト**: `FewShotSelectorValidation`（優先順位・重なり・件数上限・文字数上限・書式）、
+  `StyleGuideRepositoryValidation`（世代管理・手編集・有効化/無効化・削除・カーソル往復、一時SQLite）、
+  `ProofreadingPromptV3Validation`（未指定時は不変・送信順・タグ偽装の無害化・スタイルガイド入力）、
+  `ReactionRepositoryValidation`の拒否率推移テスト（20件ちょうどの完了区間・進行中区間の判定）を
+  `PromptValidation`へ追加した。`--self-test` は内訳を含めて**113行すべて PASS、FAIL 0、
+  exit code 0**（本体ビルドも警告0・エラー0）。
+**2026-07-31 に実機確認済み**: 設定画面「学習」セクション（ダークテーマ、世代操作ボタン4つが
+幅520pxで収まること）と、スタイルガイド自動生成の一連の流れ（しきい値到達→確認ダイアログ
+「リアクションがN件以上たまりました。OpenAI APIを1回呼び出して…生成しますか？」→生成→
+設定画面の世代コンボに反映、★付き・編集済みマーク・内容の表示）をユーザーが確認した。
+GPT-5.6 Luna（OpenAI）経由で実際に生成された例も確認できている。
+
+**設定画面のタブ分け（2026-07-31 実装・実機確認済み）**: 学習セクション追加で縦に長くなった
+設定画面を、`TabControl`で「全般（表示・ホットキー・保存・その他）/ エディタ / 校正 / 学習 /
+API・料金（モデル単価・APIキー）」の5タブへ分割した。WPFの既定`TabItem`テンプレート（Aero2）は
+選択状態を内部固定色のグラデーションで描くため、`ComboBox`/`CheckBox`と同じ理由でテンプレートごと
+差し替える必要があり、`Themes/Styles.xaml`に`AppTabControl`/`AppTabItem`を追加した
+（色は編集タブ用の`TabActiveBackgroundBrush`等を再利用し、新規ブラシは足していない）。
+新しいコントロール種類を設定画面に置くときは、この「既定テンプレートが色指定を無視する」確認を
+毎回すること（不変条件の一覧を参照）。
+
+**未確認のまま残っていること**: 4箇所ある`MaybeOfferStyleGuideGeneration`の呼び出し元
+（許可・拒否・理由つき拒否・理由つき別案生成）はすべて同じ判定ロジックを共有するが、
+実機で確認できたのは少なくとも1経路のみ。残りの経路も同じコードパスを通るため動作は
+変わらないはずだが、個別には未確認。
+
+**「学習効果」セクションは2026-07-31にユーザーが実機（ダークテーマ）で確認済み。**
+実データ19件（進行中の第1区間、1〜19件目）で「拒否 3/19件（16%）」・青色バー（拒否率20%未満＝
+`UsageProgressNormalBrush`）・「進行中」ラベルが設計どおりに表示された。
+
 ## 次の WIP と、その判断理由
 
-次の WIP は **v3（few-shot 選定・スタイルガイド生成）**。
+**v3（文体の学習）は完了した。** requirements.md の v1〜v3 チェック項目はすべて実装済みで、
+次の WIP は未着手。
 
-理由: v2 チェックリストの最後まで残っていた3つ、(a) `pricing.json` 設定画面編集、
-(b) CSV エクスポートと明細圧縮、(c) トレイアイコンの4状態表示は、いずれも 2026-07-31 に
-実装と実機確認まで完了した。**requirements.md §5 の v2 チェック項目はすべて `[x]` になっている。**
-残っている未確認事項は「複数モデルを切り替えたときのモデル単価コンボの生テキスト保持」1件だけで、
-v2 の受け入れをブロックしない。
+理由: v3の主要な学習ループ（リアクション蓄積→few-shot→スタイルガイド自動生成→プロンプトへの統合、
+カスタム指示欄、世代管理・無効化）に加え、残っていた学習効果の可視化（拒否率推移、件数区切り）も
+2026-07-31に実装・自己テストまで完了し、ユーザーの実機（ダークテーマ）でも確認済み。
+コンテキストキャッシュのうちGemini側は、必要な確認（明示的キャッシュ`cachedContents`の
+最小トークン数・キャッシュ済みトークンの割引単価）が実APIへの疎通なしには埋まらないため、
+**意図的に見送っている**（「未着手」ではなく検討済みの判断）。OpenAI側は2026-08-01に
+`--probe-openai-cache`で実API確認済み（暗黙キャッシュが実際に働くことを確認。詳細は上の
+「v3 学習機能の実装状況」節末尾を参照）だが、これはGemini側の未確認事項には回答しないため、
+Gemini側の見送り判断自体は変わっていない。
+
+次に着手するとしたら、requirements.md 全体で唯一残っているのが（1）Gemini側の明示的キャッシュの
+検証（実Gemini APIへの疎通が必要。ユーザーはまだ許可していない——2026-08-01に許可されたのは
+GPT-5.6 Luna側の検証のみ）と、（2）ユーザーの希望があればOpenAI側のキャッシュ割引を
+`pricing.json`/`PricingService.Calculate`へ反映する実装（単価は既知なので実APIなしで着手できる）
+の2点。
 
 注意点:
 
@@ -566,10 +721,11 @@ v2 の受け入れをブロックしない。
 - モデル単価（`pricing.json`）は設定画面から編集できるが、既に記録済みの `api_calls` の料金は
   再計算しない。過去ログは行ごとに固定された値であり、単価変更は今後の呼び出しにだけ効く。
 - `api_calls` / `reactions` / `style_guides` / `fx_rates` / `app_metadata` と DB v4 の `api_call_daily` は
-  作成済みで、現時点で書き込んでいるのは `api_calls`、`api_call_daily`、`reactions`、`fx_rates`、
-  `app_metadata` である。`style_guides` は v3 で使う。
+  作成済みで、v3実装により `style_guides` と `app_metadata`（しきい値カーソル）への書き込みも
+  始まった。DBスキーマ自体（`Database.Migrate`）はv3実装で変更していない（v4のまま）。
 - 自動校正を含む課金APIは、設定「課金API実行前の確認を表示する」がONなら実行前に確認ダイアログを出す。
-  OFFなら自動校正・手動校正・理由付き別案生成の確認を省略する。開発中に実APIを呼ぶ場合も、
+  OFFなら自動校正・手動校正・理由付き別案生成の確認を省略する。**スタイルガイド自動生成の確認は
+  この設定と独立で、ON/OFFに関わらず必ず表示する**（要件3.4.2）。開発中に実APIを呼ぶ場合も、
   下記ルールどおり事前確認と事後の料金報告が必要。
 - ユーザー所有の未追跡 `.claude/` は変更・コミット対象にしない。
 

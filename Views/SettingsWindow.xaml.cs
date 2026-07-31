@@ -20,6 +20,8 @@ public partial class SettingsWindow : Window
     private readonly SettingsService _service;
     private readonly CredentialService _credentials;
     private readonly PricingService _pricing;
+    private readonly StyleGuideRepository _styleGuides;
+    private readonly ReactionRepository _reactions;
     private bool _deleteStoredKey;
     private bool _deleteOpenAiStoredKey;
     private bool _loadingCredentialControls;
@@ -33,11 +35,23 @@ public partial class SettingsWindow : Window
     private string? _selectedPricingModel;
     private bool _loadingPricingControls;
 
-    internal SettingsWindow(SettingsService service, CredentialService credentials, PricingService pricing)
+    // スタイルガイドの世代管理。編集・有効化・削除はOKボタンを待たずその場でDBへ書く
+    // （AppSettingsのJSON保存とは独立した操作のため）。
+    private IReadOnlyList<StyleGuide> _styleGuideHistory = [];
+    private bool _loadingStyleGuideControls;
+
+    internal SettingsWindow(
+        SettingsService service,
+        CredentialService credentials,
+        PricingService pricing,
+        StyleGuideRepository styleGuides,
+        ReactionRepository reactions)
     {
         _service = service;
         _credentials = credentials;
         _pricing = pricing;
+        _styleGuides = styleGuides;
+        _reactions = reactions;
         InitializeComponent();
         LoadFrom(service.Current);
     }
@@ -110,6 +124,13 @@ public partial class SettingsWindow : Window
         _loadingOpenAiCredentialControls = false;
         RefreshOpenAiCredentialStatus();
 
+        CustomInstructionBox.Text = s.CustomInstruction;
+        StyleGuideAutoGenerateCheck.IsChecked = s.StyleGuideAutoGenerateEnabled;
+        StyleGuideThresholdBox.Text =
+            s.StyleGuideGenerationThreshold.ToString(CultureInfo.InvariantCulture);
+        LoadStyleGuideControls();
+        LoadRejectionTrendControls();
+
         LoadPricingControls();
         ProofreadingModelCombo.ItemsSource = ProofreadingModelCatalog.SupportedModels
             .Select(ProofreadingModelCatalog.DisplayName)
@@ -180,6 +201,11 @@ public partial class SettingsWindow : Window
         s.OpenAiApiKeySource = OpenAiCredentialSourceCombo.SelectedIndex == 1
             ? GeminiApiKeySource.EnvironmentVariable
             : GeminiApiKeySource.Stored;
+
+        s.CustomInstruction = CustomInstructionBox.Text.Trim();
+        s.StyleGuideAutoGenerateEnabled = StyleGuideAutoGenerateCheck.IsChecked == true;
+        s.StyleGuideGenerationThreshold = (int)ParseNumber(
+            StyleGuideThresholdBox.Text, s.StyleGuideGenerationThreshold);
 
         s.AutoSaveDebounceMs = (int)ParseNumber(AutoSaveBox.Text, s.AutoSaveDebounceMs);
         s.TrashRetentionDays = (int)ParseNumber(TrashDaysBox.Text, s.TrashRetentionDays);
@@ -335,6 +361,234 @@ public partial class SettingsWindow : Window
 
         OpenAiCredentialStatusText.Text = $"{stored}\n{environment}{pending}";
     }
+
+    /// <summary>
+    /// スタイルガイドの世代コンボを初期化する。有効な世代（あれば）を選択状態にする。
+    /// </summary>
+    private void LoadStyleGuideControls()
+    {
+        _loadingStyleGuideControls = true;
+
+        _styleGuideHistory = _styleGuides.ListAll();
+        StyleGuideHistoryCombo.ItemsSource = _styleGuideHistory
+            .Select(FormatStyleGuideLabel)
+            .ToArray();
+
+        int activeIndex = IndexOf(_styleGuideHistory, guide => guide.IsActive);
+        StyleGuideHistoryCombo.SelectedIndex = _styleGuideHistory.Count == 0
+            ? -1
+            : activeIndex >= 0 ? activeIndex : 0;
+
+        _loadingStyleGuideControls = false;
+        ShowSelectedStyleGuide();
+    }
+
+    private static int IndexOf(IReadOnlyList<StyleGuide> guides, Func<StyleGuide, bool> predicate)
+    {
+        for (int i = 0; i < guides.Count; i++)
+        {
+            if (predicate(guides[i])) return i;
+        }
+        return -1;
+    }
+
+    private static string FormatStyleGuideLabel(StyleGuide guide)
+    {
+        string active = guide.IsActive ? "★ " : "";
+        string edited = guide.IsUserEdited ? "・編集済み" : "";
+        return $"{active}{guide.GeneratedAt.LocalDateTime:yyyy-MM-dd HH:mm}（{guide.SourceReactions}件から{edited}）";
+    }
+
+    private StyleGuide? SelectedStyleGuide()
+    {
+        int index = StyleGuideHistoryCombo.SelectedIndex;
+        return index >= 0 && index < _styleGuideHistory.Count ? _styleGuideHistory[index] : null;
+    }
+
+    private void ShowSelectedStyleGuide()
+    {
+        StyleGuide? selected = SelectedStyleGuide();
+        if (selected is null)
+        {
+            StyleGuideContentBox.Text = "";
+            StyleGuideStatusText.Text = "スタイルガイドはまだ生成されていません。";
+            return;
+        }
+
+        StyleGuideContentBox.Text = selected.Content;
+        string active = selected.IsActive ? "有効（校正に使用中）" : "無効（履歴のみ）";
+        string edited = selected.IsUserEdited ? "・手編集あり" : "";
+        StyleGuideStatusText.Text =
+            $"{selected.GeneratedAt.LocalDateTime:yyyy-MM-dd HH:mm} 生成・" +
+            $"{selected.SourceReactions}件から・{active}{edited}";
+    }
+
+    private void StyleGuideHistoryCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_loadingStyleGuideControls) ShowSelectedStyleGuide();
+    }
+
+    private void StyleGuideSaveButton_Click(object sender, RoutedEventArgs e)
+    {
+        StyleGuide? selected = SelectedStyleGuide();
+        if (selected is null)
+        {
+            MessageBox.Show(this, "編集できるスタイルガイドがありません。「今すぐ生成」はメインウィンドウのリアクション蓄積から提案されます。",
+                "JP Scratch", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(StyleGuideContentBox.Text))
+        {
+            MessageBox.Show(this, "空の内容は保存できません。削除する場合は「この世代を削除」を使ってください。",
+                "JP Scratch", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _styleGuides.UpdateContent(selected.Id, StyleGuideContentBox.Text);
+        LoadStyleGuideControls();
+    }
+
+    private void StyleGuideActivateButton_Click(object sender, RoutedEventArgs e)
+    {
+        StyleGuide? selected = SelectedStyleGuide();
+        if (selected is null) return;
+
+        _styleGuides.SetActive(selected.Id);
+        LoadStyleGuideControls();
+    }
+
+    private void StyleGuideDeactivateButton_Click(object sender, RoutedEventArgs e)
+    {
+        _styleGuides.Deactivate();
+        LoadStyleGuideControls();
+    }
+
+    private void StyleGuideDeleteButton_Click(object sender, RoutedEventArgs e)
+    {
+        StyleGuide? selected = SelectedStyleGuide();
+        if (selected is null) return;
+
+        MessageBoxResult confirm = MessageBox.Show(
+            this,
+            $"{selected.GeneratedAt.LocalDateTime:yyyy-MM-dd HH:mm} の世代を削除します。元に戻せません。",
+            "JP Scratch",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        _styleGuides.Delete(selected.Id);
+        LoadStyleGuideControls();
+    }
+
+    /// <summary>
+    /// 学習効果の可視化（要件3.4「完了の判断基準」＝拒否率の低下）。
+    /// <see cref="ReactionRepository.GetRejectionRateTrend"/>の区間を新しい順に並べ、
+    /// 各区間の分母（<c>Total</c>）はどれも完全なので、表示件数を絞っても拒否率の計算自体は狂わない
+    /// （切り詰めているのは表示だけだと分かるよう、超過分があれば件数を明示する。CSVエクスポートで
+    /// 学んだ「上限を掛けたら何が落ちたか必ず示す」規約）。
+    /// </summary>
+    private const int MaxDisplayedRejectionBuckets = 24;
+
+    private void LoadRejectionTrendControls()
+    {
+        RejectionTrendPanel.Children.Clear();
+
+        IReadOnlyList<RejectionRateBucket> buckets;
+        try
+        {
+            buckets = _reactions.GetRejectionRateTrend();
+        }
+        catch (Exception)
+        {
+            RejectionTrendPanel.Children.Add(NewTrendInfoText("拒否率の推移を読み込めませんでした。"));
+            return;
+        }
+
+        if (buckets.Count == 0)
+        {
+            RejectionTrendPanel.Children.Add(NewTrendInfoText("リアクションがまだありません。"));
+            return;
+        }
+
+        List<RejectionRateBucket> newestFirst = buckets.Reverse().ToList();
+        if (newestFirst.Count > MaxDisplayedRejectionBuckets)
+        {
+            RejectionTrendPanel.Children.Add(NewTrendInfoText(
+                $"全{newestFirst.Count}区間中、直近{MaxDisplayedRejectionBuckets}区間を表示します。"));
+            newestFirst = newestFirst.Take(MaxDisplayedRejectionBuckets).ToList();
+        }
+
+        foreach (RejectionRateBucket bucket in newestFirst)
+        {
+            RejectionTrendPanel.Children.Add(BuildRejectionTrendRow(bucket));
+        }
+    }
+
+    private static TextBlock NewTrendInfoText(string text)
+    {
+        var block = new TextBlock
+        {
+            Text = text,
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        block.SetResourceReference(TextBlock.ForegroundProperty, "SubtleTextBrush");
+        return block;
+    }
+
+    private FrameworkElement BuildRejectionTrendRow(RejectionRateBucket bucket)
+    {
+        var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var label = new TextBlock
+        {
+            Text = bucket.IsComplete ? bucket.Label : $"{bucket.Label}（進行中）",
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        label.SetResourceReference(TextBlock.ForegroundProperty, "SubtleTextBrush");
+        Grid.SetColumn(label, 0);
+
+        var bar = new ProgressBar
+        {
+            Style = (Style)FindResource("UsageProgressBar"),
+            Minimum = 0,
+            Maximum = 100,
+            Value = bucket.RejectionRate * 100,
+            Height = 14,
+            Margin = new Thickness(8, 0, 8, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        bar.SetResourceReference(Control.ForegroundProperty, RejectionRateBrushKey(bucket.RejectionRate));
+        Grid.SetColumn(bar, 1);
+
+        var summary = new TextBlock
+        {
+            Text = $"拒否 {bucket.Rejected}/{bucket.Total}件（{bucket.RejectionRate * 100:0}%）",
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        summary.SetResourceReference(TextBlock.ForegroundProperty, "SubtleTextBrush");
+        Grid.SetColumn(summary, 2);
+
+        grid.Children.Add(label);
+        grid.Children.Add(bar);
+        grid.Children.Add(summary);
+        return grid;
+    }
+
+    private static string RejectionRateBrushKey(double rate) => rate switch
+    {
+        >= 0.4 => "UsageProgressReachedBrush",
+        >= 0.2 => "UsageProgressWarningBrush",
+        _ => "UsageProgressNormalBrush",
+    };
 
     /// <summary>
     /// モデル単価コンボを初期化する。既定モデル（<see cref="PricingService.DefaultModel"/>）を先頭、

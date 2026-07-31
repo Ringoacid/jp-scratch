@@ -22,6 +22,10 @@ internal static class Program
             // ここで先に分岐する（既存フローの解析ロジックには一切触れない）。
             if (args.Length > 0 && args[0] == "--seed-billing")
                 return BillingSeedCommand.Run(args.Skip(1).ToArray());
+            // --probe-openai-cache も同様に別系統。--self-test には絶対に混ぜない
+            // （実APIを呼ぶ診断のため、self-testが無課金・無キーで動く前提を壊す）。
+            if (args.Length > 0 && args[0] == "--probe-openai-cache")
+                return await OpenAiCacheProbeCommand.RunAsync();
 
             Options options = Options.Parse(args);
             if (options.ShowHelp)
@@ -253,6 +257,9 @@ internal static class Program
         bool billingCsvPass = BillingCsvExporterValidation.RunSelfTests();
         bool apiLogCompactionPass = ApiLogCompactionValidation.RunSelfTests();
         bool trayIconStatePass = TrayIconStateValidation.RunSelfTests();
+        bool fewShotPass = FewShotSelectorValidation.RunSelfTests();
+        bool styleGuidePass = StyleGuideRepositoryValidation.RunSelfTests();
+        bool promptV3Pass = ProofreadingPromptV3Validation.RunSelfTests();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
                credentialPass && pricingPass && apiCallPass && apiCallHistoryPass &&
                apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
@@ -260,7 +267,8 @@ internal static class Program
                migrationPass && fxRatePass && reactionPass && schedulePass &&
                geminiClientPass && openAiClientPass && appPathsPass && singleInstancePass &&
                billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&
-               apiLogCompactionPass && trayIconStatePass ? 0 : 1;
+               apiLogCompactionPass && trayIconStatePass &&
+               fewShotPass && styleGuidePass && promptV3Pass ? 0 : 1;
     }
 
     private static void PrintHelp()
@@ -297,9 +305,15 @@ internal static class Program
                                  目視確認用データを投入する（APIは呼ばない）。
                                  --bulk は2000件を超える大量データ（Truncated確認用）。
                                  --force は既存app.dbの上書きを明示的に許可する。
+              --probe-openai-cache
+                                 v3相当の長いシステム指示を同一内容で2回連続送信し、OpenAIの
+                                 自動プロンプトキャッシュ（cached_tokens）が働くかを実APIで確認する
+                                 診断コマンド。課金が発生する。api_calls へは書き込まない。
+                                 APIキーは環境変数 OPENAI_API_KEY から読む。
               --help             このヘルプを表示
 
-            APIキーは環境変数 GEMINI_API_KEY からのみ読み取ります。
+            APIキーは環境変数 GEMINI_API_KEY からのみ読み取ります
+            （--probe-openai-cache だけは OPENAI_API_KEY を使います）。
             """);
     }
 

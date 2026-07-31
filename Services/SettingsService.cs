@@ -133,6 +133,10 @@ internal sealed class SettingsService
         // cutoff 計算の AddMonths が DateTime の範囲外へ出ないための歯止めでもある。
         if (s.ApiLogRetentionMonths < 0) s.ApiLogRetentionMonths = 0;
         if (s.ApiLogRetentionMonths > 1200) s.ApiLogRetentionMonths = 1200;
+
+        s.CustomInstruction ??= "";
+        // 0件では判定が常に真になり毎回生成を提案してしまうため、下限を1に固定する。
+        s.StyleGuideGenerationThreshold = Math.Clamp(s.StyleGuideGenerationThreshold, 1, 10_000);
     }
 
     private static void QuarantineBrokenFile()

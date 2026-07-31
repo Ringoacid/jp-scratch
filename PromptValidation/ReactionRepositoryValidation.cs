@@ -63,7 +63,8 @@ internal static class ReactionRepositoryValidation
             Console.WriteLine(
                 $"リアクションDB（移行・保存・理由候補）: " +
                 $"{(passed ? "PASS" : "FAIL")}");
-            return passed;
+            bool trendPassed = RunRejectionRateTrendSelfTests(repository, proposal);
+            return passed && trendPassed;
         }
         finally
         {
@@ -74,5 +75,45 @@ internal static class ReactionRepositoryValidation
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
+    }
+
+    /// <summary>
+    /// 学習効果の可視化（要件3.4「完了の判断基準」）向け<see cref="ReactionRepository.GetRejectionRateTrend"/>
+    /// の自己テスト。暦月ではなく件数（既定20件）で区切ること、末尾の未完区間に
+    /// <c>IsComplete=false</c>が立つことを確認する。既存の4件（拒否3・許可1）に加えて、
+    /// 1〜16件目区間を「許可12・拒否4」で埋めて合計20件ちょうどの完了区間を作り、
+    /// 続けて5件（許可4・拒否1）を積んで進行中の第2区間を作る。
+    /// </summary>
+    private static bool RunRejectionRateTrendSelfTests(ReactionRepository repository, ProofreadingProposal proposal)
+    {
+        // 既存4件（Reject×3, Accept×1）に16件（Accept×12, Reject×4）を足して、
+        // ちょうど20件・拒否7件の完了区間を作る。
+        for (int i = 0; i < 12; i++)
+        {
+            repository.Add("tab-test", proposal, ProofreadingReaction.Accept);
+        }
+        for (int i = 0; i < 4; i++)
+        {
+            repository.Add("tab-test", proposal, ProofreadingReaction.Reject);
+        }
+        // 進行中の第2区間: 5件（許可4・拒否1）。
+        for (int i = 0; i < 4; i++)
+        {
+            repository.Add("tab-test", proposal, ProofreadingReaction.Accept);
+        }
+        repository.Add("tab-test", proposal, ProofreadingReaction.RejectWithReason, "理由");
+
+        IReadOnlyList<RejectionRateBucket> buckets = repository.GetRejectionRateTrend();
+
+        bool passed =
+            buckets.Count == 2 &&
+            buckets[0] is { StartIndex: 1, EndIndex: 20, Total: 20, Rejected: 7, IsComplete: true } &&
+            buckets[0].Label == "1〜20件目" &&
+            buckets[1] is { StartIndex: 21, EndIndex: 25, Total: 5, Rejected: 1, IsComplete: false };
+
+        Console.WriteLine(
+            $"リアクションDB（拒否率推移の区間分け・件数区切り・進行中フラグ）: " +
+            $"{(passed ? "PASS" : "FAIL")}");
+        return passed;
     }
 }

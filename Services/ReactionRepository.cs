@@ -9,6 +9,18 @@ internal enum ProofreadingReaction
     RejectWithReason,
 }
 
+/// <summary>
+/// 学習効果の可視化（<see cref="ReactionRepository.GetRejectionRateTrend"/>）における1区間。
+/// <paramref name="IsComplete"/>がfalseなのは末尾（＝現在進行中）の区間だけで、まだ
+/// <c>StartIndex</c>〜<c>EndIndex</c>の全件が揃っていないことを示す。
+/// </summary>
+internal readonly record struct RejectionRateBucket(
+    int StartIndex, int EndIndex, int Total, int Rejected, bool IsComplete)
+{
+    internal double RejectionRate => Total == 0 ? 0 : (double)Rejected / Total;
+    internal string Label => $"{StartIndex}〜{EndIndex}件目";
+}
+
 /// <summary>本文とは独立して校正へのリアクションを永続化する。</summary>
 internal sealed class ReactionRepository
 {
@@ -59,6 +71,100 @@ internal sealed class ReactionRepository
             ("$user_reason", normalizedReason));
     }
 
+    /// <summary>蓄積された全リアクション件数（スタイルガイド生成のしきい値判定に使う）。</summary>
+    internal long GetTotalCount()
+        => _database.Read(
+            "SELECT COUNT(*) FROM reactions;",
+            reader => reader.Read() ? reader.GetInt64(0) : 0L);
+
+    /// <summary>
+    /// few-shot選定（要件3.4.1）の候補プール。直近<paramref name="limit"/>件から
+    /// <see cref="Proofreading.FewShotSelector"/>が優先度・語句の重なり・新しさで絞り込む。
+    /// </summary>
+    internal IReadOnlyList<Proofreading.FewShotCandidate> GetFewShotCandidates(int limit = 200)
+    {
+        int safeLimit = Math.Clamp(limit, 1, 1000);
+        return _database.Read(
+            """
+            SELECT original, suggestion, reaction, user_reason, reacted_at
+            FROM reactions
+            ORDER BY reacted_at DESC, id DESC
+            LIMIT $limit;
+            """,
+            reader =>
+            {
+                List<Proofreading.FewShotCandidate> candidates = [];
+                while (reader.Read())
+                {
+                    if (!TryFromStorageValue(reader.GetString(2), out ProofreadingReaction reaction) ||
+                        !DateTimeOffset.TryParse(
+                            reader.GetString(4),
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            System.Globalization.DateTimeStyles.RoundtripKind,
+                            out DateTimeOffset reactedAt))
+                    {
+                        continue;
+                    }
+
+                    candidates.Add(new Proofreading.FewShotCandidate(
+                        reader.GetString(0),
+                        reader.GetString(1),
+                        reaction,
+                        reader.IsDBNull(3) ? null : reader.GetString(3),
+                        reactedAt));
+                }
+
+                return (IReadOnlyList<Proofreading.FewShotCandidate>)candidates;
+            },
+            ("$limit", safeLimit));
+    }
+
+    /// <summary>
+    /// 学習効果の可視化（要件3.4「完了の判断基準」＝拒否率の低下）向けの集計。
+    /// 暦月ではなく「蓄積順に<paramref name="blockSize"/>件ずつ」で区切る。実データで確認したところ
+    /// v2/v3実装が同日中に進んだため、全リアクションが暦1か月に収まっており、暦月区切りだと
+    /// 棒が1本しか出ない「使い始めた頃と比べ」を比較しようがないグラフになる（要件3.4末尾の
+    /// 完了基準を参照）。件数区切りなら初日から意味のある比較ができ、履歴が伸びても崩れない。
+    /// <c>reactions</c>は明細圧縮の対象外（世代情報そのものが学習データのため）で、1ユーザーの
+    /// 手作業の履歴という上限がある前提で、CSVエクスポートと同じ理由で読み取りに上限を掛けない
+    /// （上限を掛けると境界のバケットが常に一部欠けた分母で拒否率を計算してしまう）。
+    /// </summary>
+    internal IReadOnlyList<RejectionRateBucket> GetRejectionRateTrend(int blockSize = 20)
+    {
+        int safeBlockSize = Math.Clamp(blockSize, 1, 1000);
+
+        List<ProofreadingReaction> reactions = _database.Read(
+            """
+            SELECT reaction
+            FROM reactions
+            ORDER BY reacted_at ASC, id ASC;
+            """,
+            reader =>
+            {
+                List<ProofreadingReaction> list = [];
+                while (reader.Read())
+                {
+                    if (TryFromStorageValue(reader.GetString(0), out ProofreadingReaction reaction))
+                        list.Add(reaction);
+                }
+                return list;
+            });
+
+        List<RejectionRateBucket> buckets = [];
+        for (int start = 0; start < reactions.Count; start += safeBlockSize)
+        {
+            int count = Math.Min(safeBlockSize, reactions.Count - start);
+            int rejected = 0;
+            for (int i = start; i < start + count; i++)
+            {
+                if (reactions[i] != ProofreadingReaction.Accept) rejected++;
+            }
+            buckets.Add(new RejectionRateBucket(start + 1, start + count, count, rejected, count == safeBlockSize));
+        }
+
+        return buckets;
+    }
+
     internal IReadOnlyList<string> GetRecentReasons(int limit = 8)
     {
         int safeLimit = Math.Clamp(limit, 1, 30);
@@ -89,4 +195,16 @@ internal sealed class ReactionRepository
             ProofreadingReaction.RejectWithReason => "reject_with_reason",
             _ => throw new ArgumentOutOfRangeException(nameof(reaction)),
         };
+
+    private static bool TryFromStorageValue(string value, out ProofreadingReaction reaction)
+    {
+        reaction = value switch
+        {
+            "accept" => ProofreadingReaction.Accept,
+            "reject" => ProofreadingReaction.Reject,
+            "reject_with_reason" => ProofreadingReaction.RejectWithReason,
+            _ => default,
+        };
+        return value is "accept" or "reject" or "reject_with_reason";
+    }
 }

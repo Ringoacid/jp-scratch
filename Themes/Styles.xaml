@@ -283,6 +283,77 @@
         </Setter>
     </Style>
 
+    <!--
+        設定画面のタブ分け（v3）。既定テンプレート（Aero2）は TabItem の選択状態を内部固定色の
+        グラデーションで描くため、ComboBox / CheckBox と同じくテンプレートごと差し替える。
+        タブ本体の配色は編集タブ（TabActiveBackgroundBrush 等）と共有し、新しいブラシは足さない。
+    -->
+    <Style x:Key="AppTabItem" TargetType="TabItem">
+        <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}" />
+        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="Bd"
+                            Background="{DynamicResource TabInactiveBackgroundBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
+                            BorderThickness="1,1,1,0"
+                            CornerRadius="4,4,0,0"
+                            Margin="0,0,2,0"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter ContentSource="Header"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TabHoverBackgroundBrush}" />
+                        </Trigger>
+                        <!-- 選択状態の見た目はホバーより後に書く。AppCheckBoxと同じ理由で、
+                             逆にすると選択中のタブにカーソルを乗せた瞬間に選択の見た目が消える。 -->
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TabActiveBackgroundBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="AppTabControl" TargetType="TabControl">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="ItemContainerStyle" Value="{StaticResource AppTabItem}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabControl">
+                    <Grid KeyboardNavigation.TabNavigation="Local">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TabPanel x:Name="HeaderPanel"
+                                  Grid.Row="0"
+                                  Panel.ZIndex="1"
+                                  IsItemsHost="True"
+                                  Background="Transparent" />
+                        <Border Grid.Row="1"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter x:Name="PART_SelectedContentHost"
+                                              Margin="{TemplateBinding Padding}"
+                                              ContentSource="SelectedContent" />
+                        </Border>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="SectionHeader" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         <Setter Property="FontWeight" Value="SemiBold" />

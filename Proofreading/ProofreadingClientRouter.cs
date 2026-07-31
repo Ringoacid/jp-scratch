@@ -44,6 +44,11 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
         CancellationToken cancellationToken = default)
         => Active.GenerateAlternativeAsync(proposal, reason, cancellationToken);
 
+    public Task<GeminiStyleGuideResult> GenerateStyleGuideAsync(
+        IReadOnlyList<FewShotExample> reactionHistory,
+        CancellationToken cancellationToken = default)
+        => Active.GenerateStyleGuideAsync(reactionHistory, cancellationToken);
+
     public void Dispose()
     {
         _gemini.Dispose();

@@ -31,6 +31,7 @@ public partial class MainWindow : Window
     private readonly ApiCallRepository _apiCalls;
     private readonly FxRateService _fxRates;
     private readonly ReactionRepository _reactions;
+    private readonly StyleGuideRepository _styleGuides;
     private readonly IProofreadingClient _proofreadingClient;
     private readonly TrayIconService _tray;
     private readonly DateTimeOffset _sessionStartedAt;
@@ -97,6 +98,12 @@ public partial class MainWindow : Window
     private bool _proofreadingRunInProgress;
 
     /// <summary>
+    /// スタイルガイド自動生成（要件3.4.2）が課金APIの応答待ちか。校正・別案生成と同じく
+    /// トレイの「校正中」表示・_apiErrorStickyを共有するので、互いに排他させる。
+    /// </summary>
+    private bool _styleGuideGenerationInProgress;
+
+    /// <summary>
     /// 直近の Gemini 呼び出しが失敗したまま復帰していないか（トレイアイコン用、要件 3.1.1）。
     /// 次に 1 回でも成功したら解除する。キー未設定・確認ダイアログのキャンセル・本文変更による
     /// 破棄はここに含めない。APIの異常ではなく、こちらの都合で呼ばなかった・捨てただけなので、
@@ -111,6 +118,7 @@ public partial class MainWindow : Window
                          ApiCallRepository apiCalls,
                          FxRateService fxRates,
                          ReactionRepository reactions,
+                         StyleGuideRepository styleGuides,
                         IProofreadingClient proofreadingClient,
                         TrayIconService tray)
     {
@@ -124,6 +132,7 @@ public partial class MainWindow : Window
         _apiCalls = apiCalls;
         _fxRates = fxRates;
         _reactions = reactions;
+        _styleGuides = styleGuides;
         _proofreadingClient = proofreadingClient;
         _tray = tray;
         _sessionStartedAt = DateTimeOffset.Now;
@@ -805,6 +814,7 @@ public partial class MainWindow : Window
         _activeProofreading?.Reject(proposal);
         SetTransientStatus("理由を記録して拒否しました");
         Editor.TextArea.Focus();
+        MaybeOfferStyleGuideGeneration();
     }
 
     private async void AlternativeWithReasonMenuItem_Click(
@@ -813,6 +823,7 @@ public partial class MainWindow : Window
     {
         if (_alternativeInProgress ||
             _proofreadingRunInProgress ||
+            _styleGuideGenerationInProgress ||
             _selectedProposal is not { IsActive: true } proposal ||
             !TryGetReason(generatesAlternative: true, out string reason))
         {
@@ -944,6 +955,9 @@ public partial class MainWindow : Window
             ReleaseAutoHide();
             Activate();
             Editor.TextArea.Focus();
+            // _reactions.Add はこのメソッドの本体（_alternativeInProgress中）で呼ばれているため、
+            // しきい値判定はここまで遅延させる（要件3.4.2、_alternativeInProgress解除後に判定する設計）。
+            MaybeOfferStyleGuideGeneration();
         }
     }
 
@@ -962,6 +976,7 @@ public partial class MainWindow : Window
         if (_activeProofreading?.TryApply(proposal) == true)
             SetTransientStatus("修正を許可しました");
         Editor.TextArea.Focus();
+        MaybeOfferStyleGuideGeneration();
     }
 
     private void RejectSelectedProposal()
@@ -979,6 +994,7 @@ public partial class MainWindow : Window
         _activeProofreading?.Reject(proposal);
         SetTransientStatus("修正を拒否しました");
         Editor.TextArea.Focus();
+        MaybeOfferStyleGuideGeneration();
     }
 
     private bool CanReactTo(ProofreadingProposal proposal)
@@ -1085,6 +1101,198 @@ public partial class MainWindow : Window
         => _ = RunProofreadingAsync(manual: true);
 
     /// <summary>
+    /// 要件3.4.2: リアクションが一定件数たまるごとにスタイルガイド生成を提案する。
+    /// リアクション記録の直後（3箇所）と、別案生成完了後（_alternativeInProgress解除後）から呼ぶ。
+    /// 校正・別案生成・スタイルガイド生成のいずれかが進行中は判定自体をスキップし、
+    /// 次にこのメソッドが呼ばれるタイミングへ先送りする（しきい値は減らないので取りこぼさない）。
+    /// </summary>
+    private void MaybeOfferStyleGuideGeneration()
+    {
+        if (_proofreadingRunInProgress ||
+            _alternativeInProgress ||
+            _styleGuideGenerationInProgress ||
+            !_settings.Current.StyleGuideAutoGenerateEnabled)
+        {
+            return;
+        }
+
+        long total;
+        long cursor;
+        try
+        {
+            total = _reactions.GetTotalCount();
+            cursor = _styleGuides.GetReviewCursor();
+        }
+        catch (Exception)
+        {
+            // 補助機能の読み取り失敗でリアクション記録そのものは壊さない。
+            return;
+        }
+
+        if (total - cursor < _settings.Current.StyleGuideGenerationThreshold)
+            return;
+
+        _ = RunStyleGuideGenerationAsync(total);
+    }
+
+    /// <summary>
+    /// スタイルガイドの自動生成。要件3.4.2により、「課金API実行前の確認を表示する」設定に関わらず
+    /// 必ず確認ダイアログを出す（ConfirmPaidApiCallsとは独立）。月間上限に達している間は生成せず、
+    /// 承諾・辞退・上限到達のいずれでもカーソルを進め、次のしきい値まで再確認しない。
+    /// </summary>
+    private async Task RunStyleGuideGenerationAsync(long totalReactionsAtCheck)
+    {
+        if (IsMonthlyLimitReached())
+        {
+            TryAdvanceReviewCursor(totalReactionsAtCheck);
+            return;
+        }
+
+        SuppressAutoHide();
+        bool confirmed;
+        try
+        {
+            MessageBoxResult confirmation = MessageBox.Show(
+                this,
+                $"リアクションが{_settings.Current.StyleGuideGenerationThreshold}件以上たまりました。" +
+                $"{ActiveProviderName()} APIを1回呼び出して、あなたの文体ルール（スタイルガイド）を生成しますか？\n\n" +
+                BuildPricingSummary() + "\n" +
+                "実行後に使用トークン数と料金を表示します。生成後は設定画面でいつでも閲覧・編集・削除できます。",
+                "スタイルガイドの自動生成",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No);
+            confirmed = confirmation == MessageBoxResult.Yes;
+        }
+        finally
+        {
+            ReleaseAutoHide();
+        }
+
+        // 承諾・辞退のどちらでも今回分の蓄積は消費済み扱いにする。辞退のたびに毎回確認を
+        // 出さないための措置（次にまた閾値ぶん積み上がるまで再確認しない）。
+        TryAdvanceReviewCursor(totalReactionsAtCheck);
+        if (!confirmed)
+            return;
+
+        string? apiKey = GetActiveApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            MessageBox.Show(
+                this,
+                $"{ActiveProviderName()} APIキーが設定されていません。設定画面で登録してください。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        IReadOnlyList<FewShotCandidate> candidates =
+            _reactions.GetFewShotCandidates(StyleGuideSourceSelector.MaxReactions);
+        StyleGuideSourceSelection source = StyleGuideSourceSelector.Select(candidates);
+        if (source.Examples.Count == 0)
+        {
+            SetProofreadingStatus("スタイルガイド生成に使えるリアクションがありません", force: true);
+            return;
+        }
+
+        _styleGuideGenerationInProgress = true;
+        UpdateTrayIconState();
+        try
+        {
+            SetProofreadingStatus("スタイルガイドを生成しています…");
+            var stopwatch = Stopwatch.StartNew();
+            GeminiStyleGuideResult result;
+            try
+            {
+                result = await _proofreadingClient.GenerateStyleGuideAsync(source.Examples);
+            }
+            catch (GeminiClientException ex)
+            {
+                stopwatch.Stop();
+                _apiErrorSticky = true;
+                RecordFailedApiCall(ApiCallTrigger.StyleGuide, ex, stopwatch.Elapsed);
+                MessageBox.Show(
+                    this,
+                    "スタイルガイドを生成できませんでした。\n\n" + ex.Message,
+                    "JP Scratch",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                SetProofreadingStatus("スタイルガイド生成に失敗しました", force: true);
+                return;
+            }
+
+            _apiErrorSticky = false;
+            RecordedApiCall recorded = RecordSuccessfulApiCall(
+                ApiCallTrigger.StyleGuide,
+                result.Usage,
+                result.Elapsed,
+                suggestionCount: 1,
+                discardedCount: 0);
+
+            // 課金済みの生成結果をここで失うのが最悪なので、保存の成否を必ずユーザーへ伝える。
+            // RecordApiCallと違い黙って握りつぶさない（課金ログはロギングの補助情報だが、
+            // こちらは今回の支払いに対する唯一の成果物のため）。
+            bool saved;
+            try
+            {
+                _styleGuides.Generate(result.Content, source.Examples.Count);
+                saved = true;
+            }
+            catch (Exception)
+            {
+                saved = false;
+            }
+
+            if (saved)
+            {
+                MessageBox.Show(
+                    this,
+                    "スタイルガイドを生成しました。設定画面で内容を確認・編集できます。\n\n" +
+                    $"入力 {result.Usage.PromptTokens:N0}、出力・推論 {result.Usage.BillableOutputTokens:N0} tokens\n" +
+                    $"料金 {FormatCostWithJpy(recorded.Cost)}",
+                    "スタイルガイドの生成",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                SetProofreadingStatus("スタイルガイドを生成しました " + FormatCostWithJpy(recorded.Cost), force: true);
+            }
+            else
+            {
+                MessageBox.Show(
+                    this,
+                    "スタイルガイドは生成されましたが、保存に失敗しました。" +
+                    "料金は発生済みです。内容を手元に控えてください。\n\n" +
+                    result.Content,
+                    "スタイルガイドを保存できませんでした",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                SetProofreadingStatus(
+                    "スタイルガイドの保存に失敗しました " + FormatCostWithJpy(recorded.Cost), force: true);
+            }
+        }
+        finally
+        {
+            _styleGuideGenerationInProgress = false;
+            UpdateTrayIconState();
+        }
+    }
+
+    /// <summary>
+    /// カーソル更新は補助的な既読管理であり、失敗しても確認フロー自体は止めない
+    /// （最悪の場合、次回も同じ件数ぶんで再確認が出るだけで、データを失うわけではない）。
+    /// </summary>
+    private void TryAdvanceReviewCursor(long totalReactionsAtCheck)
+    {
+        try
+        {
+            _styleGuides.AdvanceReviewCursor(totalReactionsAtCheck);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    /// <summary>
     /// トレイアイコンの状態を今の条件から計算し直す（要件 3.1.1）。
     /// 条件が変わりうる箇所（校正の開始・終了、API の成否、当月累計・上限額の更新）から呼ぶ。
     /// 状態が変わらなければ <see cref="TrayIconService.SetState"/> 側で握り潰されるので、
@@ -1093,7 +1301,8 @@ public partial class MainWindow : Window
     /// </summary>
     private void UpdateTrayIconState()
         => _tray.SetState(TrayIconStateResolver.Resolve(
-            proofreading: _proofreadingRunInProgress || _alternativeInProgress,
+            proofreading: _proofreadingRunInProgress || _alternativeInProgress ||
+                          _styleGuideGenerationInProgress,
             apiError: _apiErrorSticky,
             limitReached: IsMonthlyLimitReached()));
 
@@ -1101,6 +1310,7 @@ public partial class MainWindow : Window
     {
         if (_proofreadingRunInProgress ||
             _alternativeInProgress ||
+            _styleGuideGenerationInProgress ||
             _tabs.Active is not { } tab)
         {
             return;
@@ -1171,6 +1381,33 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 要件3.4.4: スタイルガイド・カスタム指示は文書全体で共通なので実行中1回だけ読む。
+        // few-shotだけは校正対象ごとに語句の重なりが変わるため、候補プールをここで一度読み、
+        // リクエストごとの選定（CPUのみ）はループ内で行う。
+        // ここは補助機能（学習素材）の読み取りであり、失敗しても校正そのものは殺さない
+        // （MaybeOfferStyleGuideGenerationと同じ方針）。_proofreadingRunInProgress = true と
+        // それに対応するfinallyの間に置くと、ここで例外が出た場合にfinallyへ到達できず、
+        // 入口ガードにより自動校正が永久に弾かれ続ける（再起動以外に復帰手段がなくなる）ため、
+        // フラグを立てる前に済ませる。
+        string? styleGuideContent;
+        string? customInstruction;
+        IReadOnlyList<FewShotCandidate> fewShotCandidates;
+        try
+        {
+            styleGuideContent = _styleGuides.GetActive()?.Content;
+            customInstruction = string.IsNullOrWhiteSpace(_settings.Current.CustomInstruction)
+                ? null
+                : _settings.Current.CustomInstruction;
+            fewShotCandidates = _reactions.GetFewShotCandidates();
+        }
+        catch (Exception)
+        {
+            // 学習素材が読めなくても、学習を反映しないv2相当の校正として続行する。
+            styleGuideContent = null;
+            customInstruction = null;
+            fewShotCandidates = [];
+        }
+
         _proofreadingRunInProgress = true;
         _proofreadingTimer.Stop();
         SetProposalActionsEnabled(false);
@@ -1213,6 +1450,13 @@ public partial class MainWindow : Window
                 SetProofreadingStatus(
                     $"校正しています… {index + 1}/{plan.Requests.Count}");
                 ProofreadingRequest request = plan.Requests[index];
+                FewShotSelection fewShotSelection = FewShotSelector.Select(
+                    fewShotCandidates, request.SourceText);
+                request = request with
+                {
+                    SystemInstructionOverride = ProofreadingPrompt.BuildSystemInstruction(
+                        styleGuideContent, customInstruction, fewShotSelection.Examples),
+                };
                 var stopwatch = Stopwatch.StartNew();
                 GeminiProofreadingResult result;
                 try
@@ -1839,7 +2083,7 @@ public partial class MainWindow : Window
         SuppressAutoHide();
         try
         {
-            var dialog = new SettingsWindow(_settings, _credentials, _pricing) { Owner = this };
+            var dialog = new SettingsWindow(_settings, _credentials, _pricing, _styleGuides, _reactions) { Owner = this };
             dialog.ShowDialog();
         }
         finally

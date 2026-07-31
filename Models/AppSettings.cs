@@ -105,6 +105,26 @@ public sealed class AppSettings
     /// </summary>
     public decimal MonthlyLimitWarningRatio { get; set; } = 0.80m;
 
+    // ---- 3.4 学習機能（文体の適応） ----
+    /// <summary>
+    /// ユーザー手書きのカスタム指示（要件3.4.3）。プロンプト末尾（自動生成スタイルガイドより後）へ
+    /// 必ず付加し、最優先と明示する。空なら何も付加しない。
+    /// </summary>
+    public string CustomInstruction { get; set; } = "";
+
+    /// <summary>
+    /// リアクションが一定件数たまるごとにスタイルガイドの自動生成を提案する（要件3.4.2）かどうか。
+    /// OFFでも手動生成は可能。生成は課金APIを呼ぶため、この設定に関わらず実行前に必ず確認する
+    /// （<see cref="ConfirmPaidApiCalls"/>とは独立。3.4.2は「実行前に確認ダイアログを出す」を無条件で要求する）。
+    /// </summary>
+    public bool StyleGuideAutoGenerateEnabled { get; set; } = true;
+
+    /// <summary>
+    /// スタイルガイド自動生成の起点となるリアクション件数（要件3.4.2の既定50）。
+    /// 前回の確認時点から見て、これだけ新しいリアクションが積まれたら生成を提案する。
+    /// </summary>
+    public int StyleGuideGenerationThreshold { get; set; } = 50;
+
     // ---- 3.6.2 課金ログの保持 ----
     /// <summary>
     /// <c>api_calls</c> の明細を残す月数。要件 3.6.2 の既定は 12 か月。

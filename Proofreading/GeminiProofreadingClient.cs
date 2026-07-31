@@ -63,6 +63,20 @@ internal sealed record GeminiAlternativeResult(
     TimeSpan Elapsed,
     int Attempts);
 
+/// <summary>スタイルガイド自動生成（要件3.4.2）の結果。文書全文の差分検査は行わない。</summary>
+internal sealed record GeminiStyleGuideResult(
+    string Content,
+    GeminiUsage Usage,
+    TimeSpan Elapsed,
+    int Attempts);
+
+/// <summary>HTTP応答から抽出した生テキストと使用量。校正の差分検査より前の共通の中間結果。</summary>
+internal sealed record GeminiRawTextResult(
+    string Text,
+    GeminiUsage Usage,
+    TimeSpan Elapsed,
+    int Attempts);
+
 /// <summary>プロバイダーに依存しない校正クライアントの呼び出し口。</summary>
 internal interface IProofreadingClient : IDisposable
 {
@@ -75,6 +89,11 @@ internal interface IProofreadingClient : IDisposable
     Task<GeminiAlternativeResult> GenerateAlternativeAsync(
         ProofreadingProposal proposal,
         string reason,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>要件3.4.2。蓄積されたリアクション履歴からスタイルガイドの本文を生成する。</summary>
+    Task<GeminiStyleGuideResult> GenerateStyleGuideAsync(
+        IReadOnlyList<FewShotExample> reactionHistory,
         CancellationToken cancellationToken = default);
 }
 
@@ -141,12 +160,13 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return await ProofreadAsync(
+        return await GenerateAsync(
             request.SourceText,
             ProofreadingPrompt.BuildUserMessage(
                 request.SourceText,
                 request.BeforeContext,
                 request.AfterContext),
+            request.SystemInstructionOverride ?? ProofreadingPrompt.SystemInstruction,
             cancellationToken);
     }
 
@@ -210,6 +230,48 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
         if (sourceText.Length == 0)
             throw new ArgumentException("空の文書は校正できません。", nameof(sourceText));
 
+        return await SendWithRetryAsync(
+            systemInstruction,
+            userMessage,
+            (body, elapsed, attempt) => ParseSuccess(body, sourceText, elapsed, attempt),
+            cancellationToken);
+    }
+
+    public async Task<GeminiStyleGuideResult> GenerateStyleGuideAsync(
+        IReadOnlyList<FewShotExample> reactionHistory,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reactionHistory);
+
+        GeminiRawTextResult raw = await SendWithRetryAsync(
+            ProofreadingPrompt.StyleGuideSystemInstruction,
+            ProofreadingPrompt.BuildStyleGuideUserMessage(reactionHistory),
+            ParseRawSuccess,
+            cancellationToken);
+
+        string content = raw.Text.Trim();
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            throw new GeminiClientException(
+                GeminiClientError.InvalidResponse,
+                "Gemini APIから有効なスタイルガイドが返されませんでした。",
+                usage: raw.Usage,
+                elapsed: raw.Elapsed);
+        }
+
+        return new GeminiStyleGuideResult(content, raw.Usage, raw.Elapsed, raw.Attempts);
+    }
+
+    /// <summary>
+    /// APIキー確認・リクエスト構築・タイムアウト15秒・1回だけの再試行を、校正とスタイルガイド生成で共有する。
+    /// 応答の解釈だけが異なるため、成功時のパースを <paramref name="parseSuccess"/> へ委譲する。
+    /// </summary>
+    private async Task<T> SendWithRetryAsync<T>(
+        string systemInstruction,
+        string userMessage,
+        Func<string, TimeSpan, int, T> parseSuccess,
+        CancellationToken cancellationToken)
+    {
         string? apiKey = _apiKeyProvider();
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -243,10 +305,9 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
                     throw CreateRequestFailedException(response);
                 }
 
-                GeminiProofreadingResult result =
-                    ParseSuccess(body, sourceText, stopwatch.Elapsed, attempt);
+                T result = parseSuccess(body, stopwatch.Elapsed, attempt);
                 stopwatch.Stop();
-                return result with { Elapsed = stopwatch.Elapsed };
+                return result;
             }
             catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
             {
@@ -334,20 +395,29 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
         TimeSpan elapsed,
         int attempts)
     {
+        (string correctedText, GeminiUsage usage) = ParseRaw(body);
+        DocumentDiffResult diff = DocumentDiff.Create(sourceText, correctedText);
+        return new GeminiProofreadingResult(correctedText, diff, usage, elapsed, attempts);
+    }
+
+    private static GeminiRawTextResult ParseRawSuccess(
+        string body,
+        TimeSpan elapsed,
+        int attempts)
+    {
+        (string text, GeminiUsage usage) = ParseRaw(body);
+        return new GeminiRawTextResult(text, usage, elapsed, attempts);
+    }
+
+    private static (string Text, GeminiUsage Usage) ParseRaw(string body)
+    {
         try
         {
             using JsonDocument document = JsonDocument.Parse(body);
             JsonElement root = document.RootElement;
-            string correctedText = ExtractCandidateText(root);
+            string text = ExtractCandidateText(root);
             GeminiUsage usage = ExtractUsage(root);
-            DocumentDiffResult diff = DocumentDiff.Create(sourceText, correctedText);
-
-            return new GeminiProofreadingResult(
-                correctedText,
-                diff,
-                usage,
-                elapsed,
-                attempts);
+            return (text, usage);
         }
         catch (GeminiClientException)
         {
