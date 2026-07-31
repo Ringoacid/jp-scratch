@@ -383,6 +383,9 @@ public partial class MainWindow : Window
         RefreshUsageDisplay();
         ScheduleAutomaticProofreading();
         StartupRegistration.Sync(settings.StartWithWindows);
+        // 保持期間を短くした直後に効かせる。起動時にしか圧縮しないと、設定を変えても
+        // 再起動するまで課金履歴画面が何も変わらず「設定が効いていない」ように見える。
+        CompactApiLogsInBackground();
 
         var failures = _hotkeys.Reregister(settings);
         if (failures.Count > 0)
@@ -1680,6 +1683,43 @@ public partial class MainWindow : Window
 
         // 日次判定はサービス側に任せ、通信失敗時も既存表示と校正をそのまま続ける。
         _ = RefreshFxRateAsync();
+
+        // 常駐したままでも月をまたげば新しい明細が保持期限を越える。ここで呼ばないと、
+        // 一度も再起動しない限り圧縮が走らない。
+        CompactApiLogsInBackground();
+    }
+
+    /// <summary>
+    /// 保持期限を過ぎた <c>api_calls</c> の明細を日次サマリへ圧縮する（要件 3.6.2）。
+    /// 期間合計は <see cref="ApiCallRepository.GetUsageSummary"/> が両テーブルを合算するため変わらない。
+    ///
+    /// 起動時（<c>App.OnStartup</c>）・保持期間を変更したとき（<see cref="OnSettingsChanged"/>）・
+    /// 日付が変わったとき（<see cref="RefreshUsageForRollover"/>）の3経路から呼ぶ。
+    /// 起動時だけにすると、設定画面で保持期間を短くしても再起動するまで何も起きず、
+    /// 「設定が効いていない」ように見える（実機で踏んだ）。
+    ///
+    /// <see cref="Database"/> は内部で直列化しているので、UIスレッドの読み書きと競合しても壊れない。
+    /// 何度呼んでも結果が同じ（<see cref="ApiCallRepository.Compact"/> は既存サマリを取り込んでから
+    /// 書き直す）なので、余分に呼んでも合計は狂わない。失敗しても本文編集・校正・課金表示は
+    /// 続けられるため、握りつぶして次の機会に再試行する。
+    /// </summary>
+    internal void CompactApiLogsInBackground()
+    {
+        DateTimeOffset? cutoff = ApiLogRetention.ComputeCutoff(
+            DateTimeOffset.Now, _settings.Current.ApiLogRetentionMonths);
+        if (cutoff is null) return;
+
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                _apiCalls.Compact(cutoff.Value);
+            }
+            catch (Exception ex) when (
+                ex is Microsoft.Data.Sqlite.SqliteException or IOException or InvalidOperationException)
+            {
+            }
+        });
     }
 
     private static DateOnly LocalDate(DateTimeOffset value)

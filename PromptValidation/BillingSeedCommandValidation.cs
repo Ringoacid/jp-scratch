@@ -14,9 +14,11 @@ internal static class BillingSeedCommandValidation
         bool guardPass = RunGuardSelfTests();
         bool seedFlowPass = RunSeedFlowSelfTests();
         bool multiRateRangePass = RunMultiRateOnlyRangeSelfTests();
-        bool passed = structuralPass && guardPass && seedFlowPass && multiRateRangePass;
-        Console.WriteLine("課金シード（構造・保護ガード・投入結果の一致・複数レート専用範囲）: " +
-            (passed ? "PASS" : "FAIL"));
+        bool retentionRangePass = RunRetentionCheckRangeSelfTests();
+        bool passed = structuralPass && guardPass && seedFlowPass && multiRateRangePass &&
+            retentionRangePass;
+        Console.WriteLine("課金シード（構造・保護ガード・投入結果の一致・複数レート専用範囲・" +
+            "圧縮確認用の古い明細）: " + (passed ? "PASS" : "FAIL"));
         return passed;
     }
 
@@ -237,6 +239,106 @@ internal static class BillingSeedCommandValidation
                 $"  複数レート専用範囲（{day1:yyyy-MM-dd}〜{day2:yyyy-MM-dd}がIsJpyComplete=true・" +
                 "DistinctRateCount>=2）: " + (passed ? "PASS" : "FAIL"));
             return passed;
+        }
+        finally
+        {
+            try { Directory.Delete(directory, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    /// <summary>
+    /// 実機確認で「保持期間を1か月にしても何も圧縮されない」と分かった件の再発防止テスト。
+    ///
+    /// 原因はシード側にあった。<see cref="ApiLogRetention.ComputeCutoff"/> の境界は
+    /// 「当月から N か月前の月初」なので、保持期間 1 か月でも前月の明細は残る。ところが
+    /// シードの最古は前月11日だったため、**どの保持期間を指定しても圧縮対象が0件**で、
+    /// 画面で確認しようがなかった。
+    ///
+    /// ここでは (a) 既定の12か月では1件も圧縮されない、(b) 3か月にすると
+    /// <see cref="BillingSeedCommand.RetentionCheckRange"/> の OldDay だけが圧縮される、
+    /// (c) 1か月にすると OldDay と MidDay の両方が圧縮される、(d) いずれの場合も
+    /// 全期間の集計は <c>CompactedCalls</c> を除いて完全に一致する、を確認する。
+    /// </summary>
+    private static bool RunRetentionCheckRangeSelfTests()
+    {
+        DateTimeOffset fixedNow = new(2026, 7, 30, 15, 0, 0, TimeSpan.FromHours(9));
+        IReadOnlyList<BillingSeedCommand.SeedRow> rows = BillingSeedCommand.BuildRows(fixedNow);
+        (DateOnly oldDay, DateOnly midDay) = BillingSeedCommand.RetentionCheckRange(fixedNow);
+
+        int oldDayRows = rows.Count(r => DateOnly.FromDateTime(r.CalledAt.LocalDateTime) == oldDay);
+        int midDayRows = rows.Count(r => DateOnly.FromDateTime(r.CalledAt.LocalDateTime) == midDay);
+        bool bothDaysPopulated = oldDayRows > 0 && midDayRows > 0;
+
+        bool defaultKeepsEverything = CompactedCountAt(rows, fixedNow, retentionMonths: 12) == 0;
+        bool threeMonthsCompactsOldOnly =
+            CompactedCountAt(rows, fixedNow, retentionMonths: 3) == oldDayRows;
+        bool oneMonthCompactsBoth =
+            CompactedCountAt(rows, fixedNow, retentionMonths: 1) == oldDayRows + midDayRows;
+
+        bool totalsPreserved = TotalsSurviveCompaction(rows, fixedNow, retentionMonths: 1);
+
+        bool passed = bothDaysPopulated && defaultKeepsEverything && threeMonthsCompactsOldOnly &&
+            oneMonthCompactsBoth && totalsPreserved;
+
+        Console.WriteLine(
+            $"  圧縮確認用の古い明細（{oldDay:yyyy-MM-dd}に{oldDayRows}件・{midDay:yyyy-MM-dd}に{midDayRows}件。" +
+            "12か月では0件・3か月では前者のみ・1か月では両方が対象で合計不変）: " +
+            (passed ? "PASS" : "FAIL"));
+        return passed;
+    }
+
+    /// <summary>指定した保持期間で圧縮対象になるシード行の件数を、境界計算だけで数える。</summary>
+    private static int CompactedCountAt(
+        IReadOnlyList<BillingSeedCommand.SeedRow> rows, DateTimeOffset now, int retentionMonths)
+    {
+        DateTimeOffset? cutoff = ApiLogRetention.ComputeCutoff(now, retentionMonths);
+        return cutoff is null ? 0 : rows.Count(r => r.CalledAt < cutoff.Value);
+    }
+
+    /// <summary>
+    /// シードを実際に投入して圧縮し、全期間の集計が <c>CompactedCalls</c> を除いて
+    /// 完全一致することを確かめる。<see cref="ApiLogCompactionValidation"/> は合成データで
+    /// 同じ不変条件を見ているが、こちらは画面確認に使う実物のシードで確かめる。
+    /// </summary>
+    private static bool TotalsSurviveCompaction(
+        IReadOnlyList<BillingSeedCommand.SeedRow> rows, DateTimeOffset now, int retentionMonths)
+    {
+        DateTimeOffset? cutoff = ApiLogRetention.ComputeCutoff(now, retentionMonths);
+        if (cutoff is null) return false;
+
+        string directory = Path.Combine(
+            Path.GetTempPath(), "JpScratchBillingSeedRetentionValidation", Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            Directory.CreateDirectory(directory);
+            using var database = new Database(Path.Combine(directory, "app.db"));
+
+            DateTimeOffset current = now;
+            var repository = new ApiCallRepository(database, () => current);
+            foreach (BillingSeedCommand.SeedRow row in rows)
+            {
+                current = row.CalledAt;
+                repository.Add(new ApiCallLogEntry(
+                    row.Trigger, PricingService.DefaultModel, row.PromptTokens, row.OutputTokens,
+                    row.UsdCost, row.DurationMilliseconds, row.Status, row.ErrorMessage,
+                    row.SuggestionCount, row.DiscardedCount, row.FxRate));
+            }
+
+            ApiCallUsageSummary before = repository.GetUsageSummary();
+            long detailsBefore = repository.GetHistory().TotalCount;
+
+            ApiCallCompactionResult result = repository.Compact(cutoff.Value);
+
+            ApiCallUsageSummary after = repository.GetUsageSummary();
+            long detailsAfter = repository.GetHistory().TotalCount;
+
+            return result.DidCompact &&
+                (after with { CompactedCalls = 0 }) == before &&
+                after.CompactedCalls == result.CompactedCalls &&
+                detailsAfter == detailsBefore - result.CompactedCalls;
         }
         finally
         {

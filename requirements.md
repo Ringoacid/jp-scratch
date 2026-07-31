@@ -421,9 +421,11 @@ USD/JPYスナップショットを合算して結果を表示する。使用量�
   モデル名・エラー文は外部由来の自由文字列なので、`= + - @` などで始まる場合に `'` を前置して
   CSV インジェクションを防ぐ。
 - 保持期間は既定 12 か月（設定画面 `ApiLogRetentionMonths`、0 で無期限）。それ以前の月の明細は
-  起動後にバックグラウンドで日次サマリ `api_call_daily` へ圧縮し、`api_calls` から削除する。**実装済み**
-  （`Services/ApiLogRetention.cs`、`ApiCallRepository.Compact`）。境界は月初のローカル 0 時に丸めるので、
-  削除されるのは必ず「保持期間以上前」の明細に限られる。
+  バックグラウンドで日次サマリ `api_call_daily` へ圧縮し、`api_calls` から削除する。**実装済み**
+  （`Services/ApiLogRetention.cs`、`ApiCallRepository.Compact`、`MainWindow.CompactApiLogsInBackground`）。
+  実行契機は**起動後・設定変更後・日付が変わったとき**の3つ。境界は月初のローカル 0 時に丸めるので、
+  削除されるのは必ず「保持期間以上前」の明細に限られる（保持期間 1 か月・現在 2026-07 なら境界は
+  2026-06-01 で、前月の明細は残る）。
   **期間合計は圧縮しても変わらない**。`GetUsageSummary` が `api_calls` と `api_call_daily` を合算する。
   失われるのは 1 件ごとの明細（時刻・所要時間・エラー文）だけで、その件数は
   `ApiCallUsageSummary.CompactedCalls` として画面ヘッダと CSV 出力時に明示する。
@@ -636,7 +638,9 @@ CREATE TABLE app_metadata (
       修正済み（`Services/SettingsFieldFormatting.cs`）
 - [x] CSV エクスポートと保持期限後の明細圧縮（3.6.2）。`Services/BillingCsvExporter.cs`、
       `Services/ApiLogRetention.cs`、`ApiCallRepository.Compact`、DB v4 `api_call_daily`。
-      **実機確認は未実施**（CSVの実ファイル書き出しと Excel での文字化け有無、設定画面の新しい入力欄）
+      CSV の書き出しと Excel での文字化けが無いことは 2026-07-31 に実機確認済み。同日の実機確認で
+      「設定画面の補足文が右端で切れる」「保持期間を変えても圧縮が走らない（起動時のみ実行していた）」
+      の2件が見つかり、いずれも修正済み。**圧縮後の画面表示の実機確認は未実施**
 - [ ] **次の WIP: トレイアイコンの状態表示**（3.1.1、通常/校正中/APIエラー/月間上限到達の4状態）。
       月間上限ガードの実装中に未実装であることが判明し、別WIPとして切り出した
 - [x] キーボードだけで提案を処理できる導線（`F8` / `Ctrl+.` / `Ctrl+,`）

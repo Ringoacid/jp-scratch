@@ -29,9 +29,9 @@ internal static class BillingSeedCommand
 
     /// <summary>
     /// <paramref name="now"/> を基準に、期間フィルタ（当日/当週/当月/全期間）・種別フィルタ・
-    /// 円欠損（jpy_cost NULL）・複数レート・error/timeoutのツールチップを一通り確認できる
-    /// 30行の決定的なデータを組み立てる。日付は実行時点の「今日」からの相対で決めるため、
-    /// いつ実行しても当日・当週・当月・前月のいずれかに必ず分布する。
+    /// 円欠損（jpy_cost NULL）・複数レート・error/timeoutのツールチップ・保持期限後の明細圧縮を
+    /// 一通り確認できる35行の決定的なデータを組み立てる。日付は実行時点の「今日」からの相対で
+    /// 決めるため、いつ実行しても当日・当週・当月・前月・それ以前のいずれかに必ず分布する。
     ///
     /// <paramref name="multiRateOnlyDay1"/>・<paramref name="multiRateOnlyDay2"/>
     /// （<see cref="Run"/> が投入結果に明記する2日間、連続日）は円欠損行を含まず、
@@ -64,10 +64,15 @@ internal static class BillingSeedCommand
         // 含まない連続2日間。カスタム期間の複数レート表示だけを踏むための専用の日。
         (DateOnly multiRateOnlyDay1, DateOnly multiRateOnlyDay2) = MultiRateOnlyRange(now);
 
+        // 保持期限の圧縮を画面で確認するための、十分に古い2日。
+        (DateOnly retentionOldDay, DateOnly retentionMidDay) = RetentionCheckRange(now);
+
         FxRate rateA = new(today.AddDays(-3), 155.32m, AtLocal(today.AddDays(-3), 8, 0));
         FxRate rateB = new(firstOfMonth.AddDays(-12), 149.87m, AtLocal(firstOfMonth.AddDays(-12), 8, 0));
         FxRate rateC = new(multiRateOnlyDay1, 152.10m, AtLocal(multiRateOnlyDay1, 8, 0));
         FxRate rateD = new(multiRateOnlyDay2, 148.05m, AtLocal(multiRateOnlyDay2, 8, 0));
+        FxRate rateE = new(retentionOldDay, 143.55m, AtLocal(retentionOldDay, 8, 0));
+        FxRate rateF = new(retentionMidDay, 146.20m, AtLocal(retentionMidDay, 8, 0));
 
         const string http429 = "Gemini APIがHTTP 429を返しました。";
         const string http500 = "Gemini APIがHTTP 500を返しました。";
@@ -77,6 +82,23 @@ internal static class BillingSeedCommand
 
         return
         [
+            // ---- 保持期限の圧縮確認用（当月から4か月前・2か月前）----
+            // 保持期間を 1〜3 か月に縮めるとこの範囲だけが api_call_daily へ圧縮され、
+            // 課金履歴画面のヘッダに「うち N 件は保持期限を過ぎ日次サマリへ圧縮済み」が出る。
+            // 既定の 12 か月では圧縮されない（＝既定のまま使う限り明細は消えない）。
+            // 先頭2行は日・種別・モデル・成否・レートがすべて同じなので、圧縮すると
+            // サマリ1行にまとまる。件数が減ること自体を画面で確認するために必要。
+            Row(retentionOldDay, 9, 15, ApiCallTrigger.Auto, ApiCallStatus.Ok,
+                20, 10, 0.00002400m, 950, 1, 0, rateE, null, "保持期限外/成功/レートE"),
+            Row(retentionOldDay, 14, 40, ApiCallTrigger.Auto, ApiCallStatus.Ok,
+                24, 12, 0.00002800m, 1000, 2, 0, rateE, null, "保持期限外/成功/レートE（同一粒度）"),
+            Row(retentionOldDay, 18, 5, ApiCallTrigger.Manual, ApiCallStatus.Error,
+                5, 0, 0.00000600m, 500, 0, 0, null, http500, "保持期限外/エラー500/円欠損"),
+            Row(retentionMidDay, 10, 30, ApiCallTrigger.Auto, ApiCallStatus.Ok,
+                18, 9, 0.00002000m, 900, 1, 0, rateF, null, "保持期限外/成功/レートF"),
+            Row(retentionMidDay, 16, 20, ApiCallTrigger.Realternative, ApiCallStatus.Ok,
+                60, 45, 0.00008200m, 1800, 1, 1, null, null, "保持期限外/成功/円欠損/別案生成"),
+
             // ---- 複数レート専用範囲（円欠損行を含まない連続2日間。カスタム期間で
             //      multiRateOnlyDay1〜multiRateOnlyDay2 を指定すると、複数レートの
             //      日付範囲・件数表示だけを踏める） ----
@@ -159,6 +181,23 @@ internal static class BillingSeedCommand
     {
         DateOnly firstOfMonth = DateOnly.FromDateTime(UsagePeriod.StartOfMonth(now).LocalDateTime);
         return (firstOfMonth.AddDays(-20), firstOfMonth.AddDays(-19));
+    }
+
+    /// <summary>
+    /// 保持期限後の明細圧縮（要件 3.6.2）を画面で確認するための、十分に古い2日。
+    ///
+    /// <see cref="ApiLogRetention.ComputeCutoff"/> の境界は「当月から N か月前の月初」なので、
+    /// 保持期間 1 か月でも前月の明細は残る。実際、これを足す前のシードは最古が前月11日で、
+    /// **どの保持期間を指定しても圧縮対象が1件も無かった**（画面で確認しようがなかった）。
+    ///
+    /// OldDay は4か月前、MidDay は2か月前に置く。保持期間 1 か月なら両方、3 か月なら OldDay だけが
+    /// 圧縮対象になり、「一部だけ圧縮される」状態も画面で確認できる。既定の 12 か月では
+    /// どちらも圧縮されない。
+    /// </summary>
+    internal static (DateOnly OldDay, DateOnly MidDay) RetentionCheckRange(DateTimeOffset now)
+    {
+        DateOnly firstOfMonth = DateOnly.FromDateTime(UsagePeriod.StartOfMonth(now).LocalDateTime);
+        return (firstOfMonth.AddMonths(-4).AddDays(9), firstOfMonth.AddMonths(-2).AddDays(14));
     }
 
     /// <summary>
@@ -323,6 +362,14 @@ internal static class BillingSeedCommand
                 $"複数レート表示の確認用: 課金履歴画面でカスタム期間を " +
                 $"{multiRateDay1:yyyy-MM-dd} 〜 {multiRateDay2:yyyy-MM-dd} に指定すると、" +
                 "円欠損行を含まない複数レート（2種類）の期間合計表示を確認できます。");
+
+            (DateOnly retentionOldDay, DateOnly retentionMidDay) = RetentionCheckRange(now);
+            Console.WriteLine(
+                $"明細圧縮の確認用: {retentionOldDay:yyyy-MM-dd} に3件・{retentionMidDay:yyyy-MM-dd} に2件を" +
+                "置いています。設定画面の「明細の保持期間」を1にすると5件すべて、3にすると" +
+                $"{retentionOldDay:yyyy-MM-dd} の3件だけが日次サマリへ圧縮されます" +
+                "（既定の12では圧縮されません）。まず「全期間」の合計を控えてから変更し、" +
+                "圧縮後も合計が一致すること・ヘッダに圧縮件数が出ることを確認してください。");
         }
         Console.WriteLine("credentials.dat は作成していません（APIキー未設定のまま）。");
 
