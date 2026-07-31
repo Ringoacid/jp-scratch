@@ -36,4 +36,94 @@ internal static class SettingsFieldFormatting
         decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal value)
             ? value
             : fallback;
+
+    /// <summary>
+    /// モデル単価（USD / 1M tokens）の表示。往復不変にするため <see cref="UsageFormatting.FormatUsd"/>
+    /// と同じ最大8桁を使う。
+    /// </summary>
+    internal static string FormatUnitPrice(decimal value) => UsageFormatting.FormatUsd(value);
+
+    /// <summary>単価は非負の decimal のみ受け付ける（InvariantCulture 固定）。</summary>
+    internal static bool TryParseUnitPrice(string text, out decimal value) =>
+        decimal.TryParse(
+            (text ?? "").Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out value) &&
+        value >= 0m;
+
+    /// <summary>更新日は yyyy-MM-dd 厳密（InvariantCulture 固定）。前後の空白は許す。</summary>
+    internal static bool TryParseUpdatedAt(string text, out string normalized)
+    {
+        if (DateOnly.TryParseExact(
+                (text ?? "").Trim(), "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly date))
+        {
+            normalized = date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            return true;
+        }
+
+        normalized = "";
+        return false;
+    }
+
+    /// <summary>
+    /// 設定画面の3欄（入力単価・出力単価・更新日）から <see cref="ModelPricing"/> を作る。
+    ///
+    /// 3欄すべてが <paramref name="original"/> を書式化した文字列と一致するなら、パースし直さず
+    /// <paramref name="original"/> をそのまま返す。表示書式は小数点以下最大8桁なので、
+    /// <c>pricing.json</c> を手で編集して9桁以上の単価を入れていた場合、ユーザーが触っていない欄まで
+    /// 表示書式で丸めて書き戻してしまう（月間上限額の往復不変性バグと同種のデータ破壊）。
+    /// 未編集の欄は元の値をそのまま通すことで防ぐ。
+    /// </summary>
+    internal static bool TryBuildPricing(
+        string inputText,
+        string outputText,
+        string updatedAtText,
+        ModelPricing original,
+        out ModelPricing result,
+        out string error)
+    {
+        string inputTrimmed = (inputText ?? "").Trim();
+        string outputTrimmed = (outputText ?? "").Trim();
+        string updatedAtTrimmed = (updatedAtText ?? "").Trim();
+
+        bool unedited =
+            inputTrimmed == FormatUnitPrice(original.InputUsdPerMillion) &&
+            outputTrimmed == FormatUnitPrice(original.OutputUsdPerMillion) &&
+            updatedAtTrimmed == original.UpdatedAt;
+        if (unedited)
+        {
+            result = original;
+            error = "";
+            return true;
+        }
+
+        if (!TryParseUnitPrice(inputTrimmed, out decimal input))
+        {
+            result = original;
+            error = "入力単価は 0 以上の数値で入力してください。";
+            return false;
+        }
+
+        if (!TryParseUnitPrice(outputTrimmed, out decimal output))
+        {
+            result = original;
+            error = "出力単価は 0 以上の数値で入力してください。";
+            return false;
+        }
+
+        if (!TryParseUpdatedAt(updatedAtTrimmed, out string normalizedUpdatedAt))
+        {
+            result = original;
+            error = "更新日は yyyy-MM-dd 形式で入力してください。";
+            return false;
+        }
+
+        result = new ModelPricing
+        {
+            InputUsdPerMillion = input,
+            OutputUsdPerMillion = output,
+            UpdatedAt = normalizedUpdatedAt,
+        };
+        error = "";
+        return true;
+    }
 }

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="JP Scratch の設定"
-        Width="520" Height="620"
+        Width="520" Height="700"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         WindowStyle="None"
@@ -215,6 +215,83 @@
                                Style="{StaticResource FieldLabel}"
                                Margin="8,0,0,0" />
                 </Grid>
+
+                <TextBlock Text="モデル単価" Style="{StaticResource SectionHeader}" />
+                <TextBlock Text="Gemini公式の価格が変わったときに更新します。1M tokensあたりのUSDです。"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource SubtleTextBrush}"
+                           FontSize="11"
+                           Margin="0,0,0,6" />
+
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="モデル" Style="{StaticResource FieldLabel}" />
+                    <ComboBox x:Name="PricingModelCombo"
+                              Grid.Column="1"
+                              Style="{StaticResource AppComboBox}"
+                              SelectionChanged="PricingModelCombo_SelectionChanged" />
+                </Grid>
+
+                <Grid Margin="0,4,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="80" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="入力単価" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="PricingInputBox"
+                             Grid.Column="1"
+                             Style="{StaticResource AppTextBox}"
+                             TextAlignment="Right" />
+                    <TextBlock Grid.Column="2"
+                               Text="USD / 1M tokens"
+                               Style="{StaticResource FieldLabel}"
+                               Margin="8,0,0,0" />
+                </Grid>
+
+                <Grid Margin="0,4,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="80" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="出力単価" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="PricingOutputBox"
+                             Grid.Column="1"
+                             Style="{StaticResource AppTextBox}"
+                             TextAlignment="Right" />
+                    <TextBlock Grid.Column="2"
+                               Text="USD / 1M tokens（thinking を含む）"
+                               Style="{StaticResource FieldLabel}"
+                               Margin="8,0,0,0" />
+                </Grid>
+
+                <Grid Margin="0,4,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="80" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="更新日" Style="{StaticResource FieldLabel}" />
+                    <TextBox x:Name="PricingUpdatedAtBox"
+                             Grid.Column="1"
+                             Style="{StaticResource AppTextBox}"
+                             TextAlignment="Right" />
+                    <TextBlock Grid.Column="2"
+                               Text="yyyy-MM-dd"
+                               Style="{StaticResource FieldLabel}"
+                               Margin="8,0,0,0" />
+                </Grid>
+
+                <TextBlock x:Name="PricingErrorText"
+                           Margin="150,2,0,8"
+                           TextWrapping="Wrap"
+                           FontSize="11"
+                           Foreground="{DynamicResource SubtleTextBrush}"
+                           Visibility="Collapsed" />
 
                 <Grid Margin="0,0,0,4">
                     <Grid.ColumnDefinitions>

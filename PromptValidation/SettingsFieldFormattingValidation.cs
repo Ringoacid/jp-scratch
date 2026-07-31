@@ -16,10 +16,17 @@ internal static class SettingsFieldFormattingValidation
         bool monthlyLimitPassed = RunMonthlyLimitRoundTripTests();
         bool warningRatioPassed = RunWarningRatioRoundTripTests();
         bool parseFallbackPassed = RunParseFallbackTests();
+        bool unitPriceRoundTripPassed = RunUnitPriceRoundTripTests();
+        bool unitPriceRejectPassed = RunUnitPriceRejectTests();
+        bool updatedAtPassed = RunUpdatedAtTests();
+        bool buildPricingUneditedPassed = RunBuildPricingUneditedTests();
+        bool buildPricingEditedPassed = RunBuildPricingEditedTests();
 
-        bool passed = monthlyLimitPassed && warningRatioPassed && parseFallbackPassed;
+        bool passed = monthlyLimitPassed && warningRatioPassed && parseFallbackPassed &&
+                      unitPriceRoundTripPassed && unitPriceRejectPassed && updatedAtPassed &&
+                      buildPricingUneditedPassed && buildPricingEditedPassed;
         Console.WriteLine(
-            "設定画面の数値欄の往復不変性（月間上限額・警告閾値・パース失敗時のフォールバック）: " +
+            "設定画面の数値欄の往復不変性（月間上限額・警告閾値・パース失敗時のフォールバック・モデル単価編集）: " +
             (passed ? "PASS" : "FAIL"));
         return passed;
     }
@@ -85,6 +92,132 @@ internal static class SettingsFieldFormattingValidation
         bool passed = blankFallsBack && garbageFallsBack;
         Console.WriteLine(
             "  パース失敗時のフォールバック（空欄・不正文字列で変更前の値を保つ）: " +
+            (passed ? "PASS" : "FAIL"));
+        return passed;
+    }
+
+    /// <summary>モデル単価（USD / 1M tokens）の表示→パースの往復不変性。</summary>
+    private static bool RunUnitPriceRoundTripTests()
+    {
+        decimal[] values = [0.30m, 2.50m, 0m, 0.00000001m, 12345.6789m];
+
+        bool allPassed = true;
+        foreach (decimal value in values)
+        {
+            string displayed = SettingsFieldFormatting.FormatUnitPrice(value);
+            bool ok = SettingsFieldFormatting.TryParseUnitPrice(displayed, out decimal parsed) &&
+                      parsed == value;
+            allPassed &= ok;
+            Console.WriteLine(
+                $"  モデル単価 往復: {value} → \"{displayed}\" → {parsed} : " +
+                (ok ? "PASS" : "FAIL"));
+        }
+
+        return allPassed;
+    }
+
+    /// <summary>モデル単価は負値・空・非数値を拒否すること。</summary>
+    private static bool RunUnitPriceRejectTests()
+    {
+        bool negativeRejected = !SettingsFieldFormatting.TryParseUnitPrice("-1", out _);
+        bool blankRejected = !SettingsFieldFormatting.TryParseUnitPrice("", out _);
+        bool garbageRejected = !SettingsFieldFormatting.TryParseUnitPrice("abc", out _);
+        bool passed = negativeRejected && blankRejected && garbageRejected;
+        Console.WriteLine(
+            "  モデル単価の不正入力拒否（負値・空欄・非数値）: " +
+            (passed ? "PASS" : "FAIL"));
+        return passed;
+    }
+
+    /// <summary>更新日は yyyy-MM-dd 厳密。区切り違い・空欄・非日付は拒否すること。</summary>
+    private static bool RunUpdatedAtTests()
+    {
+        bool acceptsStrict =
+            SettingsFieldFormatting.TryParseUpdatedAt("2026-07-31", out string normalized) &&
+            normalized == "2026-07-31";
+        bool rejectsShortYear = !SettingsFieldFormatting.TryParseUpdatedAt("2026-7-31", out _);
+        bool rejectsSlash = !SettingsFieldFormatting.TryParseUpdatedAt("2026/07/31", out _);
+        bool rejectsBlank = !SettingsFieldFormatting.TryParseUpdatedAt("", out _);
+        bool rejectsGarbage = !SettingsFieldFormatting.TryParseUpdatedAt("abcd", out _);
+        bool passed = acceptsStrict && rejectsShortYear && rejectsSlash && rejectsBlank && rejectsGarbage;
+        Console.WriteLine(
+            "  更新日の厳密パース（yyyy-MM-dd のみ受理）: " +
+            (passed ? "PASS" : "FAIL"));
+        return passed;
+    }
+
+    /// <summary>
+    /// 設計の肝: 3欄すべてが未編集（書式化した original と一致）なら、パースし直さず original を
+    /// そのまま返す。小数9桁以上の単価（表示書式の最大8桁を超える精度）で確認する。ここが崩れると、
+    /// pricing.json を手で編集して9桁以上の単価を入れていた場合に、ユーザーが触っていない欄まで
+    /// 表示書式で丸めて書き戻してしまう（月間上限額の往復不変性バグと同種のデータ破壊）。
+    /// </summary>
+    private static bool RunBuildPricingUneditedTests()
+    {
+        var original = new ModelPricing
+        {
+            InputUsdPerMillion = 0.123456789m,
+            OutputUsdPerMillion = 2.987654321m,
+            UpdatedAt = "2026-07-29",
+        };
+
+        string inputText = SettingsFieldFormatting.FormatUnitPrice(original.InputUsdPerMillion);
+        string outputText = SettingsFieldFormatting.FormatUnitPrice(original.OutputUsdPerMillion);
+
+        // 表示書式（小数点以下最大8桁）が9桁目を丸めていることの前提確認。
+        bool displayRounds =
+            inputText != original.InputUsdPerMillion.ToString() &&
+            outputText != original.OutputUsdPerMillion.ToString();
+
+        bool built = SettingsFieldFormatting.TryBuildPricing(
+            inputText, outputText, original.UpdatedAt, original, out ModelPricing result, out string error);
+
+        bool passed = displayRounds && built && error == "" &&
+                      result.InputUsdPerMillion == original.InputUsdPerMillion &&
+                      result.OutputUsdPerMillion == original.OutputUsdPerMillion &&
+                      result.UpdatedAt == original.UpdatedAt;
+        Console.WriteLine(
+            "  TryBuildPricing 未編集時は元の高精度値をそのまま保つ（9桁以上の単価）: " +
+            (passed ? "PASS" : "FAIL"));
+        return passed;
+    }
+
+    /// <summary>編集後の値を正しく反映し、不正入力ではエラーを返すこと。</summary>
+    private static bool RunBuildPricingEditedTests()
+    {
+        var original = new ModelPricing
+        {
+            InputUsdPerMillion = 0.30m,
+            OutputUsdPerMillion = 2.50m,
+            UpdatedAt = "2026-07-29",
+        };
+
+        bool editedApplied =
+            SettingsFieldFormatting.TryBuildPricing(
+                "0.40", "2.60", "2026-08-01", original, out ModelPricing edited, out string editedError) &&
+            editedError == "" &&
+            edited.InputUsdPerMillion == 0.40m &&
+            edited.OutputUsdPerMillion == 2.60m &&
+            edited.UpdatedAt == "2026-08-01";
+
+        bool invalidInputRejected =
+            !SettingsFieldFormatting.TryBuildPricing(
+                "-1", "2.60", "2026-08-01", original, out _, out string inputError) &&
+            inputError.Length > 0;
+
+        bool invalidOutputRejected =
+            !SettingsFieldFormatting.TryBuildPricing(
+                "0.40", "abc", "2026-08-01", original, out _, out string outputError) &&
+            outputError.Length > 0;
+
+        bool invalidDateRejected =
+            !SettingsFieldFormatting.TryBuildPricing(
+                "0.40", "2.60", "2026/08/01", original, out _, out string dateError) &&
+            dateError.Length > 0;
+
+        bool passed = editedApplied && invalidInputRejected && invalidOutputRejected && invalidDateRejected;
+        Console.WriteLine(
+            "  TryBuildPricing 編集反映と不正入力拒否（入力単価・出力単価・更新日）: " +
             (passed ? "PASS" : "FAIL"));
         return passed;
     }

@@ -59,10 +59,12 @@ internal static class PricingServiceValidation
                 unknownPass = true;
             }
 
+            bool replacePass = RunReplaceTests(pricingFile);
+
             bool pass =
-                defaultPass && customPass && recoveryPass && unknownPass;
+                defaultPass && customPass && recoveryPass && unknownPass && replacePass;
             Console.WriteLine(
-                "料金設定（作成・モデル別計算・破損復旧）: " +
+                "料金設定（作成・モデル別計算・破損復旧・設定画面からの編集API）: " +
                 (pass ? "PASS" : "FAIL"));
             return pass;
         }
@@ -80,5 +82,112 @@ internal static class PricingServiceValidation
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
+    }
+
+    /// <summary>
+    /// 設定画面から使う <see cref="PricingService.Snapshot"/> / <see cref="PricingService.Replace"/> の検証。
+    /// 他モデルの保持、永続化（別インスタンスでの読み直し）、拒否ケースでのメモリ非破壊を確認する。
+    /// </summary>
+    private static bool RunReplaceTests(string pricingFile)
+    {
+        File.WriteAllText(
+            pricingFile,
+            """
+            {
+              "gemini-3.5-flash-lite": {
+                "input_usd_per_1m": 0.30,
+                "output_usd_per_1m": 2.50,
+                "updated_at": "2026-07-29"
+              },
+              "other-model": {
+                "input_usd_per_1m": 1.00,
+                "output_usd_per_1m": 3.00,
+                "updated_at": "2026-07-01"
+              }
+            }
+            """);
+        var service = new PricingService(pricingFile);
+
+        // 既定モデルの単価だけを変更し、other-model はSnapshotの値をそのまま渡す。
+        var snapshot = new Dictionary<string, ModelPricing>(service.Snapshot(), StringComparer.Ordinal);
+        snapshot[PricingService.DefaultModel] = new ModelPricing
+        {
+            InputUsdPerMillion = 0.40m,
+            OutputUsdPerMillion = 2.60m,
+            UpdatedAt = "2026-08-01",
+        };
+        service.Replace(snapshot);
+
+        bool otherModelKept =
+            service.GetPricing("other-model").InputUsdPerMillion == 1.00m &&
+            service.GetPricing("other-model").OutputUsdPerMillion == 3.00m;
+        bool defaultModelUpdated =
+            service.GetPricing(PricingService.DefaultModel).InputUsdPerMillion == 0.40m;
+
+        // 永続化の確認: 同じファイルを読み直した新しいインスタンスが新しい値を返す。
+        var reloaded = new PricingService(pricingFile);
+        bool persisted =
+            reloaded.GetPricing(PricingService.DefaultModel).InputUsdPerMillion == 0.40m &&
+            reloaded.GetPricing("other-model").InputUsdPerMillion == 1.00m;
+
+        // 拒否ケース: 負値・日付不正・既定モデル欠落は例外で拒否され、メモリ上の単価は変わらない。
+        bool negativeRejected = RejectsAndKeepsMemory(service, m =>
+        {
+            m[PricingService.DefaultModel] = new ModelPricing
+            {
+                InputUsdPerMillion = -1m,
+                OutputUsdPerMillion = 2.60m,
+                UpdatedAt = "2026-08-01",
+            };
+        });
+        bool badDateRejected = RejectsAndKeepsMemory(service, m =>
+        {
+            m[PricingService.DefaultModel] = new ModelPricing
+            {
+                InputUsdPerMillion = 0.40m,
+                OutputUsdPerMillion = 2.60m,
+                UpdatedAt = "2026/08/01",
+            };
+        });
+        bool missingDefaultRejected = RejectsAndKeepsMemory(service, m =>
+        {
+            m.Remove(PricingService.DefaultModel);
+        });
+
+        bool pass = otherModelKept && defaultModelUpdated && persisted &&
+                    negativeRejected && badDateRejected && missingDefaultRejected;
+        Console.WriteLine(
+            "  Replace（他モデル保持・永続化・負値/日付不正/既定モデル欠落の拒否）: " +
+            (pass ? "PASS" : "FAIL"));
+        return pass;
+    }
+
+    private static bool RejectsAndKeepsMemory(
+        PricingService service,
+        Action<Dictionary<string, ModelPricing>> mutate)
+    {
+        ModelPricing before = service.GetPricing(PricingService.DefaultModel);
+
+        var candidate = new Dictionary<string, ModelPricing>(service.Snapshot(), StringComparer.Ordinal);
+        mutate(candidate);
+
+        bool threw;
+        try
+        {
+            service.Replace(candidate);
+            threw = false;
+        }
+        catch (InvalidDataException)
+        {
+            threw = true;
+        }
+
+        ModelPricing after = service.GetPricing(PricingService.DefaultModel);
+        bool unchanged =
+            after.InputUsdPerMillion == before.InputUsdPerMillion &&
+            after.OutputUsdPerMillion == before.OutputUsdPerMillion &&
+            after.UpdatedAt == before.UpdatedAt;
+
+        return threw && unchanged;
     }
 }

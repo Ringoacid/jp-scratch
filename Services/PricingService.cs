@@ -59,6 +59,37 @@ internal sealed class PricingService
                 $"モデル「{model.Trim()}」の単価がpricing.jsonにありません。");
     }
 
+    /// <summary>現在の単価表のスナップショット（設定画面の読み込み用）。</summary>
+    internal IReadOnlyDictionary<string, ModelPricing> Snapshot() =>
+        new Dictionary<string, ModelPricing>(_models, StringComparer.Ordinal);
+
+    /// <summary>
+    /// 単価表を丸ごと差し替えて保存する。設定画面からの明示的な操作専用であり、
+    /// <see cref="TrySave"/> と違ってIO例外を握りつぶさず呼び出し側へ投げる
+    /// （保存できていないのに成功したように見せない）。検証・書き込みに失敗した場合は
+    /// メモリ上の単価を一切変えない（部分適用を作らない）。
+    /// </summary>
+    internal void Replace(IReadOnlyDictionary<string, ModelPricing> models)
+    {
+        Dictionary<string, ModelPricing> validated =
+            Validate(new Dictionary<string, ModelPricing>(models, StringComparer.Ordinal));
+
+        // 既定モデルが消えると校正そのものが止まるため、他の壊れ方（負値・日付不正・重複）と
+        // 同じ扱いで拒否する。
+        if (!validated.ContainsKey(DefaultModel))
+        {
+            throw new InvalidDataException(
+                $"既定モデル「{DefaultModel}」の単価は削除できません。");
+        }
+
+        AtomicFile.WriteAllText(
+            _pricingFile,
+            JsonSerializer.Serialize(validated, JsonOptions));
+
+        // 書き込みに成功したときにだけメモリ上の単価を更新する。
+        _models = validated;
+    }
+
     internal PricingQuote Calculate(
         string model,
         int promptTokens,

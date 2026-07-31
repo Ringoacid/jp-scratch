@@ -19,13 +19,23 @@ public partial class SettingsWindow : Window
 
     private readonly SettingsService _service;
     private readonly CredentialService _credentials;
+    private readonly PricingService _pricing;
     private bool _deleteStoredKey;
     private bool _loadingCredentialControls;
 
-    internal SettingsWindow(SettingsService service, CredentialService credentials)
+    // モデル単価編集用。入力途中の値はモデルごとに「生テキスト」で保持し、検証はOK押下時にまとめて
+    // 行う（コンボを切り替えるたびに検証して選択を巻き戻すような作りにしない）。
+    private Dictionary<string, ModelPricing> _pricingOriginal = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string Input, string Output, string UpdatedAt)> _pricingText =
+        new(StringComparer.Ordinal);
+    private string? _selectedPricingModel;
+    private bool _loadingPricingControls;
+
+    internal SettingsWindow(SettingsService service, CredentialService credentials, PricingService pricing)
     {
         _service = service;
         _credentials = credentials;
+        _pricing = pricing;
         InitializeComponent();
         LoadFrom(service.Current);
     }
@@ -84,6 +94,8 @@ public partial class SettingsWindow : Window
             s.GeminiApiKeySource == GeminiApiKeySource.EnvironmentVariable ? 1 : 0;
         _loadingCredentialControls = false;
         RefreshCredentialStatus();
+
+        LoadPricingControls();
 
         AutoSaveBox.Text = s.AutoSaveDebounceMs.ToString(CultureInfo.InvariantCulture);
         TrashDaysBox.Text = s.TrashRetentionDays.ToString(CultureInfo.InvariantCulture);
@@ -191,6 +203,7 @@ public partial class SettingsWindow : Window
         var updated = _service.Current.Clone();
         ApplyTo(updated);
         if (!TryApplyCredentialChanges(updated)) return;
+        if (!TryApplyPricingChanges()) return;
         _service.Replace(updated);
 
         DialogResult = true;
@@ -241,6 +254,149 @@ public partial class SettingsWindow : Window
             : "";
 
         CredentialStatusText.Text = $"{stored}\n{environment}{pending}";
+    }
+
+    /// <summary>
+    /// モデル単価コンボを初期化する。既定モデル（<see cref="PricingService.DefaultModel"/>）を先頭、
+    /// 残りは序数順に並べる。既定モデルが無ければ先頭を選択するが、<c>PricingService.Load</c> が
+    /// 常に既定モデルを補うため通常は起きない。
+    /// </summary>
+    private void LoadPricingControls()
+    {
+        _loadingPricingControls = true;
+
+        _pricingOriginal = new Dictionary<string, ModelPricing>(_pricing.Snapshot(), StringComparer.Ordinal);
+        _pricingText.Clear();
+        foreach ((string model, ModelPricing pricing) in _pricingOriginal)
+        {
+            _pricingText[model] = (
+                SettingsFieldFormatting.FormatUnitPrice(pricing.InputUsdPerMillion),
+                SettingsFieldFormatting.FormatUnitPrice(pricing.OutputUsdPerMillion),
+                pricing.UpdatedAt);
+        }
+
+        List<string> models = _pricingOriginal.Keys
+            .Where(model => model != PricingService.DefaultModel)
+            .OrderBy(model => model, StringComparer.Ordinal)
+            .ToList();
+        if (_pricingOriginal.ContainsKey(PricingService.DefaultModel))
+            models.Insert(0, PricingService.DefaultModel);
+
+        PricingModelCombo.ItemsSource = models;
+        _selectedPricingModel = models.Count > 0 ? models[0] : null;
+        PricingModelCombo.SelectedIndex = models.Count > 0 ? 0 : -1;
+
+        ShowSelectedPricingModel();
+
+        _loadingPricingControls = false;
+    }
+
+    private void PricingModelCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingPricingControls) return;
+
+        StashCurrentPricingModel();
+        _selectedPricingModel = PricingModelCombo.SelectedItem as string;
+        ShowSelectedPricingModel();
+    }
+
+    /// <summary>現在表示中の3欄を、選択中モデルの「生テキスト」として <see cref="_pricingText"/> へ退避する。</summary>
+    private void StashCurrentPricingModel()
+    {
+        if (_selectedPricingModel is null) return;
+        _pricingText[_selectedPricingModel] = (PricingInputBox.Text, PricingOutputBox.Text, PricingUpdatedAtBox.Text);
+    }
+
+    private void ShowSelectedPricingModel()
+    {
+        if (_selectedPricingModel is null || !_pricingText.TryGetValue(_selectedPricingModel, out var text))
+        {
+            PricingInputBox.Text = "";
+            PricingOutputBox.Text = "";
+            PricingUpdatedAtBox.Text = "";
+            return;
+        }
+
+        PricingInputBox.Text = text.Input;
+        PricingOutputBox.Text = text.Output;
+        PricingUpdatedAtBox.Text = text.UpdatedAt;
+    }
+
+    /// <summary>
+    /// 全モデルの生テキストを検証し、<see cref="_pricing"/> へ保存する。失敗したらエラーを表示し、
+    /// 該当モデルをコンボで選択し直して該当欄へフォーカスを当ててから false を返す
+    /// （ウィンドウは閉じない）。
+    /// </summary>
+    private bool TryApplyPricingChanges()
+    {
+        StashCurrentPricingModel();
+
+        var updated = new Dictionary<string, ModelPricing>(StringComparer.Ordinal);
+        foreach ((string model, (string input, string output, string updatedAt)) in _pricingText)
+        {
+            ModelPricing original = _pricingOriginal[model];
+            if (!SettingsFieldFormatting.TryBuildPricing(
+                    input, output, updatedAt, original, out ModelPricing built, out string error))
+            {
+                ShowPricingError(model, error);
+                return false;
+            }
+
+            updated[model] = built;
+        }
+
+        try
+        {
+            _pricing.Replace(updated);
+        }
+        catch (InvalidDataException ex)
+        {
+            // TryBuildPricingを個別に通した後の二重チェック（Replace側のValidate）で弾かれるのは、
+            // 既定モデルのエントリを丸ごと削除した場合など、UIの操作だけでは起きにくいケース。
+            MessageBox.Show(
+                this,
+                "モデル単価を保存できませんでした。" + ex.Message,
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(
+                this,
+                "モデル単価を保存できませんでした。データフォルダへのアクセス権を確認してください。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
+
+        PricingErrorText.Visibility = Visibility.Collapsed;
+        return true;
+    }
+
+    private void ShowPricingError(string model, string error)
+    {
+        PricingErrorText.Text = $"{model}: {error}";
+        PricingErrorText.Visibility = Visibility.Visible;
+
+        if (model.Length > 0 && PricingModelCombo.SelectedItem as string != model)
+        {
+            _loadingPricingControls = true;
+            PricingModelCombo.SelectedItem = model;
+            _selectedPricingModel = model;
+            ShowSelectedPricingModel();
+            _loadingPricingControls = false;
+        }
+
+        // エラー文言（SettingsFieldFormatting.TryBuildPricing）から該当欄を判別してフォーカスする。
+        if (error.StartsWith("出力単価", StringComparison.Ordinal))
+            PricingOutputBox.Focus();
+        else if (error.StartsWith("更新日", StringComparison.Ordinal))
+            PricingUpdatedAtBox.Focus();
+        else
+            PricingInputBox.Focus();
     }
 
     private bool TryApplyCredentialChanges(AppSettings updated)

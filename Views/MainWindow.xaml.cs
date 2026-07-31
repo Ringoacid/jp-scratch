@@ -1755,7 +1755,7 @@ public partial class MainWindow : Window
         SuppressAutoHide();
         try
         {
-            var dialog = new SettingsWindow(_settings, _credentials) { Owner = this };
+            var dialog = new SettingsWindow(_settings, _credentials, _pricing) { Owner = this };
             dialog.ShowDialog();
         }
         finally
