@@ -58,11 +58,91 @@ internal static class CustomDateRangeParserValidation
 
         bool passed =
             validPassed && sameDayPassed && badFormatPassed && blankPassed &&
-            reversedPassed && extremeEndPassed && nearExtremeEndPassed && minStartPassed;
+            reversedPassed && extremeEndPassed && nearExtremeEndPassed && minStartPassed &&
+            RunRoundTripTests() && RunAllTimeToCustomDefaultTests();
 
         Console.WriteLine(
             "課金履歴カスタム期間の解析（正常系・書式/前後エラー・開始日/終了日いずれの上限でも例外化しない）: " +
             (passed ? "PASS" : "FAIL"));
         return passed;
+    }
+
+    /// <summary>
+    /// 課金履歴画面の項目7の自己テスト。プリセット（当日/当週/当月）が実際にクエリへ渡す
+    /// 半開区間を <see cref="CustomDateRangeParser.FormatInclusive"/> で書き戻し、その文字列を
+    /// 再び <see cref="CustomDateRangeParser.Parse"/> へ通しても同じ区間になることを確認する。
+    /// ここがずれると「当月からカスタムに切り替えただけで期間が1日ずれる」バグになる
+    /// （レビュー指摘の再現防止）。
+    /// </summary>
+    private static bool RunRoundTripTests()
+    {
+        bool RoundTrips(DateTimeOffset from, DateTimeOffset toExclusive)
+        {
+            (string fromText, string toText) = CustomDateRangeParser.FormatInclusive(from, toExclusive);
+            CustomDateRangeParser.Result reparsed = CustomDateRangeParser.Parse(fromText, toText);
+            return !reparsed.IsError && reparsed.From == from && reparsed.To == toExclusive;
+        }
+
+        // 当月相当（月初〜翌月1日00:00、排他）。
+        bool monthPreset = RoundTrips(
+            new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Local)),
+            new DateTimeOffset(new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Local)));
+
+        // 当週相当（月曜0時〜翌週月曜0時、排他）。
+        bool weekPreset = RoundTrips(
+            new DateTimeOffset(new DateTime(2026, 7, 27, 0, 0, 0, DateTimeKind.Local)),
+            new DateTimeOffset(new DateTime(2026, 8, 3, 0, 0, 0, DateTimeKind.Local)));
+
+        // 当日相当（1日だけ、排他的な終了は翌日0時）。
+        bool dayPreset = RoundTrips(
+            new DateTimeOffset(new DateTime(2026, 7, 30, 0, 0, 0, DateTimeKind.Local)),
+            new DateTimeOffset(new DateTime(2026, 7, 31, 0, 0, 0, DateTimeKind.Local)));
+
+        // 年またぎ（12月→翌年1月）でも同じく往復する。
+        bool yearBoundary = RoundTrips(
+            new DateTimeOffset(new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Local)),
+            new DateTimeOffset(new DateTime(2027, 1, 1, 0, 0, 0, DateTimeKind.Local)));
+
+        bool passed = monthPreset && weekPreset && dayPreset && yearBoundary;
+        Console.WriteLine(
+            "  プリセット→カスタム欄書き戻しの往復一致（当月/当週/当日/年またぎ）: " +
+            (passed ? "PASS" : "FAIL"));
+        return passed;
+    }
+
+    /// <summary>
+    /// 課金履歴画面のレビュー指摘の再発防止テスト。「全期間」から欄を空にした状態で
+    /// 「カスタム」へ切り替えると、<c>BillingHistoryWindow.FillCustomRangeDefaultIfBlank</c> が
+    /// 当月（<see cref="UsagePeriod.StartOfMonth"/> 〜翌月1日00:00）を既定値として書き戻す。
+    /// WPFのウィンドウはこの検証ハーネスから直接インスタンス化できない（App.xamlのリソース初期化・
+    /// STAスレッドを要するため）ため、その既定値ぶんの日付計算とフォーマット・再解析だけを
+    /// ロジックレベルで再現し、「空欄のままカスタムへ切り替えても、いきなり入力エラーにならず、
+    /// 有効な範囲として解釈できる」ことを確認する。
+    /// </summary>
+    private static bool RunAllTimeToCustomDefaultTests()
+    {
+        DateTimeOffset now = DateTimeOffset.Now;
+        DateTimeOffset monthStart = UsagePeriod.StartOfMonth(now);
+        DateTimeOffset nextMonthStart = LocalStartOfNextMonth(now);
+
+        (string fromText, string toText) = CustomDateRangeParser.FormatInclusive(monthStart, nextMonthStart);
+        CustomDateRangeParser.Result parsed = CustomDateRangeParser.Parse(fromText, toText);
+
+        bool notAnError = !parsed.IsError;
+        bool matchesComputedRange = parsed.From == monthStart && parsed.To == nextMonthStart;
+
+        bool passed = notAnError && matchesComputedRange;
+        Console.WriteLine(
+            "  全期間→カスタムの既定値（当月書き戻しがエラーにならず有効な範囲として解釈できる）: " +
+            (passed ? "PASS" : "FAIL"));
+        return passed;
+    }
+
+    // BillingHistoryWindow.LocalStartOfNextMonth と同じ計算（この検証ハーネスはWindowを参照しない）。
+    private static DateTimeOffset LocalStartOfNextMonth(DateTimeOffset value)
+    {
+        DateTime localStart = new(
+            value.LocalDateTime.Year, value.LocalDateTime.Month, 1, 0, 0, 0, DateTimeKind.Local);
+        return new DateTimeOffset(localStart.AddMonths(1));
     }
 }

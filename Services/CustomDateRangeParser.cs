@@ -59,4 +59,20 @@ internal static class CustomDateRangeParser
 
         return new Result(from, toExclusive, null);
     }
+
+    /// <summary>
+    /// プリセット期間（当日/当週/当月など）が実際にクエリへ渡す半開区間を、カスタム入力欄の
+    /// 「終了日は含む」規約に合わせて <c>yyyy-MM-dd</c> の文字列へ書き戻す。
+    /// ここで作った文字列を <see cref="Parse"/> に戻すと同じ区間になることを、プリセット切替時に
+    /// 表示がずれないための往復一致として <c>PromptValidation</c> で確認している。
+    /// </summary>
+    internal static (string From, string To) FormatInclusive(DateTimeOffset from, DateTimeOffset toExclusive)
+    {
+        DateOnly fromDate = DateOnly.FromDateTime(from.LocalDateTime);
+        // 終了日は「翌日0時（排他的）」から1日引いて「含む最終日」に変換する。
+        DateOnly toDateInclusive = DateOnly.FromDateTime(toExclusive.LocalDateTime.AddDays(-1));
+        return (
+            fromDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            toDateInclusive.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+    }
 }

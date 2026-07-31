@@ -60,11 +60,14 @@ public partial class BillingHistoryWindow : Window
         PeriodCombo.SelectedIndex = (int)PeriodOption.ThisMonth;
 
         DateOnly today = DateOnly.FromDateTime(DateTime.Now);
+        // 暫定値。直後の UpdateCustomRangeDisplay() が既定プリセット（当月）の実際の範囲へ
+        // 書き戻すので、ここでの30日固定範囲は一瞬も表示されない。
         CustomFromBox.Text = today.AddDays(-30).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         CustomToBox.Text = today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         _initializing = false;
 
         UpdateCustomRangeEnabled();
+        UpdateCustomRangeDisplay();
         LoadHistory();
     }
 
@@ -75,6 +78,7 @@ public partial class BillingHistoryWindow : Window
     {
         if (_initializing) return;
         UpdateCustomRangeEnabled();
+        UpdateCustomRangeDisplay();
         LoadHistory();
     }
 
@@ -83,6 +87,66 @@ public partial class BillingHistoryWindow : Window
         bool isCustom = (PeriodOption)PeriodCombo.SelectedIndex == PeriodOption.Custom;
         CustomFromBox.IsEnabled = isCustom;
         CustomToBox.IsEnabled = isCustom;
+    }
+
+    /// <summary>
+    /// プリセット（当日/当週/当月）選択時に、実際にクエリへ渡す範囲をカスタム欄へ書き戻す。
+    /// これをしないと「当月」を選んでいるのにカスタム欄が初期値の固定30日レンジのままになり、
+    /// 実際の集計期間と表示が食い違って見える（レビュー指摘の再現バグ）。
+    /// 「カスタム」選択時は、ユーザー入力（または他プリセットから書き戻された値）が既にあれば
+    /// 上書きしない。「全期間」は単一の日付範囲で表現できないため欄を空にする
+    /// （直前の表示を残すと「全期間を選んでいるのに特定の日付が出ている」という、
+    /// 当月のときと同種の誤読を招く）。
+    /// クエリが使う排他的な終了日時（翌日/翌月1日 00:00）は、カスタム欄の「終了日は含む」規約に
+    /// 合わせて <see cref="CustomDateRangeParser.FormatInclusive"/> で変換してから書き戻す。
+    /// </summary>
+    private void UpdateCustomRangeDisplay()
+    {
+        var option = (PeriodOption)PeriodCombo.SelectedIndex;
+
+        if (option == PeriodOption.AllTime)
+        {
+            CustomFromBox.Text = "";
+            CustomToBox.Text = "";
+            return;
+        }
+
+        if (option == PeriodOption.Custom)
+        {
+            FillCustomRangeDefaultIfBlank();
+            return;
+        }
+
+        (DateTimeOffset? From, DateTimeOffset? To)? range = ComputeRange(out _, out _);
+        if (range is null || range.Value.From is null || range.Value.To is null) return;
+
+        SetCustomRangeBoxes(range.Value.From.Value, range.Value.To.Value);
+    }
+
+    /// <summary>
+    /// 「全期間」から空欄のまま「カスタム」へ切り替えた直後にそのまま検索すると、
+    /// 「日付はyyyy-MM-dd形式で入力してください」という入力エラーがいきなり出て面食らう
+    /// （レビュー指摘）。未入力は「まだ選んでいない」中立状態として扱い、当月を初期値にする。
+    /// 既に値がある（他プリセットから書き戻された、またはユーザーが入力済み）場合は触らない。
+    /// </summary>
+    private void FillCustomRangeDefaultIfBlank()
+    {
+        if (!string.IsNullOrWhiteSpace(CustomFromBox.Text) || !string.IsNullOrWhiteSpace(CustomToBox.Text))
+            return;
+
+        DateTimeOffset now = DateTimeOffset.Now;
+        // TextChangedのたびのLoadHistory再実行を防ぎ、呼び出し元の1回のLoadHistoryへ任せる。
+        bool wasInitializing = _initializing;
+        _initializing = true;
+        SetCustomRangeBoxes(UsagePeriod.StartOfMonth(now), LocalStartOfNextMonth(now));
+        _initializing = wasInitializing;
+    }
+
+    private void SetCustomRangeBoxes(DateTimeOffset from, DateTimeOffset toExclusive)
+    {
+        (string fromText, string toText) = CustomDateRangeParser.FormatInclusive(from, toExclusive);
+        CustomFromBox.Text = fromText;
+        CustomToBox.Text = toText;
     }
 
     private void CustomRange_TextChanged(object sender, TextChangedEventArgs e)
