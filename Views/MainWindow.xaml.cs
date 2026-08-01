@@ -62,6 +62,14 @@ public partial class MainWindow : Window
     /// </summary>
     private decimal _monthUsageUsd;
 
+    /// <summary>
+    /// 当月累計を一度でも正常に読み取れたか。起動時の集計読み取りが失敗すると
+    /// <see cref="_monthUsageUsd"/> が 0 のままになり、このフラグが無いと月間上限が効かない
+    /// （fail-open）まま自動校正が課金される。一度も読めていない間は自動送信を見送る（fail-close）。
+    /// 手動校正はユーザーの明示的な操作なのでブロックしない。
+    /// </summary>
+    private bool _monthUsageKnown;
+
     /// <summary>月間上限到達のトレイ通知を「年月＋上限額」単位で一度だけに抑える状態。</summary>
     private readonly UsageLimitNotificationTracker _usageLimitNotifications = new();
 
@@ -146,6 +154,7 @@ public partial class MainWindow : Window
         TabStrip.ItemsSource = _tabs.Tabs;
         _tabs.ActiveChanged += OnActiveTabChanged;
         _tabs.TabTextChanged += OnTabTextChanged;
+        _tabs.TabRemoved += OnTabRemoved;
 
         Editor.TextArea.TextView.LineTransformers.Add(_ideographicSpace);
         Editor.TextArea.TextView.BackgroundRenderers.Add(_proofreadingRenderer);
@@ -492,6 +501,12 @@ public partial class MainWindow : Window
             ScheduleAutomaticProofreading();
     }
 
+    private void OnTabRemoved(ScratchTab tab)
+    {
+        // 閉じたタブのデバウンス状態を残さない。長時間の常駐で辞書が無制限に肥大するのを防ぐ。
+        _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
+    }
+
     private void OnProofreadingChanged()
         => RefreshProofreadingPresentation();
 
@@ -583,8 +598,25 @@ public partial class MainWindow : Window
 
     private void CloseTabButton_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is ScratchTab tab) _tabs.Close(tab);
+        if ((sender as FrameworkElement)?.DataContext is ScratchTab tab) TryCloseTab(tab);
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// タブを閉じる（ゴミ箱へ）。本文ファイルの移動に失敗したら、タブは閉じずにステータスバーで
+    /// 理由を伝える。失敗を握ると「UI から消えたのに本文ファイルは残る」乖離が起き、後で本文が
+    /// 失われたように見えるため、必ずユーザーへ伝える（要件 3.2.4: 本文はサルベージ可能）。
+    /// </summary>
+    private void TryCloseTab(ScratchTab tab)
+    {
+        try
+        {
+            _tabs.Close(tab);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            SetTransientStatus("本文ファイルをゴミ箱へ移動できなかったため、タブを閉じませんでした");
+        }
     }
 
     private void TabItem_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -625,7 +657,7 @@ public partial class MainWindow : Window
     {
         // 中クリックで閉じる（要件 3.2.1）
         if (e.ChangedButton != MouseButton.Middle) return;
-        if ((sender as FrameworkElement)?.DataContext is ScratchTab tab) _tabs.Close(tab);
+        if ((sender as FrameworkElement)?.DataContext is ScratchTab tab) TryCloseTab(tab);
         e.Handled = true;
     }
 
@@ -690,7 +722,7 @@ public partial class MainWindow : Window
             => InputBindings.Add(new KeyBinding(new RelayCommand(action), key, modifiers));
 
         Bind(Key.T, ModifierKeys.Control, () => _tabs.AddNew());
-        Bind(Key.W, ModifierKeys.Control, () => { if (_tabs.Active is { } t) _tabs.Close(t); });
+        Bind(Key.W, ModifierKeys.Control, () => { if (_tabs.Active is { } t) TryCloseTab(t); });
         Bind(Key.T, ModifierKeys.Control | ModifierKeys.Shift, RestoreClosedTab);
         Bind(Key.Tab, ModifierKeys.Control, () => _tabs.ActivateByOffset(1));
         Bind(Key.Tab, ModifierKeys.Control | ModifierKeys.Shift, () => _tabs.ActivateByOffset(-1));
@@ -806,13 +838,9 @@ public partial class MainWindow : Window
         if (!CanReactTo(proposal))
             return;
 
-        _reactions.Add(
-            _tabs.Active?.Id,
-            proposal,
-            ProofreadingReaction.RejectWithReason,
-            reason);
+        bool recorded = TryAddReaction(proposal, ProofreadingReaction.RejectWithReason, reason);
         _activeProofreading?.Reject(proposal);
-        SetTransientStatus("理由を記録して拒否しました");
+        SetTransientStatus(recorded ? "理由を記録して拒否しました" : "拒否しました（理由の記録に失敗）");
         Editor.TextArea.Focus();
         MaybeOfferStyleGuideGeneration();
     }
@@ -863,11 +891,14 @@ public partial class MainWindow : Window
         }
 
         _alternativeInProgress = true;
-        SetProposalActionsEnabled(false);
-        UpdateTrayIconState();
         ApiUsageCost? failedApiCost = null;
         try
         {
+            // 進行中フラグを立てた行と try の間には何も置かない（CLAUDE.md の不変条件）。
+            // ここで例外が出ても finally が必ず _alternativeInProgress を戻す。
+            SetProposalActionsEnabled(false);
+            UpdateTrayIconState();
+            PinModelForRun();
             SetProofreadingStatus("別案を生成しています…");
             var stopwatch = Stopwatch.StartNew();
             GeminiAlternativeResult result;
@@ -890,45 +921,32 @@ public partial class MainWindow : Window
 
             if (!CanReactTo(proposal))
             {
-                RecordedApiCall recorded = RecordSuccessfulApiCall(
-                    ApiCallTrigger.Realternative,
-                    result.Usage,
-                    result.Elapsed,
-                    suggestionCount: 0,
-                    discardedCount: 1);
-                ShowAlternativeCost(result, recorded.Cost,
+                ApiUsageCost? discardedCost = TryRecordAlternativeCall(result, 0, 1);
+                ShowAlternativeCost(result, discardedCost,
                     "生成中に本文が変更されたため、別案は適用しませんでした。");
                 return;
             }
 
-            _reactions.Add(
-                _tabs.Active?.Id,
+            // 課金済みの成果物（別案の差し替え）を最優先で適用する。リアクション記録・課金ログは
+            // 補助情報なので、記録に失敗しても適用を妨げない。従来は _reactions.Add を先に呼んで
+            // いたため、ここで例外（DB失敗・単価未登録など）が飛ぶと、課金だけ発生して別案が
+            // 失われていた。順序を「適用 → 補助記録」へ入れ替え、各記録をガードする。
+            bool applied = _activeProofreading?.TryReplaceSuggestion(
                 proposal,
-                ProofreadingReaction.RejectWithReason,
-                reason);
+                result.Alternative) == true;
+            // 理由つき拒否はユーザーの判断＝v3の学習データなので、差し替えの成否とは独立に
+            // 記録する。差し替えに失敗しても「この提案をこの理由で拒否した」事実は有効な
+            // 学習素材であり、無条件に記録していた従来の挙動へ戻す。
+            bool recorded = TryAddReaction(proposal, ProofreadingReaction.RejectWithReason, reason);
 
-            if (_activeProofreading?.TryReplaceSuggestion(
-                    proposal,
-                    result.Alternative) != true)
-            {
-                RecordedApiCall recorded = RecordSuccessfulApiCall(
-                    ApiCallTrigger.Realternative,
-                    result.Usage,
-                    result.Elapsed,
-                    suggestionCount: 0,
-                    discardedCount: 1);
-                ShowAlternativeCost(result, recorded.Cost,
-                    "有効な別案へ差し替えられませんでした。");
-                return;
-            }
-
-            RecordedApiCall recordedSuccess = RecordSuccessfulApiCall(
-                ApiCallTrigger.Realternative,
-                result.Usage,
-                result.Elapsed,
-                suggestionCount: 1,
-                discardedCount: 0);
-            ShowAlternativeCost(result, recordedSuccess.Cost, "別案を表示しました。");
+            ApiUsageCost? cost = TryRecordAlternativeCall(result, applied ? 1 : 0, applied ? 0 : 1);
+            ShowAlternativeCost(
+                result,
+                cost,
+                applied
+                    ? "別案を表示しました。"
+                    : "有効な別案へ差し替えられませんでした。" +
+                      (recorded ? "" : "\n（リアクションの記録には失敗しました）"));
         }
         catch (GeminiClientException ex)
         {
@@ -947,9 +965,22 @@ public partial class MainWindow : Window
                   (failedApiCost is null ? "（料金未確認）" : FormatCostWithJpy(failedApiCost)),
                 force: true);
         }
+        catch (Exception ex)
+        {
+            // 予期しない内部エラー。async void ハンドラから未処理で漏らすと「予期しないエラー」
+            // ダイアログになるだけで理由が分からないため、ここで明示的に伝える。
+            MessageBox.Show(
+                this,
+                "別案生成で予期しないエラーが発生しました。\n\n" + ex.Message,
+                "別案を生成できませんでした",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            SetProofreadingStatus("別案生成でエラーが発生しました", force: true);
+        }
         finally
         {
             _alternativeInProgress = false;
+            UnpinModelAfterRun();
             SetProposalActionsEnabled(true);
             UpdateTrayIconState();
             ReleaseAutoHide();
@@ -969,12 +1000,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        _reactions.Add(
-            _tabs.Active?.Id,
-            proposal,
-            ProofreadingReaction.Accept);
+        bool recorded = TryAddReaction(proposal, ProofreadingReaction.Accept);
         if (_activeProofreading?.TryApply(proposal) == true)
-            SetTransientStatus("修正を許可しました");
+            SetTransientStatus(
+                recorded ? "修正を許可しました" : "修正を許可しました（リアクション記録は失敗）");
         Editor.TextArea.Focus();
         MaybeOfferStyleGuideGeneration();
     }
@@ -987,12 +1016,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        _reactions.Add(
-            _tabs.Active?.Id,
-            proposal,
-            ProofreadingReaction.Reject);
+        bool recorded = TryAddReaction(proposal, ProofreadingReaction.Reject);
         _activeProofreading?.Reject(proposal);
-        SetTransientStatus("修正を拒否しました");
+        SetTransientStatus(recorded ? "修正を拒否しました" : "修正を拒否しました（リアクション記録は失敗）");
         Editor.TextArea.Focus();
         MaybeOfferStyleGuideGeneration();
     }
@@ -1013,7 +1039,8 @@ public partial class MainWindow : Window
         {
             var dialog = new ProofreadingReasonDialog(
                 _reactions.GetRecentReasons(),
-                generatesAlternative)
+                generatesAlternative,
+                ActiveProviderName())
             {
                 Owner = this,
             };
@@ -1036,13 +1063,14 @@ public partial class MainWindow : Window
 
     private void ShowAlternativeCost(
         GeminiAlternativeResult result,
-        ApiUsageCost cost,
+        ApiUsageCost? cost,
         string message)
     {
+        string costText = cost is null ? "確認できませんでした" : FormatCostWithJpy(cost);
         string summary =
             $"{message}\n\n入力 {result.Usage.PromptTokens:N0}、" +
             $"出力・推論 {result.Usage.BillableOutputTokens:N0} tokens\n" +
-            $"料金 {FormatCostWithJpy(cost)}";
+            $"料金 {costText}";
 
         MessageBox.Show(
             this,
@@ -1053,8 +1081,55 @@ public partial class MainWindow : Window
         SetProofreadingStatus(
             $"別案 ↑{result.Usage.PromptTokens:N0} " +
             $"↓{result.Usage.BillableOutputTokens:N0} tok  " +
-            FormatCostWithJpy(cost),
+            (cost is null ? "料金未確認" : FormatCostWithJpy(cost)),
             force: true);
+    }
+
+    /// <summary>
+    /// 別案生成の課金ログを記録する。単価未登録・DB失敗などの記録失敗は握りつぶして
+    /// <c>null</c> を返す（料金は「確認できません」として表示する）。課金済みの別案そのものは
+    /// 呼び出し側で既に適用済みのため、ここが失敗しても結果は失われない。
+    /// </summary>
+    private ApiUsageCost? TryRecordAlternativeCall(
+        GeminiAlternativeResult result,
+        int suggestionCount,
+        int discardedCount)
+    {
+        try
+        {
+            return RecordSuccessfulApiCall(
+                ApiCallTrigger.Realternative,
+                result.Usage,
+                result.Elapsed,
+                suggestionCount,
+                discardedCount).Cost;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// リアクション（許可・拒否・理由つき拒否）の学習データを記録する。記録失敗（DBエラー等）は
+    /// 提案操作の適用や料金表示を妨げない（補助情報扱い）が、黙って消すとリアクション総数が
+    /// 伸びずスタイルガイド自動生成のしきい値が静かに遠のくため、成否を bool で返して呼び出し側が
+    /// ステータス表示へ反映する。
+    /// </summary>
+    private bool TryAddReaction(
+        ProofreadingProposal proposal,
+        ProofreadingReaction reaction,
+        string? reason = null)
+    {
+        try
+        {
+            _reactions.Add(_tabs.Active?.Id, proposal, reaction, reason);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     // ================= 校正の実行制御 =================
@@ -1086,6 +1161,12 @@ public partial class MainWindow : Window
         if (IsMonthlyLimitReached())
             return;
 
+        // 当月累計が一度も読めていない（起動時の集計読み取りが失敗した）間は、自動送信を
+        // fail-close で見送る。0 のまま走らせると月間上限が効かずに課金され続けるため。
+        // 次の RefreshUsageDisplay が成功した時点で _monthUsageKnown が立ち、再開される。
+        if (!_monthUsageKnown)
+            return;
+
         DateTimeOffset? due = _proofreadingSchedule.GetAutomaticDueAt(tab.Id);
         if (due is null)
             return;
@@ -1099,6 +1180,16 @@ public partial class MainWindow : Window
 
     private void RunManualProofreading()
         => _ = RunProofreadingAsync(manual: true);
+
+    /// <summary>
+    /// 1回の実行で使うモデルを固定する。_proofreadingClient は常に <see cref="ProofreadingClientRouter"/> だが
+    /// フィールド型はインターフェースのため、ルーター固有のピン留めを as で取り出して呼ぶ。
+    /// </summary>
+    private void PinModelForRun()
+        => (_proofreadingClient as ProofreadingClientRouter)?.PinModel(_proofreadingClient.Model);
+
+    private void UnpinModelAfterRun()
+        => (_proofreadingClient as ProofreadingClientRouter)?.UnpinModel();
 
     /// <summary>
     /// 要件3.4.2: リアクションが一定件数たまるごとにスタイルガイド生成を提案する。
@@ -1187,8 +1278,19 @@ public partial class MainWindow : Window
             return;
         }
 
-        IReadOnlyList<FewShotCandidate> candidates =
-            _reactions.GetFewShotCandidates(StyleGuideSourceSelector.MaxReactions);
+        IReadOnlyList<FewShotCandidate> candidates;
+        try
+        {
+            candidates = _reactions.GetFewShotCandidates(StyleGuideSourceSelector.MaxReactions);
+        }
+        catch (Exception)
+        {
+            // ここで失敗するとカーソルは既に進んでいる（次回の確認は次のしきい値まで来ない）ため、
+            // 黙って消さず、生成を再実行できる状態であることを伝える。
+            SetProofreadingStatus("スタイルガイドの素材を読み込めませんでした", force: true);
+            return;
+        }
+
         StyleGuideSourceSelection source = StyleGuideSourceSelector.Select(candidates);
         if (source.Examples.Count == 0)
         {
@@ -1196,10 +1298,17 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 生成中（数秒）にフォーカスが外れて自動非表示になると、完了時のメッセージが見えないため、
+        // API 呼び出しの間は自動非表示を抑止する。フラグ設定より前に出しておく（フラグと無関係で
+        // あり、これより後で例外が出ても finally の ReleaseAutoHide と必ず対になる）。
+        SuppressAutoHide();
         _styleGuideGenerationInProgress = true;
-        UpdateTrayIconState();
         try
         {
+            // 進行中フラグを立てた行と try の間には何も置かない（CLAUDE.md の不変条件）。
+            // ここで例外が出ても finally が必ず _styleGuideGenerationInProgress を戻す。
+            UpdateTrayIconState();
+            PinModelForRun();
             SetProofreadingStatus("スタイルガイドを生成しています…");
             var stopwatch = Stopwatch.StartNew();
             GeminiStyleGuideResult result;
@@ -1211,7 +1320,14 @@ public partial class MainWindow : Window
             {
                 stopwatch.Stop();
                 _apiErrorSticky = true;
-                RecordFailedApiCall(ApiCallTrigger.StyleGuide, ex, stopwatch.Elapsed);
+                try
+                {
+                    RecordFailedApiCall(ApiCallTrigger.StyleGuide, ex, stopwatch.Elapsed);
+                }
+                catch (Exception)
+                {
+                    // 課金ログの記録失敗は補助情報。API エラー自体の通知（下のダイアログ）は止めない。
+                }
                 MessageBox.Show(
                     this,
                     "スタイルガイドを生成できませんでした。\n\n" + ex.Message,
@@ -1223,12 +1339,25 @@ public partial class MainWindow : Window
             }
 
             _apiErrorSticky = false;
-            RecordedApiCall recorded = RecordSuccessfulApiCall(
-                ApiCallTrigger.StyleGuide,
-                result.Usage,
-                result.Elapsed,
-                suggestionCount: 1,
-                discardedCount: 0);
+            // 課金ログの記録失敗（単価未登録・DBエラー等）は補助情報。生成結果そのものの保存を
+            // 妨げないようガードし、料金は「確認できません」として表示する。
+            ApiUsageCost? recordedCost;
+            try
+            {
+                recordedCost = RecordSuccessfulApiCall(
+                    ApiCallTrigger.StyleGuide,
+                    result.Usage,
+                    result.Elapsed,
+                    suggestionCount: 1,
+                    discardedCount: 0).Cost;
+            }
+            catch (Exception)
+            {
+                recordedCost = null;
+            }
+            string costText = recordedCost is null
+                ? "料金は確認できませんでした"
+                : FormatCostWithJpy(recordedCost);
 
             // 課金済みの生成結果をここで失うのが最悪なので、保存の成否を必ずユーザーへ伝える。
             // RecordApiCallと違い黙って握りつぶさない（課金ログはロギングの補助情報だが、
@@ -1250,11 +1379,11 @@ public partial class MainWindow : Window
                     this,
                     "スタイルガイドを生成しました。設定画面で内容を確認・編集できます。\n\n" +
                     $"入力 {result.Usage.PromptTokens:N0}、出力・推論 {result.Usage.BillableOutputTokens:N0} tokens\n" +
-                    $"料金 {FormatCostWithJpy(recorded.Cost)}",
+                    $"料金 {costText}",
                     "スタイルガイドの生成",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
-                SetProofreadingStatus("スタイルガイドを生成しました " + FormatCostWithJpy(recorded.Cost), force: true);
+                SetProofreadingStatus("スタイルガイドを生成しました " + costText, force: true);
             }
             else
             {
@@ -1267,12 +1396,27 @@ public partial class MainWindow : Window
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 SetProofreadingStatus(
-                    "スタイルガイドの保存に失敗しました " + FormatCostWithJpy(recorded.Cost), force: true);
+                    "スタイルガイドの保存に失敗しました " + costText, force: true);
             }
+        }
+        catch (Exception ex)
+        {
+            // 予期しない内部エラー。fire-and-forget（_ = ...）から未観測タスク例外として消えると
+            // ユーザーに何も伝わらないため、ここで拾って伝える（RunProofreadingAsync・別案生成と
+            // 同じ経路に揃える）。
+            MessageBox.Show(
+                this,
+                "スタイルガイド生成で予期しないエラーが発生しました。\n\n" + ex.Message,
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            SetProofreadingStatus("スタイルガイド生成でエラーが発生しました", force: true);
         }
         finally
         {
+            ReleaseAutoHide();
             _styleGuideGenerationInProgress = false;
+            UnpinModelAfterRun();
             UpdateTrayIconState();
         }
     }
@@ -1319,6 +1463,8 @@ public partial class MainWindow : Window
         if (!manual &&
             (!_settings.Current.AutoProofreadingEnabled ||
              !_proofreadingSchedule.IsAutomaticDue(tab.Id, DateTimeOffset.Now) ||
+             // 当月累計が一度も読めていない間は自動送信を見送る（fail-close。ScheduleAutomaticProofreading と同じ判定）。
+             !_monthUsageKnown ||
              IsMonthlyLimitReached()))
         {
             // 発火条件5（月間上限）を含め、ここで弾かれた場合もScheduleAutomaticProofreadingを
@@ -1329,7 +1475,7 @@ public partial class MainWindow : Window
 
         if (NativeMethods.HasImeComposition(_handle))
         {
-            SetProofreadingStatus("IME変換の確定後に校正します", force: true);
+            SetProofreadingStatus("IME変換の確定後に校正します");
             if (!manual)
             {
                 _proofreadingTimer.Interval = TimeSpan.FromMilliseconds(500);
@@ -1358,7 +1504,7 @@ public partial class MainWindow : Window
         {
             if (!manual)
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
-            SetProofreadingStatus("校正が必要な変更はありません", force: true);
+            SetProofreadingStatus("校正が必要な変更はありません");
             return;
         }
 
@@ -1377,7 +1523,7 @@ public partial class MainWindow : Window
         {
             if (!manual)
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
-            SetProofreadingStatus("校正をキャンセルしました", force: true);
+            SetProofreadingStatus("校正をキャンセルしました");
             return;
         }
 
@@ -1409,10 +1555,6 @@ public partial class MainWindow : Window
         }
 
         _proofreadingRunInProgress = true;
-        _proofreadingTimer.Stop();
-        SetProposalActionsEnabled(false);
-        UpdateTrayIconState();
-
         List<(ProofreadingRequest Request, GeminiProofreadingResult Result)> results = [];
         List<long> successfulApiCallIds = [];
         List<ApiUsageCost> responseCosts = [];
@@ -1420,12 +1562,24 @@ public partial class MainWindow : Window
         bool resultsApplied = false;
         try
         {
+            // 進行中フラグを立てた行と try の間には何も置かない（CLAUDE.md の不変条件）。
+            // ここで例外が出ても finally が必ず _proofreadingRunInProgress を戻す。
+            _proofreadingTimer.Stop();
+            // 実行中に設定画面でモデルを切り替えても、同一実行の途中でプロバイダ・単価が揺れないように
+            // 実行開始時のモデルへ固定する（finally で解除）。
+            PinModelForRun();
+            SetProposalActionsEnabled(false);
+            UpdateTrayIconState();
             for (int index = 0; index < plan.Requests.Count; index++)
             {
                 if (!ReferenceEquals(tab, _tabs.Active) ||
                     !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
                 {
                     MarkApiCallsDiscarded(successfulApiCallIds);
+                    // 完了済みの段落だけ送信済みとして記録し、内容が変わっていない段落の
+                    // 再送（二重課金）を防ぐ。未送信の段落は次回の自動プランで再試行される。
+                    if (!selectionRun)
+                        tab.ProofreadingPlanner.MarkSent(plan, index);
                     SetProofreadingStatus("本文が変更されたため校正結果を破棄しました", force: true);
                     return;
                 }
@@ -1443,6 +1597,8 @@ public partial class MainWindow : Window
                     !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
                 {
                     MarkApiCallsDiscarded(successfulApiCallIds);
+                    if (!selectionRun)
+                        tab.ProofreadingPlanner.MarkSent(plan, index);
                     SetProofreadingStatus("本文が変更されたため残りの校正を中止しました", force: true);
                     return;
                 }
@@ -1490,8 +1646,10 @@ public partial class MainWindow : Window
 
             if (!selectionRun)
             {
+                // API が成功したので、送信時スナップショットの段落ハッシュを送信済みとして記録する。
+                // これは本文変更チェックより前に済ませてよい（変更された段落はハッシュが変わり
+                // 次回再送され、変更されていない段落は二重課金を避けるため再送しない）。
                 tab.ProofreadingPlanner.MarkSent(plan);
-                _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
             }
 
             if (!ReferenceEquals(tab, _tabs.Active) ||
@@ -1500,6 +1658,15 @@ public partial class MainWindow : Window
                 MarkApiCallsDiscarded(successfulApiCallIds);
                 SetProofreadingStatus("本文が変更されたため校正結果を破棄しました", force: true);
                 return;
+            }
+
+            if (!selectionRun)
+            {
+                // pending 変更の消費は「結果が実際に適用された」ことを確認した後で行う。
+                // 本文変更により結果を破棄した場合はここに到達せず、送信中に打った最後のキーの
+                // pending が残るため、finally の ScheduleAutomaticProofreading が変更された段落を
+                // 自動で再送する（次のキー入力まで待たされない）。
+                _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
             }
 
             string corrected = ProofreadingResultMerger.Merge(plan, results);
@@ -1537,15 +1704,26 @@ public partial class MainWindow : Window
                 : "校正に失敗しました " + FormatCostWithJpy(responseCosts),
                 force: true);
         }
-        catch
+        catch (Exception ex)
         {
+            // 予期しない内部エラー。以前は throw して fire-and-forget の手動経路では
+            // 未観測タスク例外として黙って消えていた（自動経路との可視性の非対称）。
+            // ここで拾ってユーザーへ伝える。本文はこの時点では変更されていない（置換は
+            // ユーザー操作時のみ）ため、データは安全。
             if (!resultsApplied)
                 MarkApiCallsDiscarded(successfulApiCallIds);
-            throw;
+            MessageBox.Show(
+                this,
+                "校正処理で予期しないエラーが発生しました。\n\n" + ex.Message,
+                "校正できませんでした",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            SetProofreadingStatus("校正処理でエラーが発生しました", force: true);
         }
         finally
         {
             _proofreadingRunInProgress = false;
+            UnpinModelAfterRun();
             SetProposalActionsEnabled(true);
             UpdateTrayIconState();
             ScheduleAutomaticProofreading();
@@ -1821,6 +1999,7 @@ public partial class MainWindow : Window
                 monthStart, LocalStartOfNextMonth(now));
 
             _monthUsageUsd = month.UsdCost;
+            _monthUsageKnown = true;
             decimal limit = _settings.Current.MonthlyLimitUsd;
             UsageLimitState limitState = UsageLimitService.Evaluate(
                 _monthUsageUsd, limit, _settings.Current.MonthlyLimitWarningRatio);
@@ -2062,7 +2241,14 @@ public partial class MainWindow : Window
 
     private void RestoreClosedTab()
     {
-        if (_tabs.RestoreLastClosed() is null) SetTransientStatus("復元できるタブがありません");
+        try
+        {
+            if (_tabs.RestoreLastClosed() is null) SetTransientStatus("復元できるタブがありません");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            SetTransientStatus("タブを復元できませんでした（本文ファイルを移動できません）");
+        }
     }
 
     // ================= 各種ウィンドウ =================
@@ -2235,9 +2421,16 @@ public partial class MainWindow : Window
         _statusMessageUntil = DateTime.UtcNow.AddSeconds(4);
     }
 
-    /// <summary>校正処理中の一時的な状態をステータスバーへ表示する。</summary>
+    /// <summary>
+    /// 校正処理中の一時的な状態をステータスバーへ表示する。
+    /// <paramref name="force"/> が true のときは、長時間の送信中に定期更新（ヒント文）へ
+    /// 上書きされないよう、通常より長く保持する。
+    /// </summary>
     private void SetProofreadingStatus(string message, bool force = false)
-        => SetTransientStatus(message);
+    {
+        StatusRight.Text = message;
+        _statusMessageUntil = DateTime.UtcNow.AddSeconds(force ? 30 : 4);
+    }
 
     private string? GetActiveApiKey()
         => ProofreadingModelCatalog.IsOpenAi(_proofreadingClient.Model)

@@ -108,7 +108,8 @@
                                 <TextBox x:Name="ToggleHotkeyBox" Grid.Column="1"
                                          Style="{StaticResource AppTextBox}"
                                          IsReadOnly="True"
-                                         PreviewKeyDown="HotkeyBox_PreviewKeyDown" />
+                                         PreviewKeyDown="HotkeyBox_PreviewKeyDown"
+                                         LostFocus="HotkeyBox_LostFocus" />
                             </Grid>
 
                             <Grid Margin="0,4,0,4">
@@ -120,7 +121,8 @@
                                 <TextBox x:Name="CopyHideHotkeyBox" Grid.Column="1"
                                          Style="{StaticResource AppTextBox}"
                                          IsReadOnly="True"
-                                         PreviewKeyDown="HotkeyBox_PreviewKeyDown" />
+                                         PreviewKeyDown="HotkeyBox_PreviewKeyDown"
+                                         LostFocus="HotkeyBox_LostFocus" />
                             </Grid>
 
                             <!-- ===== 保存 ===== -->

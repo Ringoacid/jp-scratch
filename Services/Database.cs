@@ -11,6 +11,7 @@ internal sealed class Database : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly Lock _gate = new();
+    private bool _disposed;
 
     /// <summary>
     /// Microsoft.Data.Sqlite は、トランザクション実行中のコマンドに Transaction を明示しないと例外を投げる。
@@ -47,10 +48,13 @@ internal sealed class Database : IDisposable
     {
         var version = Convert.ToInt32(ScalarInternal("PRAGMA user_version;") ?? 0);
 
+        // v1/v2 の DDL も v3/v4 と同じ理由で IF NOT EXISTS で書く。DDL が通った直後・
+        // PRAGMA user_version の更新前に中断すると、次回起動で同じ CREATE を踏み、
+        // 「table already exists」で起動不能になる（v1/v2 は従来素の CREATE だった）。
         if (version < 1)
         {
             ExecuteInternal("""
-                CREATE TABLE tabs (
+                CREATE TABLE IF NOT EXISTS tabs (
                     id            TEXT PRIMARY KEY,
                     title         TEXT NOT NULL,
                     is_auto_title INTEGER NOT NULL DEFAULT 1,
@@ -61,8 +65,8 @@ internal sealed class Database : IDisposable
                     updated_at    TEXT NOT NULL,
                     deleted_at    TEXT
                 );
-                CREATE INDEX idx_tabs_sort    ON tabs(sort_order);
-                CREATE INDEX idx_tabs_deleted ON tabs(deleted_at);
+                CREATE INDEX IF NOT EXISTS idx_tabs_sort    ON tabs(sort_order);
+                CREATE INDEX IF NOT EXISTS idx_tabs_deleted ON tabs(deleted_at);
                 """);
             ExecuteInternal("PRAGMA user_version=1;");
         }
@@ -70,7 +74,7 @@ internal sealed class Database : IDisposable
         if (version < 2)
         {
             ExecuteInternal("""
-                CREATE TABLE api_calls (
+                CREATE TABLE IF NOT EXISTS api_calls (
                     id             INTEGER PRIMARY KEY AUTOINCREMENT,
                     called_at      TEXT    NOT NULL,
                     trigger_type   TEXT    NOT NULL,
@@ -87,9 +91,9 @@ internal sealed class Database : IDisposable
                     suggestion_cnt INTEGER NOT NULL DEFAULT 0,
                     discarded_cnt  INTEGER NOT NULL DEFAULT 0
                 );
-                CREATE INDEX idx_api_calls_at ON api_calls(called_at);
+                CREATE INDEX IF NOT EXISTS idx_api_calls_at ON api_calls(called_at);
 
-                CREATE TABLE reactions (
+                CREATE TABLE IF NOT EXISTS reactions (
                     id             INTEGER PRIMARY KEY AUTOINCREMENT,
                     reacted_at     TEXT NOT NULL,
                     api_call_id    INTEGER REFERENCES api_calls(id),
@@ -102,10 +106,10 @@ internal sealed class Database : IDisposable
                     user_reason    TEXT,
                     used_in_prompt INTEGER NOT NULL DEFAULT 0
                 );
-                CREATE INDEX idx_reactions_at  ON reactions(reacted_at);
-                CREATE INDEX idx_reactions_rxn ON reactions(reaction);
+                CREATE INDEX IF NOT EXISTS idx_reactions_at  ON reactions(reacted_at);
+                CREATE INDEX IF NOT EXISTS idx_reactions_rxn ON reactions(reaction);
 
-                CREATE TABLE style_guides (
+                CREATE TABLE IF NOT EXISTS style_guides (
                     id               INTEGER PRIMARY KEY AUTOINCREMENT,
                     generated_at     TEXT    NOT NULL,
                     content          TEXT    NOT NULL,
@@ -114,7 +118,7 @@ internal sealed class Database : IDisposable
                     is_user_edited   INTEGER NOT NULL DEFAULT 0
                 );
 
-                CREATE TABLE fx_rates (
+                CREATE TABLE IF NOT EXISTS fx_rates (
                     rate_date  TEXT PRIMARY KEY,
                     usd_jpy    REAL NOT NULL,
                     fetched_at TEXT NOT NULL
@@ -183,6 +187,7 @@ internal sealed class Database : IDisposable
     {
         lock (_gate)
         {
+            ThrowIfDisposed();
             using var cmd = CreateCommand(sql);
             foreach (var (name, value) in parameters) cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
             return cmd.ExecuteNonQuery();
@@ -193,6 +198,7 @@ internal sealed class Database : IDisposable
     {
         lock (_gate)
         {
+            ThrowIfDisposed();
             using var cmd = CreateCommand(sql);
             foreach (var (name, value) in parameters) cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
             using var reader = cmd.ExecuteReader();
@@ -205,6 +211,7 @@ internal sealed class Database : IDisposable
     {
         lock (_gate)
         {
+            ThrowIfDisposed();
             using var tx = _connection.BeginTransaction();
             _activeTransaction = tx;
             try
@@ -240,13 +247,24 @@ internal sealed class Database : IDisposable
 
     public void Dispose()
     {
-        try
+        lock (_gate)
         {
-            ExecuteInternal("PRAGMA wal_checkpoint(TRUNCATE);");
-        }
-        catch (SqliteException) { }
+            if (_disposed) return;
 
-        _connection.Dispose();
-        SqliteConnection.ClearAllPools();
+            try
+            {
+                ExecuteInternal("PRAGMA wal_checkpoint(TRUNCATE);");
+            }
+            catch (SqliteException) { }
+
+            _connection.Dispose();
+            _disposed = true;
+            SqliteConnection.ClearAllPools();
+        }
+    }
+
+    private void ThrowIfDisposed()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
     }
 }

@@ -139,15 +139,19 @@ internal static class FewShotSelector
     {
         var set = new HashSet<string>(StringComparer.Ordinal);
         string trimmed = text.Trim();
-        if (trimmed.Length < 2)
+
+        // UTF-16 の Substring(i,2) はサロゲートペア（絵文字など）を途中で分割するため、
+        // コードポイント単位（Rune）で2-gramを作る。
+        string[] runes = trimmed.EnumerateRunes().Select(rune => rune.ToString()).ToArray();
+        if (runes.Length < 2)
         {
-            if (trimmed.Length == 1)
-                set.Add(trimmed);
+            if (runes.Length == 1)
+                set.Add(runes[0]);
             return set;
         }
 
-        for (int i = 0; i < trimmed.Length - 1; i++)
-            set.Add(trimmed.Substring(i, 2));
+        for (int i = 0; i < runes.Length - 1; i++)
+            set.Add(runes[i] + runes[i + 1]);
         return set;
     }
 }
@@ -185,8 +189,11 @@ internal static class StyleGuideSourceSelector
                 candidate.Reaction,
                 candidate.UserReason);
             string line = example.FormatLine();
+
+            // 1行だけで予算を超える異常に長い例は、few-shot 側と同じく静かにスキップする。
+            // break にすると直近の1件が長いだけで、それより古い収まる例が一切選ばれなくなる。
             if (totalCharacters + line.Length > MaxTotalCharacters)
-                break;
+                continue;
 
             selected.Add(example);
             totalCharacters += line.Length;

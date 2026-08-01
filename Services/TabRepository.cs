@@ -49,10 +49,17 @@ internal sealed class TabRepository(Database db)
     }
 
     /// <summary>本文をディスクから読み込んで Document に流し込む。</summary>
+    /// <exception cref="IOException">本文ファイルがあるのに読み込めないとき。呼び出し側で
+    /// 空として扱わず、上書きを防ぐためにタブを開かない等の対処をする。</exception>
     public void LoadBody(ScratchTab tab)
     {
         var path = tab.DeletedAt is null ? AppPaths.TabFile(tab.Id) : AppPaths.TrashFile(tab.Id);
-        var text = AtomicFile.ReadAllTextOrEmpty(path);
+        if (!AtomicFile.TryReadAllText(path, out var text))
+        {
+            // 読めなかった本文を空で扱うと、後の自動保存で元の内容を上書きしてしまう。
+            // 「読めたが空」と区別して例外にする。
+            throw new IOException($"本文ファイルを読み込めませんでした: {path}");
+        }
 
         tab.Document.Text = text;
         // 復元直後は「保存済み」の状態にしておく。ここで UndoStack をクリアしないと
@@ -122,45 +129,48 @@ internal sealed class TabRepository(Database db)
         tab.IsDirty = false;
     }
 
-    /// <summary>タブを閉じる = ゴミ箱へ移す。本文ファイルも trash\ へ移動する。</summary>
+    /// <summary>
+    /// タブを閉じる = ゴミ箱へ移す。本文ファイルも trash\ へ移動する。
+    /// 本文ファイルの移動に失敗したら例外を投げる（呼び出し元はタブを閉じずに済ませる）。
+    /// 失敗を握ると「DB はゴミ箱済み・本文ファイルは残ったまま」の乖離が生じるため、
+    /// 例外で伝える（要件 3.2.4: 本文はメモ帳でサルベージできることが前提）。
+    /// </summary>
     public void MoveToTrash(ScratchTab tab)
     {
-        tab.DeletedAt = DateTime.Now;
-        tab.UpdatedAt = DateTime.Now;
-
         var from = AppPaths.TabFile(tab.Id);
         var to = AppPaths.TrashFile(tab.Id);
-        try
-        {
-            if (File.Exists(from))
-            {
-                if (File.Exists(to)) File.Delete(to);
-                File.Move(from, to);
-            }
-            else
-            {
-                AtomicFile.WriteAllText(to, tab.Document.Text);
-            }
-        }
-        catch (IOException) { }
 
+        // 本文ファイルの移動・書き出しを先に済ませる。失敗したら DB・メモリの状態は変えない。
+        if (File.Exists(from))
+        {
+            if (File.Exists(to)) File.Delete(to);
+            File.Move(from, to);
+        }
+        else
+        {
+            AtomicFile.WriteAllText(to, tab.Document.Text);
+        }
+
+        tab.DeletedAt = DateTime.Now;
+        tab.UpdatedAt = DateTime.Now;
         Upsert(tab);
     }
 
-    /// <summary>ゴミ箱から戻す（Ctrl+Shift+T）。</summary>
+    /// <summary>
+    /// ゴミ箱から戻す（Ctrl+Shift+T）。
+    /// 本文ファイルの移動に失敗したら例外を投げ、DB（deleted_at）は更新しない。
+    /// 失敗を握ると「DB は復元済み・本文ファイルが無い」になり、1文字打って保存した瞬間に
+    /// 元の本文が失われる（実データの安全に関わるため、黙らせない）。
+    /// </summary>
     public void RestoreFromTrash(ScratchTab tab, int sortOrder)
     {
         var from = AppPaths.TrashFile(tab.Id);
         var to = AppPaths.TabFile(tab.Id);
-        try
+        if (File.Exists(from))
         {
-            if (File.Exists(from))
-            {
-                if (File.Exists(to)) File.Delete(to);
-                File.Move(from, to);
-            }
+            if (File.Exists(to)) File.Delete(to);
+            File.Move(from, to);
         }
-        catch (IOException) { }
 
         tab.DeletedAt = null;
         tab.SortOrder = sortOrder;
@@ -186,22 +196,25 @@ internal sealed class TabRepository(Database db)
             },
             ("$threshold", threshold));
 
+        var purgedCount = 0;
         foreach (var id in expiredIds)
         {
             try
             {
                 var path = AppPaths.TrashFile(id);
                 if (File.Exists(path)) File.Delete(path);
+
+                // 本文ファイルを削除できた（または既に無い）行だけ消す。失敗した行はDBに
+                // 残して、次回起動時に本文ファイルの削除を再試行できるようにする。
+                purgedCount += db.Execute(
+                    "DELETE FROM tabs WHERE id = $id AND deleted_at IS NOT NULL AND deleted_at < $threshold;",
+                    ("$id", id), ("$threshold", threshold));
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
 
-        if (expiredIds.Count > 0)
-            db.Execute("DELETE FROM tabs WHERE deleted_at IS NOT NULL AND deleted_at < $threshold;",
-                ("$threshold", threshold));
-
-        return expiredIds.Count;
+        return purgedCount;
     }
 
     private static DateTime ParseDate(string value)

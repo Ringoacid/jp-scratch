@@ -43,11 +43,16 @@ internal static class SettingsFieldFormatting
     /// </summary>
     internal static string FormatUnitPrice(decimal value) => UsageFormatting.FormatUsd(value);
 
-    /// <summary>単価は非負の decimal のみ受け付ける（InvariantCulture 固定）。</summary>
+    /// <summary>
+    /// 単価は非負・上限以下の decimal のみ受け付ける（InvariantCulture 固定）。
+    /// 上限は <see cref="PricingService.MaxUnitPriceUsdPerMillion"/>。上限がないと巨大な値を
+    /// 保存したとき <see cref="PricingService.Calculate"/> の decimal 演算がオーバーフローする。
+    /// </summary>
     internal static bool TryParseUnitPrice(string text, out decimal value) =>
         decimal.TryParse(
             (text ?? "").Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out value) &&
-        value >= 0m;
+        value >= 0m &&
+        value <= PricingService.MaxUnitPriceUsdPerMillion;
 
     /// <summary>更新日は yyyy-MM-dd 厳密（InvariantCulture 固定）。前後の空白は許す。</summary>
     internal static bool TryParseUpdatedAt(string text, out string normalized)

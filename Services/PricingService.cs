@@ -36,6 +36,14 @@ internal sealed class PricingService
     internal const string DefaultModel = ProofreadingModelCatalog.GeminiModel;
     internal const string OpenAiModel = ProofreadingModelCatalog.OpenAiModel;
 
+    /// <summary>
+    /// 単価（USD/1M tokens）の上限。実在するモデルよりはるかに大きいが、
+    /// int.MaxValue トークン × この単価でも decimal のオーバーフロー（最大約 7.9e28）を
+    /// 起こさない範囲。上限がないと、設定画面で巨大な値を保存したときに
+    /// <see cref="Calculate"/> が OverflowException を投げて校正が落ちる。
+    /// </summary>
+    internal const decimal MaxUnitPriceUsdPerMillion = 1_000_000_000m;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -174,7 +182,9 @@ internal sealed class PricingService
         {
             if (string.IsNullOrWhiteSpace(model) || pricing is null ||
                 pricing.InputUsdPerMillion < 0 ||
+                pricing.InputUsdPerMillion > MaxUnitPriceUsdPerMillion ||
                 pricing.OutputUsdPerMillion < 0 ||
+                pricing.OutputUsdPerMillion > MaxUnitPriceUsdPerMillion ||
                 !DateOnly.TryParseExact(
                     pricing.UpdatedAt,
                     "yyyy-MM-dd",

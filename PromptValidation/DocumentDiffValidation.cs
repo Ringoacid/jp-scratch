@@ -68,7 +68,32 @@ internal static class DocumentDiffValidation
             $"TextAnchor追従・失効: {(anchorsPass ? "PASS" : "FAIL")}");
         passed &= anchorsPass;
 
+        bool relaxedPass = RunRelaxedModeTests();
+        Console.WriteLine(
+            $"全文差分（緩和モード）: {(relaxedPass ? "PASS" : "FAIL")}");
+        passed &= relaxedPass;
+
         return passed;
+    }
+
+    /// <summary>
+    /// 段落単位で検証済みの差分を全文へ統合した再検証（relaxedGlobalLimits=true）の回帰テスト。
+    /// 段落ごとの上限（変更箇所数 MaxChanges=50）を合計が超えても、個々のリクエストが上限を
+    /// 通過していれば全体を破棄しないこと（「50箇所超で有効な結果が丸ごと消える」バグの再発防止）。
+    /// </summary>
+    private static bool RunRelaxedModeTests()
+    {
+        string source = string.Join(
+            "\n", Enumerable.Range(0, 60).Select(_ => "これは誤りアです。"));
+        string corrected = string.Join(
+            "\n", Enumerable.Range(0, 60).Select(_ => "これは誤りがです。"));
+
+        DocumentDiffResult strict =
+            DocumentDiff.Create(source, corrected);
+        DocumentDiffResult relaxed =
+            DocumentDiff.Create(source, corrected, relaxedGlobalLimits: true);
+
+        return !strict.Accepted && relaxed.Accepted && relaxed.Changes.Count == 60;
     }
 
     internal static int AnalyzeSavedResults(

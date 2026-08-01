@@ -50,11 +50,25 @@ installer/         WiX v5 による MSI
 
 - **本文は必ずプレーンテキストで残す。** アプリが壊れてもメモ帳でサルベージできることが要件そのもの
   （requirements.md 3.2.4）。書き込みは一時ファイルに保存してから `File.Replace` で置き換える（`Infrastructure/AtomicFile.cs`）。
+- **ゴミ箱移動/復元は「ファイル操作を先、DB更新を後」**（`TabRepository.MoveToTrash` / `RestoreFromTrash`）。
+  逆にすると「UI は閉じたのに本文ファイルは残る」「DB は復元済みなのに本文ファイルが無い」という乖離が生じ、
+  1文字打って保存した瞬間に元の本文が失われる。`MoveToTrash` / `RestoreFromTrash` はファイル移動に失敗したら
+  例外を投げ、呼び出し元（`MainWindow` のタブ操作・`TabManager.RestoreLastClosed`）がそれを捕捉して
+  タブを閉じず・ゴミ箱へロールバックしてユーザーに伝える。
+- **`TabRepository.LoadBody` は読めないとき例外を投げる**。本文ファイルがあるのに読み込めなかった場合に
+  空文字で開くと、次の保存で元の本文を上書きする。`AtomicFile.TryReadAllText` の失敗は「読めたが空」と区別して
+  `IOException` にする。`TabManager.Initialize` は失敗タブを `LoadFailures` に記録して開かずに残し、
+  起動時に警告する（`CrossTabSearchWindow` のゴミ箱検索は読み取り専用なので別）。
 - **ウィンドウ位置は物理ピクセルで計算する**（`Services/WindowPlacer.cs`）。WPF の `Window.Left/Top` は
   混在 DPI のマルチモニタで信用できない。設定に持つのは「サイズ = DIP」「位置 = 物理ピクセル」。
 - **二重起動時の呼び戻しは名前付きイベント**（`Infrastructure/SingleInstance.cs`）。
   `ShowInTaskbar="False"` により WPF が隠しオーナーウィンドウを作るため、メインウィンドウは
   「所有されたウィンドウ」になり `PostMessage(HWND_BROADCAST)` は届かない。
+- **隔離実行時の `SingleInstance` の名前は、環境変数の生値ではなく「実際に採用された `AppPaths.Root`」から
+  導出する**（`AppPaths.IsIsolated` が真のときだけサフィックスを付ける）。`JPSCRATCH_DATA_DIR` の値が
+  不正・作成不能でも、`AppPaths` は黙って実データへ落とさず `IsolationFailure` として起動時に明示的に失敗させる。
+  こうしないと「実データを書きながら隔離用の名前」になり、実データの常駐インスタンスへ呼び戻されず
+  同じ `app.db` を2プロセスが書く。
 - **タブ切替では、復元したいキャレット位置を先に控える**（`Views/MainWindow.xaml.cs` の `OnActiveTabChanged`）。
   `Editor.Document` を差し替えるとキャレットが 0 に戻り、その通知が復元先の値を上書きする。
 - **IME 変換中は自動非表示を止める**（`NativeMethods.HasImeComposition`）。変換中に消えると入力が失われる。

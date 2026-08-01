@@ -28,10 +28,19 @@ internal static class DocumentDiff
     private const int MaxChanges = 50;
     private const int MaxSingleChangeElements = 200;
     private const int MaxEditDistance = 500;
+    // 段落単位で検証済みの差分を全文へ統合した再検証（relaxedGlobalLimits=true）では、段落ごとの
+    // 編集距離（最大 MaxEditDistance）が変更段落数ぶん合算されることが正当にあり得る。ただし無制限
+    // （n+m）にすると Myers の trace が d ごとに積まれる O(D²) メモリとなり、長文で UI スレッドの
+    // フリーズ／OOM に直結する。緩和モードでもこの倍数を上限にし、超えたら従来どおり
+    // 「安全検査に失敗」として穏やかに破棄する。
+    private const int RelaxedEditDistanceMultiplier = 4;
     private const int RatioAllowanceElements = 20;
     private const double MaxChangedRatio = 0.20;
 
-    internal static DocumentDiffResult Create(string source, string corrected)
+    internal static DocumentDiffResult Create(
+        string source,
+        string corrected,
+        bool relaxedGlobalLimits = false)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(corrected);
@@ -42,7 +51,8 @@ internal static class DocumentDiff
 
         List<TextElement> sourceElements = Tokenize(sourceForDiff);
         List<TextElement> correctedElements = Tokenize(correctedForDiff);
-        IReadOnlyList<DiffOperation>? operations = MyersDiff(sourceElements, correctedElements);
+        IReadOnlyList<DiffOperation>? operations = MyersDiff(
+            sourceElements, correctedElements, relaxedGlobalLimits);
         if (operations is null)
         {
             return new DocumentDiffResult(
@@ -78,7 +88,8 @@ internal static class DocumentDiff
             changes,
             hunks,
             changedElements,
-            changedRatio);
+            changedRatio,
+            relaxedGlobalLimits);
 
         return new DocumentDiffResult(
             rejection is null,
@@ -118,9 +129,19 @@ internal static class DocumentDiff
         IReadOnlyList<DocumentChange> changes,
         IReadOnlyList<RawHunk> hunks,
         int changedElements,
-        double changedRatio)
+        double changedRatio,
+        bool relaxedGlobalLimits)
     {
-        if (hunks.Count > MaxChanges)
+        // 段落・分割単位で検証済みの差分を全文へ統合した結果の再検証（relaxedGlobalLimits=true）では、
+        // 段落ごとの上限（MaxChanges / 編集距離）を合計が超えることが正当にあり得る
+        // （20段落 × 各3修正 = 60箇所など）。各リクエストは送信時に既に上限を通過しているため、
+        // ここで同じ上限を掛け直すと有効な結果が丸ごと破棄される。統合の再検証で見るべきは
+        // 「1箇所の変更が過大でない」「範囲が重複しない」「適用して修正版を再現できる」だけ。
+        // 緩和するのは件数上限と編集距離の2つだけで、変更比率のガードは外さない: 各段落が個別に
+        // 20%以下を通っているなら全文の合計も（わずかな誤差は別として）20%以下に収まり、
+        // 正当な結果を落とさない。統合がおかしくなったケース（段落外への変更が混入した等）だけを
+        // 拾える無料の保険になる。
+        if (!relaxedGlobalLimits && hunks.Count > MaxChanges)
             return $"変更箇所が多すぎます（{hunks.Count} > {MaxChanges}）";
 
         if (hunks.Any(
@@ -278,10 +299,17 @@ internal static class DocumentDiff
 
             // 1語の中で複数文字が変わった場合、機械的な最小差分を
             // バラバラの提案にせず、最大2書記素の共通部分ごとまとめる。
+            // ただし連結の結果が1箇所の上限（MaxSingleChangeElements）を超える場合は
+            // 連結しない。連結しっぱなしだと、日本語（全文字が語要素）で誤字の多い段落が
+            // 「1箇所の変更が大きすぎます」として丸ごと拒否されるため。
             bool merge = gap is >= 0 and <= 2 &&
                 gapElements.All(IsWordElement) &&
                 (current.Deleted.Count > 0 || current.Inserted.Count > 0) &&
-                (next.Deleted.Count > 0 || next.Inserted.Count > 0);
+                (next.Deleted.Count > 0 || next.Inserted.Count > 0) &&
+                Math.Max(
+                    current.Deleted.Count + gapElements.Count + next.Deleted.Count,
+                    current.Inserted.Count + gapElements.Count + next.Inserted.Count) <=
+                    MaxSingleChangeElements;
 
             if (merge)
             {
@@ -325,11 +353,18 @@ internal static class DocumentDiff
 
     private static IReadOnlyList<DiffOperation>? MyersDiff(
         IReadOnlyList<TextElement> source,
-        IReadOnlyList<TextElement> corrected)
+        IReadOnlyList<TextElement> corrected,
+        bool unlimited)
     {
         int n = source.Count;
         int m = corrected.Count;
-        int max = Math.Min(n + m, MaxEditDistance);
+        // 通常は変更量の上限（MaxEditDistance）で打ち切る。段落単位で検証済みの差分を全文へ
+        // 戻した統合結果の再検証（unlimited=true）では、段落ごとの上限を合計が超えることが
+        // 正当にあり得るため、MaxEditDistance の倍数まで許す。無制限（n+m）にはしない
+        // （O(D²) メモリの Myers で長文がフリーズ／OOM するため）。
+        int max = Math.Min(n + m, unlimited
+            ? MaxEditDistance * RelaxedEditDistanceMultiplier
+            : MaxEditDistance);
         Dictionary<int, int> v = new() { [1] = 0 };
         List<Dictionary<int, int>> trace = [];
 

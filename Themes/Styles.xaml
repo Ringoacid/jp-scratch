@@ -581,4 +581,16 @@
         </Setter>
     </Style>
 
+    <!--
+        ToolTip は ComboBox 等と違い色指定を無視しないので、テンプレート差し替えは不要。
+        既定（Aero2）のままにするとダークテーマで明るい背景が浮くため、ブラシだけ差し替える。
+    -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource ChromeBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+        <Setter Property="Padding" Value="8,5" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
 </ResourceDictionary>

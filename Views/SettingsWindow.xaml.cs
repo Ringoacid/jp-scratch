@@ -221,6 +221,22 @@ public partial class SettingsWindow : Window
             ? value
             : fallback;
 
+    private const string HotkeyHintText = "（修飾キーと組み合わせてください）";
+
+    /// <summary>無効なキーを押した直後に欄内へ表示したヒントと、戻すべき元の値。</summary>
+    private (TextBox Box, string OriginalText)? _hotkeyHint;
+
+    /// <summary>ヒント表示中なら元の値へ戻す（次のキー操作・フォーカス喪失のとき）。</summary>
+    private void RestoreHotkeyHint(TextBox box)
+    {
+        if (_hotkeyHint is { } hint && ReferenceEquals(hint.Box, box))
+        {
+            box.Text = hint.OriginalText;
+            box.ToolTip = null;
+            _hotkeyHint = null;
+        }
+    }
+
     /// <summary>
     /// ホットキーの入力欄。押されたキーをそのまま割り当てる。
     /// 修飾キー単独では確定させない（Alt だけを登録しても意味がないため）。
@@ -229,9 +245,25 @@ public partial class SettingsWindow : Window
     {
         if (sender is not TextBox box) return;
 
-        e.Handled = true;
+        // 直前の無効キーで出したヒントが残っていれば、次の操作で元の値へ戻す。
+        RestoreHotkeyHint(box);
 
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        // ナビゲーションキーは、修飾キーが無いとき（Tab は Shift 付きも含む）だけ既定の動作
+        // （Tab で次の欄へ移動、Esc でダイアログを閉じるなど）を通す。修飾キーと組み合わされた
+        // 場合はホットキーとして割り当てる（Ctrl+Enter や Alt+← を登録できるようにする）。
+        // ここを無条件に吞み込むと、キーボードだけでフォーカスを外せなくなる（フォーカストラップ）。
+        bool noModifiers = Keyboard.Modifiers is ModifierKeys.None or ModifierKeys.Shift;
+        if (noModifiers &&
+            key is Key.Tab or Key.Escape or Key.Enter
+                or Key.Left or Key.Right or Key.Up or Key.Down
+                or Key.Home or Key.End or Key.PageUp or Key.PageDown)
+        {
+            return;
+        }
+
+        e.Handled = true;
 
         if (key == Key.Back)
         {
@@ -249,11 +281,23 @@ public partial class SettingsWindow : Window
         var spec = new HotkeySpec(Keyboard.Modifiers, key);
         if (!spec.IsValid)
         {
-            box.Text = "修飾キーと組み合わせてください";
+            // 欄の中身を永続的なエラー文で置き換えない（そのまま OK を押すまで表示にゴミが残る
+            // ため）。ツールチップに加えて欄内にも一時ヒントを表示し、次のキー操作かフォーカス
+            // 喪失で元の値へ戻す（ホバーしない限り無反応に見える、を防ぐ）。
+            box.ToolTip = "修飾キーと組み合わせてください";
+            if (_hotkeyHint is not { } hint || !ReferenceEquals(hint.Box, box))
+                _hotkeyHint = (box, box.Text);
+            box.Text = HotkeyHintText;
             return;
         }
 
+        box.ToolTip = null;
         box.Text = spec.DisplayName;
+    }
+
+    private void HotkeyBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox box) RestoreHotkeyHint(box);
     }
 
     private void OkButton_Click(object sender, RoutedEventArgs e)
@@ -265,9 +309,11 @@ public partial class SettingsWindow : Window
         // 副作用（credentials.dat / pricing.json への書き込み）より前に、入力の検証をすべて済ませる。
         // 検証エラーで戻るときに「片方だけ書き込み済み」という中途半端な状態を作らない
         // （例: 単価欄の入力ミスで戻る前にAPIキーだけ credentials.dat へ書き込まれてしまう、等）。
+        // 書き込みの順序は「単価 → APIキー」にしている。後段（キー）が失敗してキャンセルした
+        // 場合でも、より重要なキーだけが先に書き込まれた状態を残さないため。
         if (!TryBuildPricingTable(out Dictionary<string, ModelPricing> pricingTable)) return;
-        if (!TryApplyCredentialChanges(updated)) return;
         if (!TrySavePricing(pricingTable)) return;
+        if (!TryApplyCredentialChanges(updated)) return;
         _service.Replace(updated);
 
         DialogResult = true;

@@ -204,120 +204,128 @@ internal sealed class ApiCallRepository
 
         var accumulator = new UsageAccumulator();
 
-        _database.Read(
-            """
-            SELECT called_at, status, prompt_tokens, output_tokens, usd_cost, jpy_cost,
-                   usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type
-            FROM api_calls;
-            """,
-            reader =>
+        // 2回の読み取り（api_calls と api_call_daily）は1つのロック区間（InTransaction）にまとめる。
+        // 別々の _database.Read だと、その間にバックグラウンドの明細圧縮（Compact）が挟まると、
+        // 圧縮対象の行が「api_calls で読んだ直後に api_call_daily へ移動」して二重に集計される。
+        // Database の lock は同一スレッドで再入できるため、InTransaction の中で db.Read を呼んでも
+        // デッドロックしない。
+        _database.InTransaction(db =>
         {
-            while (reader.Read())
-            {
-                // ISO文字列の辞書順はDSTの重複時刻で実時間順にならないため、
-                // DateTimeOffsetとして比較する。壊れた旧ログは集計対象から除外する。
-                if (!DateTimeOffset.TryParse(
-                        reader.GetString(0),
-                        CultureInfo.InvariantCulture,
-                        DateTimeStyles.RoundtripKind,
-                        out DateTimeOffset calledAt) ||
-                    (from is not null && calledAt < from.Value) ||
-                    (to is not null && calledAt >= to.Value))
+            db.Read(
+                """
+                SELECT called_at, status, prompt_tokens, output_tokens, usd_cost, jpy_cost,
+                       usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type
+                FROM api_calls;
+                """,
+                reader =>
                 {
-                    continue;
-                }
+                    while (reader.Read())
+                    {
+                        // ISO文字列の辞書順はDSTの重複時刻で実時間順にならないため、
+                        // DateTimeOffsetとして比較する。壊れた旧ログは集計対象から除外する。
+                        if (!DateTimeOffset.TryParse(
+                                reader.GetString(0),
+                                CultureInfo.InvariantCulture,
+                                DateTimeStyles.RoundtripKind,
+                                out DateTimeOffset calledAt) ||
+                            (from is not null && calledAt < from.Value) ||
+                            (to is not null && calledAt >= to.Value))
+                        {
+                            continue;
+                        }
 
-                if (!TryFromStorageTrigger(reader.GetString(10), out ApiCallTrigger rowTrigger) ||
-                    (triggerFilter is not null && !triggerFilter.Contains(rowTrigger)))
+                        if (!TryFromStorageTrigger(reader.GetString(10), out ApiCallTrigger rowTrigger) ||
+                            (triggerFilter is not null && !triggerFilter.Contains(rowTrigger)))
+                        {
+                            continue;
+                        }
+
+                        if (!decimal.TryParse(
+                                reader.GetString(4),
+                                NumberStyles.Number,
+                                CultureInfo.InvariantCulture,
+                                out decimal rowUsdCost))
+                        {
+                            continue;
+                        }
+
+                        accumulator.Add(
+                            reader.GetString(1),
+                            calls: 1,
+                            promptTokens: reader.GetInt32(2),
+                            outputTokens: reader.GetInt32(3),
+                            usdCost: rowUsdCost,
+                            jpyCost: TryReadDecimal(reader, 5, out decimal rowJpyCost) ? rowJpyCost : null,
+                            rate: TryReadDecimal(reader, 6, out decimal rowRate) ? rowRate : null,
+                            rateDate: TryReadDateOnly(reader, 7, out DateOnly rowRateDate) ? rowRateDate : null,
+                            suggestionCount: reader.GetInt32(8),
+                            discardedCount: reader.GetInt32(9),
+                            compacted: false);
+                    }
+
+                    return 0;
+                });
+
+            // 保持期限を過ぎて圧縮済みの日次サマリを合算する。ここを読まないと、
+            // 圧縮した瞬間に「全期間」や過去月の合計が黙って減る。
+            db.Read(
+                """
+                SELECT day, status, prompt_tokens, output_tokens, usd_cost, jpy_cost,
+                       usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type, call_cnt
+                FROM api_call_daily;
+                """,
+                reader =>
                 {
-                    continue;
-                }
+                    while (reader.Read())
+                    {
+                        // サマリ1行はローカル1日ぶんなので、期間の判定はその日の0時で行う。
+                        // 画面が渡す範囲（当日/当週/当月/全期間/カスタム）はすべて日境界に揃っているため、
+                        // 明細行を1件ずつ判定した場合と同じ結果になる。
+                        if (!DateOnly.TryParseExact(
+                                reader.GetString(0), "yyyy-MM-dd",
+                                CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly day))
+                        {
+                            continue;
+                        }
 
-                if (!decimal.TryParse(
-                        reader.GetString(4),
-                        NumberStyles.Number,
-                        CultureInfo.InvariantCulture,
-                        out decimal rowUsdCost))
-                {
-                    continue;
-                }
+                        var dayStart = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Local));
+                        if ((from is not null && dayStart < from.Value) ||
+                            (to is not null && dayStart >= to.Value))
+                        {
+                            continue;
+                        }
 
-                accumulator.Add(
-                    reader.GetString(1),
-                    calls: 1,
-                    promptTokens: reader.GetInt32(2),
-                    outputTokens: reader.GetInt32(3),
-                    usdCost: rowUsdCost,
-                    jpyCost: TryReadDecimal(reader, 5, out decimal rowJpyCost) ? rowJpyCost : null,
-                    rate: TryReadDecimal(reader, 6, out decimal rowRate) ? rowRate : null,
-                    rateDate: TryReadDateOnly(reader, 7, out DateOnly rowRateDate) ? rowRateDate : null,
-                    suggestionCount: reader.GetInt32(8),
-                    discardedCount: reader.GetInt32(9),
-                    compacted: false);
-            }
+                        if (!TryFromStorageTrigger(reader.GetString(10), out ApiCallTrigger rowTrigger) ||
+                            (triggerFilter is not null && !triggerFilter.Contains(rowTrigger)))
+                        {
+                            continue;
+                        }
 
-            return 0;
-        });
+                        if (!decimal.TryParse(
+                                reader.GetString(4),
+                                NumberStyles.Number,
+                                CultureInfo.InvariantCulture,
+                                out decimal rowUsdCost))
+                        {
+                            continue;
+                        }
 
-        // 保持期限を過ぎて圧縮済みの日次サマリを合算する。ここを読まないと、
-        // 圧縮した瞬間に「全期間」や過去月の合計が黙って減る。
-        _database.Read(
-            """
-            SELECT day, status, prompt_tokens, output_tokens, usd_cost, jpy_cost,
-                   usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type, call_cnt
-            FROM api_call_daily;
-            """,
-            reader =>
-        {
-            while (reader.Read())
-            {
-                // サマリ1行はローカル1日ぶんなので、期間の判定はその日の0時で行う。
-                // 画面が渡す範囲（当日/当週/当月/全期間/カスタム）はすべて日境界に揃っているため、
-                // 明細行を1件ずつ判定した場合と同じ結果になる。
-                if (!DateOnly.TryParseExact(
-                        reader.GetString(0), "yyyy-MM-dd",
-                        CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly day))
-                {
-                    continue;
-                }
+                        accumulator.Add(
+                            reader.GetString(1),
+                            calls: reader.GetInt64(11),
+                            promptTokens: reader.GetInt64(2),
+                            outputTokens: reader.GetInt64(3),
+                            usdCost: rowUsdCost,
+                            jpyCost: TryReadDecimal(reader, 5, out decimal rowJpyCost) ? rowJpyCost : null,
+                            rate: TryReadDecimal(reader, 6, out decimal rowRate) ? rowRate : null,
+                            rateDate: TryReadDateOnly(reader, 7, out DateOnly rowRateDate) ? rowRateDate : null,
+                            suggestionCount: reader.GetInt64(8),
+                            discardedCount: reader.GetInt64(9),
+                            compacted: true);
+                    }
 
-                var dayStart = new DateTimeOffset(day.ToDateTime(TimeOnly.MinValue, DateTimeKind.Local));
-                if ((from is not null && dayStart < from.Value) ||
-                    (to is not null && dayStart >= to.Value))
-                {
-                    continue;
-                }
-
-                if (!TryFromStorageTrigger(reader.GetString(10), out ApiCallTrigger rowTrigger) ||
-                    (triggerFilter is not null && !triggerFilter.Contains(rowTrigger)))
-                {
-                    continue;
-                }
-
-                if (!decimal.TryParse(
-                        reader.GetString(4),
-                        NumberStyles.Number,
-                        CultureInfo.InvariantCulture,
-                        out decimal rowUsdCost))
-                {
-                    continue;
-                }
-
-                accumulator.Add(
-                    reader.GetString(1),
-                    calls: reader.GetInt64(11),
-                    promptTokens: reader.GetInt64(2),
-                    outputTokens: reader.GetInt64(3),
-                    usdCost: rowUsdCost,
-                    jpyCost: TryReadDecimal(reader, 5, out decimal rowJpyCost) ? rowJpyCost : null,
-                    rate: TryReadDecimal(reader, 6, out decimal rowRate) ? rowRate : null,
-                    rateDate: TryReadDateOnly(reader, 7, out DateOnly rowRateDate) ? rowRateDate : null,
-                    suggestionCount: reader.GetInt64(8),
-                    discardedCount: reader.GetInt64(9),
-                    compacted: true);
-            }
-
-            return 0;
+                    return 0;
+                });
         });
 
         return accumulator.Build();

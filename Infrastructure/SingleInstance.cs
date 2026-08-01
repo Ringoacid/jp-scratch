@@ -18,28 +18,33 @@ internal sealed class SingleInstance : IDisposable
     private const string BaseActivateEventName = @"Local\JpScratch.Activate";
 
     /// <summary>
-    /// <see cref="AppPaths.DataDirEnvironmentVariable"/> と同じ環境変数。設定されている隔離実行時だけ
-    /// Mutex/イベント名にサフィックスを付け、実データの常駐インスタンスと取り合わないようにする。
-    /// 未設定なら従来どおり固定名のまま（1バイトも挙動を変えない）。
+    /// 隔離実行時（<see cref="AppPaths.IsIsolated"/>）だけ Mutex/イベント名にサフィックスを付け、
+    /// 実データの常駐インスタンスと取り合わないようにする。
+    /// サフィックスは「実際に採用された <see cref="AppPaths.Root"/>」から導出する。環境変数の生値では
+    /// なく Root を見るのは、AppPaths が不正値・作成失敗で既定へ落とした場合に「実データを書きながら
+    /// 隔離用の名前」という食い違いを作らないため（作成失敗は AppPaths が IsolationFailure として
+    /// 明示的に失敗させるので、実際には隔離名は使われない）。未設定・既定へ落ちた場合は従来どおり
+    /// 固定名のまま（1バイトも挙動を変えない）。
     /// </summary>
     private static readonly (string Mutex, string ActivateEvent) Names = ResolveNames(
-        Environment.GetEnvironmentVariable(AppPaths.DataDirEnvironmentVariable));
+        AppPaths.IsIsolated ? AppPaths.Root : null);
 
     private static string MutexName => Names.Mutex;
     private static string ActivateEventName => Names.ActivateEvent;
 
     /// <summary>
-    /// Mutex/イベント名を決定する純粋関数。<paramref name="dataDirEnvironmentValue"/> が
-    /// 空・空白のみなら従来の固定名をそのまま返す。値があれば、そのディレクトリパスから
-    /// 決定的に導出したサフィックスを固定名へ付与する（同じ値なら常に同じ名前、異なる値なら異なる名前）。
+    /// Mutex/イベント名を決定する純粋関数。<paramref name="isolatedRoot"/> が null（＝隔離でない）
+    /// なら従来の固定名をそのまま返す。値があれば、そのディレクトリパス（実際に採用された
+    /// データディレクトリ）から決定的に導出したサフィックスを固定名へ付与する
+    /// （同じ値なら常に同じ名前、異なる値なら異なる名前）。
     /// </summary>
     internal static (string MutexName, string ActivateEventName) ResolveNames(
-        string? dataDirEnvironmentValue)
+        string? isolatedRoot)
     {
-        if (string.IsNullOrWhiteSpace(dataDirEnvironmentValue))
+        if (string.IsNullOrWhiteSpace(isolatedRoot))
             return (BaseMutexName, BaseActivateEventName);
 
-        string suffix = ComputeSuffix(dataDirEnvironmentValue);
+        string suffix = ComputeSuffix(isolatedRoot);
         return ($"{BaseMutexName}.{suffix}", $"{BaseActivateEventName}.{suffix}");
     }
 
@@ -48,9 +53,9 @@ internal sealed class SingleInstance : IDisposable
     /// Windows のパスは大文字小文字を区別しないため正規化してからハッシュ化し、
     /// 同じディレクトリを指す表記ゆれ（末尾区切り文字・相対/絶対）をできる範囲で吸収する。
     /// </summary>
-    private static string ComputeSuffix(string dataDirEnvironmentValue)
+    private static string ComputeSuffix(string isolatedRoot)
     {
-        string trimmed = dataDirEnvironmentValue.Trim();
+        string trimmed = isolatedRoot.Trim();
         string normalized;
         try
         {
@@ -82,6 +87,12 @@ internal sealed class SingleInstance : IDisposable
     public bool TryAcquire()
     {
         // Local\ で十分。ユーザーセッションをまたいで 1 つに絞る必要はない。
+        // Windows では new Mutex(initiallyOwned: true, ...) が AbandonedMutexException を
+        // 投げることはない（それは WaitOne 側の例外）。前回インスタンスがハード終了して
+        // ハンドルごと消えた場合は createdNew=true で最初のインスタンスとして続行できる。
+        // よってここに AbandonedMutexException の catch は置かない: Mutex.OpenExisting は
+        // 所有権を取らないのに createdNew=true を返すため、2つ目のインスタンスが同じデータを
+        // 並走させてしまう。
         _mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
 
         if (!createdNew)

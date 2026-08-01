@@ -55,6 +55,36 @@ internal static class PricingServiceValidation
                     .OutputUsdPerMillion == 2.50m &&
                 Directory.EnumerateFiles(root, "pricing.json.bad*").Any();
 
+            // 上限超過の単価（decimalオーバーフロー源）は不正として隔離され、既定単価へ戻る。
+            File.WriteAllText(
+                pricingFile,
+                """
+                {
+                  "custom-model": {
+                    "input_usd_per_1m": 99999999999999999999999999,
+                    "output_usd_per_1m": 0.20,
+                    "updated_at": "2026-07-30"
+                  }
+                }
+                """);
+            var capped = new PricingService(pricingFile);
+            bool capModelRejected;
+            try
+            {
+                capped.GetPricing("custom-model");
+                capModelRejected = false; // 読み込まれてしまった＝上限チェックが効いていない
+            }
+            catch (KeyNotFoundException)
+            {
+                capModelRejected = true; // 隔離されて既定値へ戻った
+            }
+
+            // 設定画面の入力側も同じ上限を共有する（TryParseUnitPrice）。
+            bool parseCapPass =
+                !SettingsFieldFormatting.TryParseUnitPrice("1000000001", out _) &&
+                SettingsFieldFormatting.TryParseUnitPrice("1000000000", out _) &&
+                SettingsFieldFormatting.TryParseUnitPrice("0", out _);
+
             bool unknownPass;
             try
             {
@@ -71,7 +101,7 @@ internal static class PricingServiceValidation
             bool migrationPass = RunOpenAiPricingMigrationTest(root);
             bool pass =
                 defaultPass && openAiDefaultPass && customPass && recoveryPass &&
-                unknownPass && replacePass && migrationPass;
+                capModelRejected && parseCapPass && unknownPass && replacePass && migrationPass;
             Console.WriteLine(
                 "料金設定（作成・モデル別計算・破損復旧・設定画面からの編集API）: " +
                 (pass ? "PASS" : "FAIL"));

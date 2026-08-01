@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Windows.Threading;
 using JpScratch.Models;
 
@@ -19,6 +20,9 @@ internal sealed class TabManager : INotifyPropertyChanged
 
     public ObservableCollection<ScratchTab> Tabs { get; } = [];
 
+    /// <summary>起動時に本文を読み込めなかったタブのタイトル（読み取り失敗を空で上書きしないためスキップした分）。</summary>
+    public List<string> LoadFailures { get; } = [];
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>アクティブタブが差し替わったとき。エディタは Document を張り替える。</summary>
@@ -26,6 +30,9 @@ internal sealed class TabManager : INotifyPropertyChanged
 
     /// <summary>いずれかのタブの本文が変わったとき。文字数表示や校正トリガーの起点になる。</summary>
     public event Action<ScratchTab>? TabTextChanged;
+
+    /// <summary>タブが閉じられた（ゴミ箱へ移された）とき。校正スケジュール等の掃除に使う。</summary>
+    public event Action<ScratchTab>? TabRemoved;
 
     public TabManager(TabRepository repository, SettingsService settings)
     {
@@ -64,12 +71,26 @@ internal sealed class TabManager : INotifyPropertyChanged
     {
         _repository.PurgeExpiredTrash(_settings.Current.TrashRetentionDays);
 
+        var failures = new List<string>();
         foreach (var tab in _repository.LoadActive())
         {
-            _repository.LoadBody(tab);
+            try
+            {
+                _repository.LoadBody(tab);
+            }
+            catch (IOException)
+            {
+                // 本文ファイルがあるのに読めない（一時的なロック等）。空タブとして開くと
+                // その後の保存で元の本文を上書きしてしまうため、このタブは開かず、
+                // ファイルをそのまま残す。起動後にユーザーへ警告する（LoadFailures）。
+                failures.Add(tab.Title);
+                continue;
+            }
             Attach(tab);
             Tabs.Add(tab);
         }
+        LoadFailures.Clear();
+        LoadFailures.AddRange(failures);
 
         if (Tabs.Count == 0)
         {
@@ -123,9 +144,13 @@ internal sealed class TabManager : INotifyPropertyChanged
         if (tab.IsDirty) _repository.SaveBody(tab);
 
         var index = Tabs.IndexOf(tab);
-        Tabs.Remove(tab);
+        // 本文ファイルのゴミ箱移動を先に済ませる。失敗（MoveToTrash が例外）したらタブを
+        // 閉じずに呼び出し元へ伝える。Tabs.Remove を先にやると、失敗時だけ「UIから消えたのに
+        // DBには残る」状態になる。
         _repository.MoveToTrash(tab);
+        Tabs.Remove(tab);
         _repository.SaveOrder(Tabs);
+        TabRemoved?.Invoke(tab);
 
         if (Tabs.Count == 0)
         {
@@ -144,7 +169,26 @@ internal sealed class TabManager : INotifyPropertyChanged
         if (trashed is null) return null;
 
         _repository.RestoreFromTrash(trashed, Tabs.Count);
-        _repository.LoadBody(trashed);
+        try
+        {
+            _repository.LoadBody(trashed);
+        }
+        catch (IOException)
+        {
+            // RestoreFromTrash は既に DB の deleted_at を NULL にしてしまっている。ここで何も
+            // せず抜けると「DB 上は復元済み・UI には出ない」状態が再起動まで続くため、ゴミ箱へ
+            // ロールバックしてから呼び出し元（ユーザー）へ例外を伝える。
+            try
+            {
+                _repository.MoveToTrash(trashed);
+            }
+            catch (Exception)
+            {
+                // ロールバックも失敗した。ファイルは tabs\ に残っているので、次回起動時の
+                // 起動時警告（LoadFailures）でユーザーに伝わる。ここは元の例外を優先する。
+            }
+            throw;
+        }
         Attach(trashed);
         Tabs.Add(trashed);
         _repository.SaveOrder(Tabs);

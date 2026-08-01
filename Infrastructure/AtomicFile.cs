@@ -20,24 +20,33 @@ internal static class AtomicFile
 
         var tmp = path + ".tmp";
 
-        // WriteThrough でディスクまで落としてから差し替える。
-        // ここを省くと、電源断のときに「空の新ファイルで上書き」が起こりうる。
-        using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None,
-                                       bufferSize: 4096, FileOptions.WriteThrough))
-        using (var writer = new StreamWriter(fs, Utf8NoBom))
+        try
         {
-            writer.Write(content);
-            writer.Flush();
-            fs.Flush(flushToDisk: true);
-        }
+            // WriteThrough でディスクまで落としてから差し替える。
+            // ここを省くと、電源断のときに「空の新ファイルで上書き」が起こりうる。
+            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None,
+                                           bufferSize: 4096, FileOptions.WriteThrough))
+            using (var writer = new StreamWriter(fs, Utf8NoBom))
+            {
+                writer.Write(content);
+                writer.Flush();
+                fs.Flush(flushToDisk: true);
+            }
 
-        if (File.Exists(path))
-        {
-            File.Replace(tmp, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            if (File.Exists(path))
+            {
+                File.Replace(tmp, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Move(tmp, path);
+            }
         }
-        else
+        catch
         {
-            File.Move(tmp, path);
+            // 失敗経路では .tmp を残さない（既存ファイルは壊れていない）。
+            TryDeleteTmp(tmp);
+            throw;
         }
     }
 
@@ -48,37 +57,76 @@ internal static class AtomicFile
 
         var tmp = path + ".tmp";
 
-        using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None,
-                                       bufferSize: 4096, FileOptions.WriteThrough))
+        try
         {
-            fs.Write(content);
-            fs.Flush(flushToDisk: true);
+            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None,
+                                           bufferSize: 4096, FileOptions.WriteThrough))
+            {
+                fs.Write(content);
+                fs.Flush(flushToDisk: true);
+            }
+
+            if (File.Exists(path))
+            {
+                File.Replace(tmp, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            }
+            else
+            {
+                File.Move(tmp, path);
+            }
+        }
+        catch
+        {
+            TryDeleteTmp(tmp);
+            throw;
+        }
+    }
+
+    private static void TryDeleteTmp(string tmp)
+    {
+        try
+        {
+            if (File.Exists(tmp)) File.Delete(tmp);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    /// <summary>
+    /// 存在しなければ <c>true</c> で <paramref name="content"/> に空文字を返す。
+    /// 存在するのに読めない（一時的なロック・権限等）場合は <c>false</c> を返す。
+    /// 「読めたが空」と「読めなかった」を区別し、読めなかった本文を空で上書きする事故を防ぐ。
+    /// </summary>
+    public static bool TryReadAllText(string path, out string content)
+    {
+        if (!File.Exists(path))
+        {
+            content = string.Empty;
+            return true;
         }
 
-        if (File.Exists(path))
+        try
         {
-            File.Replace(tmp, path, destinationBackupFileName: null, ignoreMetadataErrors: true);
+            content = File.ReadAllText(path);
+            return true;
         }
-        else
+        catch (IOException)
         {
-            File.Move(tmp, path);
+            content = string.Empty;
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            content = string.Empty;
+            return false;
         }
     }
 
     /// <summary>存在しなければ空文字を返す。改行は AvalonEdit 側で正規化する。</summary>
     public static string ReadAllTextOrEmpty(string path)
-    {
-        try
-        {
-            return File.Exists(path) ? File.ReadAllText(path) : string.Empty;
-        }
-        catch (IOException)
-        {
-            return string.Empty;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return string.Empty;
-        }
-    }
+        => TryReadAllText(path, out string content) ? content : string.Empty;
 }

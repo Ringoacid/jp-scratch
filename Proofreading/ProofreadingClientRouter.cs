@@ -12,6 +12,7 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
     private readonly SettingsService _settings;
     private readonly GeminiProofreadingClient _gemini;
     private readonly OpenAiProofreadingClient _openAi;
+    private string? _pinnedModel;
 
     internal ProofreadingClientRouter(
         SettingsService settings,
@@ -28,7 +29,17 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
             ProofreadingModelCatalog.OpenAiModel);
     }
 
-    public string Model => _settings.Current.ProofreadingModel;
+    public string Model => _pinnedModel ?? _settings.Current.ProofreadingModel;
+
+    /// <summary>
+    /// 1回の校正実行の間だけ使うモデルを固定する。実行中に設定画面でモデルを切り替えても、
+    /// 同一実行の途中でプロバイダ・APIキー取得元・料金単価が揺れないようにする。
+    /// 呼び出し側（MainWindow）は実行開始前に現在のモデルを固定し、対応する finally で
+    /// <see cref="UnpinModel"/> を必ず呼ぶ。
+    /// </summary>
+    internal void PinModel(string model) => _pinnedModel = model;
+
+    internal void UnpinModel() => _pinnedModel = null;
 
     private IProofreadingClient Active =>
         ProofreadingModelCatalog.IsOpenAi(Model) ? _openAi : _gemini;

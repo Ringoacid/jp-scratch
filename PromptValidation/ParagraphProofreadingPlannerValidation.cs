@@ -15,6 +15,7 @@ internal static class ParagraphProofreadingPlannerValidation
             ("2,000文字分割", TestLongParagraph),
             ("選択範囲", TestSelection),
             ("複数応答の全文統合", TestResultMerge),
+            ("中断時の部分送信済み記録", TestPartialMarkSent),
         ];
 
         bool passed = true;
@@ -148,5 +149,51 @@ internal static class ParagraphProofreadingPlannerValidation
 
         return ProofreadingResultMerger.Merge(plan, results) ==
             "文章です。\n\n誤字があります。";
+    }
+
+    /// <summary>
+    /// 校正ループが途中で中断したときの部分送信済み記録（MarkSent(plan, completedCount)）。
+    /// 完了済みの段落は本文が変わっていなければ再送されず、未送信の段落は再送対象に残る。
+    /// 0件で呼んだ場合は何も変更しない（変更なしと判定された段落は送信済みのまま）。
+    /// 回帰テストとしては「一度 MarkSent(plan) で全件記録 → 別の本文で部分 MarkSent」の順序で
+    /// 呼ぶ。部分 MarkSent を「今回完了した段落だけ」で丸ごと置き換える実装だと、前回送信済みで
+    /// 今回のプランに現れない段落（＝変更なし）が未送信に戻り、次回再送＝二重課金になる。
+    /// </summary>
+    private static bool TestPartialMarkSent()
+    {
+        // 1回目の実行で全段落を送信済みにする（累積状態を作る）。
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan initial =
+            planner.CreateAutomaticPlan("甲です。\n\n乙です。\n\n丙です。");
+        if (initial.Requests.Count != 3)
+            return false;
+        planner.MarkSent(initial);
+
+        // 甲と丙だけを編集した状態でプランを立て直す。乙は未変更＝プランに現れない。
+        ProofreadingPlan edited =
+            planner.CreateAutomaticPlan("甲です！\n\n乙です。\n\n丙です！");
+        if (edited.Requests.Count != 2 || edited.Requests[0].SourceText != "甲です！")
+            return false;
+
+        // 甲（1件目）の送信だけが完了して中断した状況を再現する。
+        planner.MarkSent(edited, completedRequestCount: 1);
+
+        // 乙は編集していないので再送されない（累積状態が消えるバグの再発防止）。
+        // 丙は未送信のまま再送対象に残る。
+        ProofreadingPlan replan =
+            planner.CreateAutomaticPlan("甲です！\n\n乙です。\n\n丙です！");
+        bool partialWorks = replan.Requests.Count == 1 &&
+                            replan.Requests[0].SourceText == "丙です！";
+
+        // 0件（まだ1件も送信していない）なら、変更なしと判定された段落だけが送信済みのまま。
+        var plannerNone = new ParagraphProofreadingPlanner();
+        ProofreadingPlan planNone =
+            plannerNone.CreateAutomaticPlan("甲です。\n\n乙です。");
+        plannerNone.MarkSent(planNone, completedRequestCount: 0);
+        ProofreadingPlan replanNone =
+            plannerNone.CreateAutomaticPlan("甲です。\n\n乙です。");
+        bool noneWorks = replanNone.Requests.Count == 2;
+
+        return partialWorks && noneWorks;
     }
 }

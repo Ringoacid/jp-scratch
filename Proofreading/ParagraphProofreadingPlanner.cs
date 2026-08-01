@@ -122,6 +122,33 @@ internal sealed class ParagraphProofreadingPlanner
             .ToArray();
     }
 
+    /// <summary>
+    /// 校正ループが途中で中断されたとき、送信が完了していない段落だけを未送信として残し、
+    /// それ以外（完了済み・変更なしと判定された段落）は送信済みのまま記録する。
+    /// 本文変更・タブ切替で中断しても、完了済みで内容が変わっていない段落の再送（二重課金）を防ぎ、
+    /// 未送信の段落は次回の自動プランで再試行できる。
+    /// <paramref name="completedRequestCount"/> は完了済みリクエスト数（＝ループの現在 index）。
+    /// <see cref="ProofreadingRequest"/> は段落→パートの順で並ぶため、最後のパートが完了していれば
+    /// その段落の全パートが送信済みである。
+    /// 注意: <see cref="_lastSentHashes"/> は過去の実行ぶんも含む累積状態なので、丸ごと置き換えては
+    /// いけない。「今回完了した段落だけを入れる」方式だと、前回送信済みで今回のプランに現れない
+    /// （＝変更なしと判定された）段落が未送信に戻り、次回再送＝二重課金になる。
+    /// </summary>
+    internal void MarkSent(ProofreadingPlan plan, int completedRequestCount)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        HashSet<int> incomplete = plan.Requests
+            .Skip(completedRequestCount)
+            .Select(request => request.ParagraphIndex)
+            .ToHashSet();
+
+        _lastSentHashes = plan.Paragraphs
+            .Where(paragraph => !incomplete.Contains(paragraph.Index))
+            .Select(paragraph => paragraph.ContentHash)
+            .ToArray();
+    }
+
     internal static IReadOnlyList<ProofreadingParagraph> SplitParagraphs(string text)
     {
         ArgumentNullException.ThrowIfNull(text);

@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using JpScratch.Services;
 
 namespace JpScratch.Views;
@@ -178,16 +179,16 @@ public partial class BillingHistoryWindow : Window
         (DateTimeOffset? From, DateTimeOffset? To)? range = ComputeRange(out string? error, out _);
         if (range is null)
         {
-            ValidationErrorText.Text = error;
-            ValidationErrorText.Visibility = Visibility.Visible;
+            ShowValidationMessage(error, isError: true);
             return;
         }
 
         List<ApiCallTrigger> selectedTriggers = CollectSelectedTriggers();
         if (selectedTriggers.Count == 0)
         {
-            ValidationErrorText.Text = "種別を1つ以上選択してください（該当なしのためCSVを出力しません）。";
-            ValidationErrorText.Visibility = Visibility.Visible;
+            ShowValidationMessage(
+                "種別を1つ以上選択してください（該当なしのためCSVを出力しません）。",
+                isError: true);
             return;
         }
 
@@ -235,7 +236,22 @@ public partial class BillingHistoryWindow : Window
                 "圧縮済みのため、明細が無くCSVには含まれません）";
         }
 
-        ValidationErrorText.Text = message;
+        ShowValidationMessage(message, isError: false);
+    }
+
+    /// <summary>
+    /// 共通のメッセージ表示。エラーは赤（DangerBrush）、成功・案内はグレー（SubtleTextBrush）で
+    /// 区別する（従来はどちらもグレーで、入力エラーが強調されなかった）。
+    /// このウィンドウはキャッシュされて生き続けるため、FindResource で取り込むとメッセージ表示中に
+    /// テーマを切り替えたとき古い色のまま残る。SetResourceReference ならテーマ切替に追従する
+    /// （UsageProgressBar と同じ理屈）。
+    /// </summary>
+    private void ShowValidationMessage(string? message, bool isError)
+    {
+        ValidationErrorText.Text = message ?? "";
+        ValidationErrorText.SetResourceReference(
+            Control.ForegroundProperty,
+            isError ? "DangerBrush" : "SubtleTextBrush");
         ValidationErrorText.Visibility = Visibility.Visible;
     }
 
@@ -247,8 +263,7 @@ public partial class BillingHistoryWindow : Window
         if (range is null)
         {
             // 不正な入力では一覧・ヘッダを直前の状態のまま残す（ユーザーの意図と逆の「全件表示」を避ける）。
-            ValidationErrorText.Text = error;
-            ValidationErrorText.Visibility = Visibility.Visible;
+            ShowValidationMessage(error, isError: true);
             return;
         }
 

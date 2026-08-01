@@ -84,8 +84,16 @@ internal static class BillingCsvExporter
     internal static string EscapeField(string? value, bool guardFormula = false)
     {
         string text = value ?? "";
-        if (guardFormula && text.Length > 0 && "=+-@\t\r".Contains(text[0]))
-            text = "'" + text;
+        if (guardFormula && text.Length > 0)
+        {
+            // 先頭の " は RFC 4180 の引用符として Excel 側で剥がされるため、剥がした後の
+            // 先頭文字で危険文字を判定する（例: "=cmd...）。通常の = + - @ タブ CR で
+            // 始まる値は従来どおり前置する。
+            int firstNonQuote = 0;
+            while (firstNonQuote < text.Length && text[firstNonQuote] == '"') firstNonQuote++;
+            if (firstNonQuote < text.Length && "=+-@\t\r".Contains(text[firstNonQuote]))
+                text = "'" + text;
+        }
 
         if (text.AsSpan().IndexOfAny(",\"\r\n") < 0)
             return text;

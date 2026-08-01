@@ -253,9 +253,23 @@ public partial class FindReplacePanel : UserControl
         var (offset, length) = _renderer.Matches[_currentIndex];
         var original = _editor.Document.GetText(offset, length);
 
-        var replacement = RegexToggle.IsChecked == true
-            ? regex.Match(original).Result(ReplaceBox.Text)   // $1 などの後方参照を効かせる
-            : ReplaceBox.Text;
+        // 後方参照（$1 など）の解決は、実際にマッチした文字列に対して行う。
+        // 存在しないグループ参照・末尾の $・{$ は実行時に ArgumentException にならない
+        // （リテラルとして出力される）が、Int32.MaxValue を超えるグループ番号などは
+        // RegexParseException（ArgumentException の派生）になるため、例外時は置換せず
+        // ユーザーへ伝える。文書はまだ変更していないので部分適用は起きない。
+        string replacement;
+        try
+        {
+            replacement = RegexToggle.IsChecked == true
+                ? regex.Match(original).Result(ReplaceBox.Text)   // $1 などの後方参照を効かせる
+                : ReplaceBox.Text;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or RegexMatchTimeoutException)
+        {
+            MatchCountText.Text = "置換文字列が不正です";
+            return;
+        }
 
         _suppressRecalculation = true;
         try
@@ -271,7 +285,10 @@ public partial class FindReplacePanel : UserControl
         {
             _editor.CaretOffset = offset + replacement.Length;
             UpdateMatches(resetIndex: false);
-            FindNext(forward: true);
+            // UpdateMatches(resetIndex:false) は _currentIndex を保持するため、置換対象を消した
+            // 後のリストでは「次の一致」を指している。ここで FindNext を呼ぶとさらに +1 進んで
+            // 1件飛ばすため、選択だけを更新する（件数表示・再描画は UpdateMatches 内で済んでいる）。
+            SelectCurrent();
             return;
         }
 
@@ -332,6 +349,25 @@ public partial class FindReplacePanel : UserControl
             return;
         }
 
+        // 置換文字列はすべて、文書を変更する前に解決しておく。後方参照の解決で例外が出ても
+        // 1件も置換していないため部分適用にならない（例外時は「置換文字列が不正です」で中断）。
+        var replacements = new List<string>(targets.Count);
+        try
+        {
+            foreach (var (offset, length) in targets)
+            {
+                var original = _editor.Document.GetText(offset, length);
+                replacements.Add(RegexToggle.IsChecked == true
+                    ? regex.Match(original).Result(ReplaceBox.Text)
+                    : ReplaceBox.Text);
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or RegexMatchTimeoutException)
+        {
+            MatchCountText.Text = "置換文字列が不正です";
+            return;
+        }
+
         _suppressRecalculation = true;
         var lengthDelta = 0;
         // まとめて 1 回の Undo で戻せるようにする
@@ -339,12 +375,10 @@ public partial class FindReplacePanel : UserControl
         try
         {
             // 後ろから置換すれば、前方のオフセットがずれない
-            foreach (var (offset, length) in targets)
+            for (var i = 0; i < targets.Count; i++)
             {
-                var original = _editor.Document.GetText(offset, length);
-                var replacement = RegexToggle.IsChecked == true
-                    ? regex.Match(original).Result(ReplaceBox.Text)
-                    : ReplaceBox.Text;
+                var (offset, length) = targets[i];
+                var replacement = replacements[i];
                 _editor.Document.Replace(offset, length, replacement);
                 lengthDelta += replacement.Length - length;
             }

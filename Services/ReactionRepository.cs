@@ -60,7 +60,7 @@ internal sealed class ReactionRepository
                 $reacted_at, $api_call_id, $tab_id, $original, $suggestion,
                 $left_context, $right_context, $reaction, $user_reason);
             """,
-            ("$reacted_at", DateTime.Now.ToString("O")),
+            ("$reacted_at", DateTimeOffset.Now.ToString("O")),
             ("$api_call_id", apiCallId),
             ("$tab_id", tabId),
             ("$original", proposal.Original),
@@ -88,7 +88,7 @@ internal sealed class ReactionRepository
             """
             SELECT original, suggestion, reaction, user_reason, reacted_at
             FROM reactions
-            ORDER BY reacted_at DESC, id DESC
+            ORDER BY id DESC
             LIMIT $limit;
             """,
             reader =>
@@ -137,7 +137,7 @@ internal sealed class ReactionRepository
             """
             SELECT reaction
             FROM reactions
-            ORDER BY reacted_at ASC, id ASC;
+            ORDER BY id ASC;
             """,
             reader =>
             {
@@ -174,7 +174,7 @@ internal sealed class ReactionRepository
             FROM reactions
             WHERE user_reason IS NOT NULL AND trim(user_reason) <> ''
             GROUP BY user_reason
-            ORDER BY count(*) DESC, max(reacted_at) DESC
+            ORDER BY count(*) DESC, max(id) DESC
             LIMIT $limit;
             """,
             reader =>

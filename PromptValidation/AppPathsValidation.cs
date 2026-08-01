@@ -40,14 +40,35 @@ internal static class AppPathsValidation
         bool invalidPathFallsBackToDefault =
             AppPaths.ResolveRoot("C:\\invalid\u0000path", appData) == defaultRoot;
 
+        string validId = Guid.NewGuid().ToString("N");
+        bool validTabIdStaysContained =
+            AppPaths.TabDataFile(isolatedDir, validId) ==
+            Path.GetFullPath(Path.Combine(isolatedDir, validId + ".txt"));
+        bool traversalTabIdRejected = RejectsTabId("..\\..\\outside");
+        bool nonCanonicalGuidRejected = RejectsTabId(Guid.NewGuid().ToString("D"));
+
         bool passed =
             unsetFallsBackToDefault && emptyFallsBackToDefault && whitespaceFallsBackToDefault &&
             setUsesGivenDirectory && trimsWhitespace && resolvesRelativePath &&
-            invalidPathFallsBackToDefault;
+            invalidPathFallsBackToDefault && validTabIdStaysContained &&
+            traversalTabIdRejected && nonCanonicalGuidRejected;
 
         Console.WriteLine(
             "AppPaths（環境変数によるデータディレクトリ解決、未設定/空白/不正値の既定フォールバック）: " +
             (passed ? "PASS" : "FAIL"));
         return passed;
+    }
+
+    private static bool RejectsTabId(string tabId)
+    {
+        try
+        {
+            _ = AppPaths.TabDataFile(Path.GetTempPath(), tabId);
+            return false;
+        }
+        catch (InvalidDataException)
+        {
+            return true;
+        }
     }
 }

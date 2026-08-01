@@ -58,8 +58,20 @@ internal sealed class ProofreadingSession : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        DocumentDiffResult result = DocumentDiff.Create(_document.Text, corrected);
+        // 旧提案を Active のまま残さない。外部（_selectedProposal 等）が参照を持っていても
+        // IsActive=false になるよう、リストから外す前に明示的に失効させる。
+        foreach (ProofreadingProposal proposal in _proposals)
+            proposal.Invalidate();
         _proposals.Clear();
+
+        // corrected は段落単位で検証済みの差分を全文へ統合した結果（ProofreadingResultMerger）。
+        // 段落ごとの上限（変更箇所数・編集距離・変更比率）を合計が超えることが正当にあり得るため、
+        // 全文の再検証ではグローバル上限を再適用しない（緩和モード）。安全検査の本体（過大な
+        // 1箇所の変更・範囲の重複・適用で再現できること）は段落単位の検証で既に済んでいる。
+        DocumentDiffResult result = DocumentDiff.Create(
+            _document.Text,
+            corrected,
+            relaxedGlobalLimits: true);
         if (result.Accepted)
         {
             _proposals.AddRange(

@@ -7,7 +7,8 @@ public partial class ProofreadingReasonDialog : Window
 {
     internal ProofreadingReasonDialog(
         IEnumerable<string> suggestions,
-        bool generatesAlternative)
+        bool generatesAlternative,
+        string providerName)
     {
         InitializeComponent();
         ReasonSuggestionBox.ItemsSource = suggestions.ToArray();
@@ -15,7 +16,7 @@ public partial class ProofreadingReasonDialog : Window
             ? "この案を採用しない理由を入力してください。理由を反映した別案を生成します。"
             : "この案を採用しない理由を入力してください。";
         CostNoticeText.Text = generatesAlternative
-            ? "Gemini APIの料金が発生します。決定後、送信前にもう一度確認します。"
+            ? $"{providerName} APIの料金が発生します。決定後、送信前にもう一度確認します。"
             : "";
         Loaded += (_, _) => ReasonBox.Focus();
     }

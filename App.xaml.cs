@@ -42,6 +42,24 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        if (AppPaths.IsolationFailure is { } isolationPath)
+        {
+            // 隔離用ディレクトリ（JPSCRATCH_DATA_DIR）を作成できなかった。黙って実データ
+            // （%APPDATA%\JpScratch）へ落とすと、同じ app.db を既存の常駐インスタンスと並走して
+            // 書く危険があるため、起動を中止してユーザーに直させる。
+            MessageBox.Show(
+                "JPSCRATCH_DATA_DIR で指定した隔離用ディレクトリを作成できませんでした。\n\n" +
+                isolationPath + "\n\n" +
+                "実データ（%APPDATA%\\JpScratch）へフォールバックすると別インスタンスとデータを" +
+                "同時に書きかねないため、起動を中止します。\n" +
+                "環境変数を修正してから起動し直してください。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+            Shutdown();
+            return;
+        }
+
         if (!_singleInstance.TryAcquire())
         {
             // 既に常駐しているので、そちらを前に出して自分は静かに退場する
@@ -79,6 +97,22 @@ public partial class App : Application
         var repository = new TabRepository(_database);
         _tabs = new TabManager(repository, _settings);
         _tabs.Initialize();
+
+        if (_tabs.LoadFailures.Count > 0)
+        {
+            // 本文ファイルがあるのに読めなかったタブは開かずに残してある。ファイルは無傷なので
+            // メモ帳等で直接開けるが、黙って消えると気づけないため起動時に必ず伝える。
+            var names = string.Join(Environment.NewLine, _tabs.LoadFailures.Take(10));
+            var overflow = _tabs.LoadFailures.Count > 10
+                ? $"{Environment.NewLine}ほか {_tabs.LoadFailures.Count - 10} 件"
+                : "";
+            MessageBox.Show(
+                $"{_tabs.LoadFailures.Count} 個のタブの本文を読み込めませんでした（ファイルは残っています）。\n\n" +
+                names + overflow,
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
 
         _window = new MainWindow(
             _settings,
@@ -153,22 +187,71 @@ public partial class App : Application
 
     private void ExitApplication()
     {
-        _tabs?.SaveDirty();
+        // 保存失敗で Shutdown() に到達できず「終了できない」状態を避ける。保存そのものは
+        // OnExit 側でも再試行される（例外を握って終了処理へ進む）。原因はログへ残す。
+        try
+        {
+            _tabs?.SaveDirty();
+        }
+        catch (Exception ex)
+        {
+            WriteCrashLog(ex, "トレイ終了時の保存");
+        }
+
         Shutdown();
     }
 
+    /// <summary>
+    /// 環境変数によるAPIキー（GEMINI_API_KEY / OPENAI_API_KEY）が見つかったとき、使うかどうかを
+    /// 初回のみ確認する（CLAUDE.md: 「使うかどうかを初回のみ確認する。選択は記憶する」）。
+    /// プロバイダーごとに独立して確認し、選択はそれぞれ記憶する。
+    /// </summary>
     private void ConfirmEnvironmentCredentialSource()
     {
-        if (_settings.Current.GeminiApiKeySource != Models.GeminiApiKeySource.Unspecified ||
-            !_credentials.EnvironmentKeyAvailable)
+        ConfirmCredentialSourceIfNeeded(
+            providerName: "Gemini",
+            environmentVariableName: CredentialService.EnvironmentVariableName,
+            source: _settings.Current.GeminiApiKeySource,
+            environmentAvailable: _credentials.EnvironmentKeyAvailable,
+            storedKeyState: _credentials.StoredKeyState,
+            apply: value => _settings.Current.GeminiApiKeySource = value);
+
+        ConfirmCredentialSourceIfNeeded(
+            providerName: "OpenAI",
+            environmentVariableName: CredentialService.OpenAiEnvironmentVariableName,
+            source: _settings.Current.OpenAiApiKeySource,
+            environmentAvailable: _credentials.OpenAiEnvironmentKeyAvailable,
+            storedKeyState: _credentials.OpenAiStoredKeyState,
+            apply: value => _settings.Current.OpenAiApiKeySource = value);
+    }
+
+    private void ConfirmCredentialSourceIfNeeded(
+        string providerName,
+        string environmentVariableName,
+        Models.GeminiApiKeySource source,
+        bool environmentAvailable,
+        StoredCredentialState storedKeyState,
+        Action<Models.GeminiApiKeySource> apply)
+    {
+        if (source != Models.GeminiApiKeySource.Unspecified || !environmentAvailable)
+            return;
+
+        var dialog = new CredentialSourceDialog(
+            storedKeyState,
+            providerName,
+            environmentVariableName);
+        if (dialog.ShowDialog() != true)
         {
+            // × や Esc で閉じられた場合も、選択を未指定のままにしない（「初回のみ確認する。
+            // 選択は記憶する」の規約）。未指定のままだと毎回の起動で同じダイアログが出る。
+            // 既定は「保存済みキーを使う」（ダイアログの既定と同じで、未指定時と同じ動作）
+            // として記憶し、設定画面からいつでも変更できる。
+            apply(Models.GeminiApiKeySource.Stored);
+            _settings.SaveNow();
             return;
         }
 
-        var dialog = new CredentialSourceDialog(_credentials.StoredKeyState);
-        dialog.ShowDialog();
-
-        _settings.Current.GeminiApiKeySource = dialog.SelectedSource;
+        apply(dialog.SelectedSource);
         _settings.SaveNow();
     }
 

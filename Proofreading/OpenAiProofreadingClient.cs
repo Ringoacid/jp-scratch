@@ -187,11 +187,15 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
         }
 
         string requestJson = BuildRequestJson(systemInstruction, userMessage);
-        Stopwatch stopwatch = Stopwatch.StartNew();
+        Stopwatch stopwatch = new();
 
         for (int attempt = 1; attempt <= 2; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // 所要時間は「今回の送信」だけを計る。先頭で一度だけ開始すると、再試行の
+            // バックオフ（1秒）と初回の失敗分が含まれ、ログの所要時間が実送信より膨らむ。
+            stopwatch.Restart();
 
             try
             {
@@ -203,7 +207,7 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
                 {
                     if (attempt == 1 && IsTransient(response.StatusCode))
                     {
-                        await _delay(TimeSpan.FromSeconds(1), cancellationToken);
+                        await BackoffAsync(response, cancellationToken);
                         continue;
                     }
 
@@ -221,7 +225,7 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
             {
                 if (attempt == 1)
                 {
-                    await _delay(TimeSpan.FromSeconds(1), cancellationToken);
+                    await BackoffAsync(null, cancellationToken);
                     continue;
                 }
 
@@ -269,6 +273,27 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
     private static bool IsTransient(HttpStatusCode statusCode)
         => statusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests ||
            (int)statusCode >= 500;
+
+    private async Task BackoffAsync(
+        HttpResponseMessage? response,
+        CancellationToken cancellationToken)
+    {
+        // 429 で Retry-After が指定されていればそれに従う（Delta と HTTP-date の両形式に対応）。
+        // 無ければ固定1秒。長すぎる待ちで無駄に占有しないよう、下限1秒・上限5秒でクランプする
+        // （1試行あたりのタイムアウト15秒に対して、10秒待つと1リクエストの最悪時間が40秒近くに
+        // 伸びるため。5秒程度が妥当）。
+        TimeSpan delay = TimeSpan.FromSeconds(1);
+        if (response is { StatusCode: HttpStatusCode.TooManyRequests } &&
+            response.Headers.RetryAfter is { } retryAfter)
+        {
+            TimeSpan? retryAfterDelay = retryAfter.Delta ??
+                (retryAfter.Date is { } date ? date - DateTimeOffset.UtcNow : null);
+            if (retryAfterDelay is { } d)
+                delay = TimeSpan.FromSeconds(Math.Clamp(d.TotalSeconds, 1, 5));
+        }
+
+        await _delay(delay, cancellationToken);
+    }
 
     private static GeminiProofreadingResult ParseSuccess(
         string body,
