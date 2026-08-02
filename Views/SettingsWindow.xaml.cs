@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.ComponentModel;
 using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Controls;
@@ -12,7 +13,7 @@ using JpScratch.Services;
 
 namespace JpScratch.Views;
 
-/// <summary>設定画面（要件 5 / v1）。OK を押すまで実際の設定には触らない。</summary>
+/// <summary>設定画面（要件 5 / v1）。設定の変更は OK またはウィンドウを閉じると保存する。</summary>
 public partial class SettingsWindow : Window
 {
     private const string AutoFontLabel = "（自動: メイリオ → 游ゴシック）";
@@ -26,6 +27,7 @@ public partial class SettingsWindow : Window
     private bool _deleteOpenAiStoredKey;
     private bool _loadingCredentialControls;
     private bool _loadingOpenAiCredentialControls;
+    private bool _settingsApplied;
 
     // モデル単価編集用。入力途中の値はモデルごとに「生テキスト」で保持し、検証はOK押下時にまとめて
     // 行う（コンボを切り替えるたびに検証して選択を巻き戻すような作りにしない）。
@@ -34,6 +36,7 @@ public partial class SettingsWindow : Window
         new(StringComparer.Ordinal);
     private string? _selectedPricingModel;
     private bool _loadingPricingControls;
+    private bool _pricingControlsLoaded;
 
     // スタイルガイドの世代管理。編集・有効化・削除はOKボタンを待たずその場でDBへ書く
     // （AppSettingsのJSON保存とは独立した操作のため）。
@@ -302,6 +305,11 @@ public partial class SettingsWindow : Window
 
     private void OkButton_Click(object sender, RoutedEventArgs e)
     {
+        SaveAndClose();
+    }
+
+    private bool TrySaveSettings()
+    {
         // 現在値のコピーに書き込んでから差し替える。途中で例外が出ても設定が半端に壊れない。
         var updated = _service.Current.Clone();
         ApplyTo(updated);
@@ -311,18 +319,41 @@ public partial class SettingsWindow : Window
         // （例: 単価欄の入力ミスで戻る前にAPIキーだけ credentials.dat へ書き込まれてしまう、等）。
         // 書き込みの順序は「単価 → APIキー」にしている。後段（キー）が失敗してキャンセルした
         // 場合でも、より重要なキーだけが先に書き込まれた状態を残さないため。
-        if (!TryBuildPricingTable(out Dictionary<string, ModelPricing> pricingTable)) return;
-        if (!TrySavePricing(pricingTable)) return;
-        if (!TryApplyCredentialChanges(updated)) return;
+        // 単価コントロールの初期化に失敗した状態で閉じる場合、空の単価表を保存して
+        // pricing.json を壊さない。通常の操作では LoadPricingControls が必ず先に完了する。
+        if (_pricingControlsLoaded && _pricingText.Count > 0)
+        {
+            if (!TryBuildPricingTable(out Dictionary<string, ModelPricing> pricingTable)) return false;
+            if (!TrySavePricing(pricingTable)) return false;
+        }
+        if (!TryApplyCredentialChanges(updated)) return false;
         _service.Replace(updated);
+        return true;
+    }
 
+    private void SaveAndClose()
+    {
+        if (_settingsApplied || !TrySaveSettings()) return;
+
+        _settingsApplied = true;
         DialogResult = true;
         Close();
     }
 
-    private void CancelButton_Click(object sender, RoutedEventArgs e) => Close();
+    private void TitleBarCloseButton_Click(object sender, RoutedEventArgs e) => SaveAndClose();
 
-    private void TitleBarCloseButton_Click(object sender, RoutedEventArgs e) => Close();
+    private void SettingsWindow_Closing(object? sender, CancelEventArgs e)
+    {
+        if (_settingsApplied) return;
+
+        if (TrySaveSettings())
+        {
+            _settingsApplied = true;
+            return;
+        }
+
+        e.Cancel = true;
+    }
 
     private void CredentialSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -588,9 +619,9 @@ public partial class SettingsWindow : Window
     private FrameworkElement BuildRejectionTrendRow(RejectionRateBucket bucket)
     {
         var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(96) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
 
         var label = new TextBlock
         {
@@ -619,6 +650,7 @@ public partial class SettingsWindow : Window
             Text = $"拒否 {bucket.Rejected}/{bucket.Total}件（{bucket.RejectionRate * 100:0}%）",
             FontSize = 11,
             VerticalAlignment = VerticalAlignment.Center,
+            TextAlignment = TextAlignment.Left,
         };
         summary.SetResourceReference(TextBlock.ForegroundProperty, "SubtleTextBrush");
         Grid.SetColumn(summary, 2);
@@ -669,6 +701,7 @@ public partial class SettingsWindow : Window
         ShowSelectedPricingModel();
 
         _loadingPricingControls = false;
+        _pricingControlsLoaded = true;
     }
 
     private void PricingModelCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -689,6 +722,8 @@ public partial class SettingsWindow : Window
 
     private void ShowSelectedPricingModel()
     {
+        UpdateCredentialPanelVisibility();
+
         if (_selectedPricingModel is null || !_pricingText.TryGetValue(_selectedPricingModel, out var text))
         {
             PricingInputBox.Text = "";
@@ -700,6 +735,18 @@ public partial class SettingsWindow : Window
         PricingInputBox.Text = text.Input;
         PricingOutputBox.Text = text.Output;
         PricingUpdatedAtBox.Text = text.UpdatedAt;
+    }
+
+    private void UpdateCredentialPanelVisibility()
+    {
+        bool isGemini = string.Equals(
+            _selectedPricingModel,
+            ProofreadingModelCatalog.GeminiModel,
+            StringComparison.Ordinal);
+        bool isOpenAi = ProofreadingModelCatalog.IsOpenAi(_selectedPricingModel);
+
+        GeminiCredentialPanel.Visibility = isGemini ? Visibility.Visible : Visibility.Collapsed;
+        OpenAiCredentialPanel.Visibility = isOpenAi ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>

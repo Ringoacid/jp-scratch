@@ -8,3 +8,12 @@ obj/
 
 # コードの行数を数える拡張機能の出力
 .VSCodeCounter
+
+# codex
+.codex/
+
+# github-copilot
+.github/
+
+# Python バイトコードキャッシュ
+__pycache__/

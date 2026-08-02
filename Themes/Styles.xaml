@@ -108,8 +108,23 @@
         <Setter Property="CaretBrush" Value="{DynamicResource TextBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="4,3" />
+        <Setter Property="Padding" Value="8,5" />
+        <Setter Property="MinHeight" Value="34" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6">
+                        <ScrollViewer x:Name="PART_ContentHost"
+                                      Padding="{TemplateBinding Padding}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style x:Key="AppPasswordBox" TargetType="PasswordBox">
@@ -118,8 +133,23 @@
         <Setter Property="CaretBrush" Value="{DynamicResource TextBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Padding" Value="4,3" />
+        <Setter Property="Padding" Value="8,5" />
+        <Setter Property="MinHeight" Value="34" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6">
+                        <ScrollViewer x:Name="PART_ContentHost"
+                                      Padding="{TemplateBinding Padding}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!--
@@ -127,48 +157,147 @@
         Background / Foreground を設定しても無視されるため、ダークテーマでは
         「明るい箱」「暗い背景に暗い文字」になる。CheckBox と ComboBox はテンプレートごと差し替える。
     -->
-    <Style x:Key="AppCheckBox" TargetType="CheckBox">
+    <Style x:Key="AppToggleSwitch" TargetType="ToggleButton">
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
-        <Setter Property="Background" Value="{DynamicResource ControlBackgroundBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
-        <Setter Property="Margin" Value="0,4" />
+        <Setter Property="Background" Value="{DynamicResource ToggleOffBrush}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Width" Value="48" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Right" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Track"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="13">
+                        <Ellipse x:Name="Thumb"
+                                 Width="20" Height="20"
+                                 Margin="3"
+                                 HorizontalAlignment="Left"
+                                 Fill="{DynamicResource ToggleThumbBrush}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Track" Property="Opacity" Value="0.88" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Track" Property="Background" Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 設定項目用。CheckBox本体をスイッチだけにすることで、横一列全体がクリック判定にならない。 -->
+    <Style x:Key="AppToggleCheckBox" TargetType="CheckBox">
+        <Setter Property="Width" Value="48" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalAlignment" Value="Right" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <Border x:Name="Track"
+                            Width="48" Height="26"
+                            Background="{DynamicResource ToggleOffBrush}"
+                            CornerRadius="13">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CheckStates">
+                                <VisualState x:Name="Checked">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Thumb"
+                                                         Storyboard.TargetProperty="(Canvas.Left)"
+                                                         To="25" Duration="0:0:0.16">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Unchecked">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Thumb"
+                                                         Storyboard.TargetProperty="(Canvas.Left)"
+                                                         To="3" Duration="0:0:0.16">
+                                            <DoubleAnimation.EasingFunction>
+                                                <QuadraticEase EasingMode="EaseOut" />
+                                            </DoubleAnimation.EasingFunction>
+                                        </DoubleAnimation>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                        <Canvas Width="48" Height="26" ClipToBounds="True">
+                            <Ellipse x:Name="Thumb"
+                                     Width="20" Height="20"
+                                     Canvas.Left="3"
+                                     Canvas.Top="3"
+                                     Fill="{DynamicResource ToggleThumbBrush}" />
+                        </Canvas>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Track" Property="Opacity" Value="0.88" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Track" Property="Background" Value="{DynamicResource AccentBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="AppCheckBox" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource StrongTextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
-                    <!-- ラベルの余白もクリックできるよう、透明の背景を敷いておく -->
-                    <StackPanel Orientation="Horizontal" Background="Transparent">
-                        <Border x:Name="Box"
-                                Width="16" Height="16"
-                                CornerRadius="3"
-                                VerticalAlignment="Center"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="1">
-                            <Path x:Name="Check"
-                                  Margin="3,4,3,3"
-                                  Stretch="Uniform"
-                                  Data="M0,4 L3.2,7.2 L9,0.6"
-                                  Stroke="{DynamicResource AccentTextBrush}"
-                                  StrokeThickness="1.8"
-                                  StrokeEndLineCap="Round"
-                                  StrokeStartLineCap="Round"
-                                  Visibility="Collapsed" />
-                        </Border>
-                        <ContentPresenter Margin="6,0,0,0"
+                    <Grid Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ContentPresenter Grid.Column="0"
                                           VerticalAlignment="Center"
+                                          HorizontalAlignment="Left"
+                                          Margin="0,0,16,0"
                                           RecognizesAccessKey="True" />
-                    </StackPanel>
+                        <Border x:Name="Track"
+                                Grid.Column="1"
+                                Width="48" Height="26"
+                                Background="{DynamicResource ToggleOffBrush}"
+                                CornerRadius="13">
+                            <Ellipse x:Name="Thumb"
+                                     Width="20" Height="20"
+                                     Margin="3"
+                                     HorizontalAlignment="Left"
+                                     Fill="{DynamicResource ToggleThumbBrush}" />
+                        </Border>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource SubtleTextBrush}" />
+                            <Setter TargetName="Track" Property="Opacity" Value="0.88" />
                         </Trigger>
-                        <!-- チェック時の見た目はホバーより後に書く。順序を逆にすると、
-                             チェック済みのままカーソルを乗せたときに枠が灰色へ戻る。 -->
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource AccentBrush}" />
-                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
-                            <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="Track" Property="Background" Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.5" />
@@ -290,7 +419,9 @@
     -->
     <Style x:Key="AppTabItem" TargetType="TabItem">
         <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}" />
-        <Setter Property="Padding" Value="12,6" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Padding" Value="20,10" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TabItem">
@@ -312,8 +443,9 @@
                         <!-- 選択状態の見た目はホバーより後に書く。AppCheckBoxと同じ理由で、
                              逆にすると選択中のタブにカーソルを乗せた瞬間に選択の見た目が消える。 -->
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TabActiveBackgroundBrush}" />
-                            <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -357,13 +489,45 @@
     <Style x:Key="SectionHeader" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Margin" Value="0,14,0,6" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Margin" Value="0,18,0,8" />
     </Style>
 
     <Style x:Key="FieldLabel" TargetType="TextBlock">
-        <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource StrongTextBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontSize" Value="14" />
         <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="Margin" Value="0,0,8,0" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="TextAlignment" Value="Left" />
+        <Setter Property="Margin" Value="0,0,12,0" />
+    </Style>
+
+    <Style x:Key="SettingsCard" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource SettingsCardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0,0,0,4" />
+    </Style>
+
+    <Style x:Key="SettingsRow" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{DynamicResource SettingsSeparatorBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Margin" Value="16,0" />
+        <Setter Property="Padding" Value="0,12" />
+    </Style>
+
+    <Style x:Key="SettingsLastRow" TargetType="Border" BasedOn="{StaticResource SettingsRow}">
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
+    <Style x:Key="SettingsDescription" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource SubtleTextBrush}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
     <!--

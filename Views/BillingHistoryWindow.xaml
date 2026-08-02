@@ -51,6 +51,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
@@ -124,9 +125,16 @@
                            TextWrapping="Wrap"
                            Foreground="{DynamicResource TextBrush}" />
 
+                <TextBlock Grid.Row="4"
+                           Margin="0,0,0,8"
+                           Text="表示料金は入力・出力トークン数と設定単価だけで算出した概算です。キャッシュ関連料金などは考慮していないため、実際の請求額が表示額を上回る場合があります。"
+                           TextWrapping="Wrap"
+                           FontSize="12"
+                           Foreground="{DynamicResource SubtleTextBrush}" />
+
                 <!-- ===== 明細一覧 ===== -->
                 <ListView x:Name="ResultsList"
-                          Grid.Row="4"
+                          Grid.Row="5"
                           Background="{DynamicResource ControlBackgroundBrush}"
                           Foreground="{DynamicResource TextBrush}"
                           BorderBrush="{DynamicResource BorderBrush}"

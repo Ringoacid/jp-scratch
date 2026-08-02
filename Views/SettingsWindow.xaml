@@ -4,13 +4,15 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:system="clr-namespace:System;assembly=System.Runtime"
         Title="JP Scratch の設定"
-        Width="520" Height="700"
+        Width="760" Height="920"
+        MinWidth="680" MinHeight="640"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         WindowStyle="None"
         ResizeMode="CanResize"
         UseLayoutRounding="True"
-        Background="{DynamicResource WindowBackgroundBrush}">
+        Background="{DynamicResource WindowBackgroundBrush}"
+        Closing="SettingsWindow_Closing">
 
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="32"
@@ -63,103 +65,187 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="0,10,0,0">
 
-                            <TextBlock Text="表示" Style="{StaticResource SectionHeader}" Margin="0,0,0,6" />
+                            <TextBlock Text="表示" Style="{StaticResource SectionHeader}" Margin="0,0,0,8" />
 
-                            <Grid Margin="0,0,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="ウィンドウの表示位置" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="PositionCombo" Grid.Column="1" Style="{StaticResource AppComboBox}" />
-                            </Grid>
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="ウィンドウの表示位置" Style="{StaticResource FieldLabel}" />
+                                            <ComboBox x:Name="PositionCombo" Grid.Column="1" Width="320"
+                                                      HorizontalAlignment="Right" Style="{StaticResource AppComboBox}" />
+                                        </Grid>
+                                    </Border>
 
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="テーマ" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="ThemeCombo" Grid.Column="1" Style="{StaticResource AppComboBox}" />
-                            </Grid>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="テーマ" Style="{StaticResource FieldLabel}" />
+                                            <ComboBox x:Name="ThemeCombo" Grid.Column="1" Width="320"
+                                                      HorizontalAlignment="Right" Style="{StaticResource AppComboBox}" />
+                                        </Grid>
+                                    </Border>
 
-                            <CheckBox x:Name="TopmostCheck" Style="{StaticResource AppCheckBox}"
-                                      Content="常に手前に表示する" />
-                            <CheckBox x:Name="HideOnFocusLostCheck" Style="{StaticResource AppCheckBox}"
-                                      Content="フォーカスが外れたら自動的に隠す" />
-                            <CheckBox x:Name="CopyOnHideCheck" Style="{StaticResource AppCheckBox}"
-                                      Content="隠すときに本文をクリップボードへコピーする"
-                                      ToolTip="フォーカス喪失・ホットキー・Esc・閉じるボタン、どの隠し方でもコピーします" />
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="常に手前に表示する" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="TopmostCheck" Grid.Column="1"
+                                                      Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="フォーカスが外れたら自動的に隠す" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="HideOnFocusLostCheck" Grid.Column="1"
+                                                      Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="隠すときに本文をクリップボードへコピーする"
+                                                       Style="{StaticResource FieldLabel}"
+                                                       ToolTip="フォーカス喪失・ホットキー・Esc・閉じるボタンなど、どの方法で非表示にしてもコピーします。" />
+                                            <CheckBox x:Name="CopyOnHideCheck" Grid.Column="1"
+                                                      Style="{StaticResource AppToggleCheckBox}"
+                                                      ToolTip="フォーカス喪失・ホットキー・Esc・閉じるボタンなど、どの方法で非表示にしてもコピーします。" />
+                                            <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
+                                                       Text="フォーカス喪失・ホットキー・Esc・閉じるボタンなど、どの方法で非表示にしてもコピーします。"
+                                                       Style="{StaticResource SettingsDescription}"
+                                                       Margin="0,4,64,0" />
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
 
                             <!-- ===== ホットキー ===== -->
-                            <TextBlock Text="グローバルホットキー" Style="{StaticResource SectionHeader}" />
+                            <TextBlock Text="グローバルホットキー" Style="{StaticResource SectionHeader}" Margin="0,18,0,0" />
                             <TextBlock Text="入力欄を選んでキーを押すと割り当てられます。Backspace で解除。"
                                        TextWrapping="Wrap"
                                        Foreground="{DynamicResource SubtleTextBrush}"
                                        FontSize="11"
-                                       Margin="0,0,0,6" />
+                                       Margin="0,0,0,8" />
 
-                            <Grid Margin="0,0,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="表示 / 非表示" Style="{StaticResource FieldLabel}" />
-                                <TextBox x:Name="ToggleHotkeyBox" Grid.Column="1"
-                                         Style="{StaticResource AppTextBox}"
-                                         IsReadOnly="True"
-                                         PreviewKeyDown="HotkeyBox_PreviewKeyDown"
-                                         LostFocus="HotkeyBox_LostFocus" />
-                            </Grid>
-
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="全文をコピーして隠す" Style="{StaticResource FieldLabel}" />
-                                <TextBox x:Name="CopyHideHotkeyBox" Grid.Column="1"
-                                         Style="{StaticResource AppTextBox}"
-                                         IsReadOnly="True"
-                                         PreviewKeyDown="HotkeyBox_PreviewKeyDown"
-                                         LostFocus="HotkeyBox_LostFocus" />
-                            </Grid>
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="320" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="表示 / 非表示" Style="{StaticResource FieldLabel}" />
+                                            <TextBox x:Name="ToggleHotkeyBox" Grid.Column="1"
+                                                     Style="{StaticResource AppTextBox}"
+                                                     IsReadOnly="True"
+                                                     HorizontalAlignment="Stretch"
+                                                     PreviewKeyDown="HotkeyBox_PreviewKeyDown"
+                                                     LostFocus="HotkeyBox_LostFocus" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="320" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="全文をコピーして隠す" Style="{StaticResource FieldLabel}" />
+                                            <TextBox x:Name="CopyHideHotkeyBox" Grid.Column="1"
+                                                     Style="{StaticResource AppTextBox}"
+                                                     IsReadOnly="True"
+                                                     HorizontalAlignment="Stretch"
+                                                     PreviewKeyDown="HotkeyBox_PreviewKeyDown"
+                                                     LostFocus="HotkeyBox_LostFocus" />
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
 
                             <!-- ===== 保存 ===== -->
                             <TextBlock Text="保存" Style="{StaticResource SectionHeader}" />
 
-                            <Grid Margin="0,0,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="80" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="自動保存の待ち時間" Style="{StaticResource FieldLabel}" />
-                                <TextBox x:Name="AutoSaveBox" Grid.Column="1" Style="{StaticResource AppTextBox}"
-                                         TextAlignment="Right" />
-                                <TextBlock Grid.Column="2" Text="ミリ秒" Style="{StaticResource FieldLabel}" Margin="8,0,0,0" />
-                            </Grid>
-
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="80" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="ゴミ箱の保持期間" Style="{StaticResource FieldLabel}" />
-                                <TextBox x:Name="TrashDaysBox" Grid.Column="1" Style="{StaticResource AppTextBox}"
-                                         TextAlignment="Right" />
-                                <TextBlock Grid.Column="2" Text="日" Style="{StaticResource FieldLabel}" Margin="8,0,0,0" />
-                            </Grid>
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="210" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="自動保存の待ち時間" Style="{StaticResource FieldLabel}" />
+                                            <Grid Grid.Column="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="130" />
+                                                    <ColumnDefinition Width="10" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="AutoSaveBox" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
+                                                <TextBlock Grid.Column="2" Text="ミリ秒" Style="{StaticResource FieldLabel}" Margin="0" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="210" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="ゴミ箱の保持期間" Style="{StaticResource FieldLabel}" />
+                                            <Grid Grid.Column="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="130" />
+                                                    <ColumnDefinition Width="10" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="TrashDaysBox" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
+                                                <TextBlock Grid.Column="2" Text="日" Style="{StaticResource FieldLabel}" Margin="0" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
 
                             <!-- ===== その他 ===== -->
                             <TextBlock Text="その他" Style="{StaticResource SectionHeader}" />
-                            <CheckBox x:Name="StartupCheck" Style="{StaticResource AppCheckBox}"
-                                      Content="Windows のサインイン時に常駐を開始する" />
+                            <Border Style="{StaticResource SettingsCard}">
+                                <Border Style="{StaticResource SettingsLastRow}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="48" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Windows のサインイン時に常駐を開始する" Style="{StaticResource FieldLabel}" />
+                                        <CheckBox x:Name="StartupCheck" Grid.Column="1"
+                                                  Style="{StaticResource AppToggleCheckBox}" />
+                                    </Grid>
+                                </Border>
+                            </Border>
 
                             <TextBlock x:Name="DataFolderText"
                                        TextWrapping="Wrap"
-                                       FontSize="11"
+                                       FontSize="12"
                                        Margin="0,12,0,0"
                                        Foreground="{DynamicResource SubtleTextBrush}" />
                         </StackPanel>
@@ -171,28 +257,58 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="0,10,0,0">
 
-                            <TextBlock Text="エディタ" Style="{StaticResource SectionHeader}" Margin="0,0,0,6" />
+                            <TextBlock Text="エディタ" Style="{StaticResource SectionHeader}" Margin="0,0,0,8" />
 
-                            <Grid Margin="0,0,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="フォント" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="FontCombo" Grid.Column="1" Style="{StaticResource AppComboBox}"
-                                          IsEditable="False" MaxDropDownHeight="320" />
-                                <TextBox x:Name="FontSizeBox" Grid.Column="2" Width="56" Margin="8,0,0,0"
-                                         Style="{StaticResource AppTextBox}" TextAlignment="Right"
-                                         ToolTip="フォントサイズ（Ctrl + マウスホイールでも変えられます）" />
-                            </Grid>
-
-                            <CheckBox x:Name="WordWrapCheck" Style="{StaticResource AppCheckBox}" Content="折り返して表示する" />
-                            <CheckBox x:Name="LineNumbersCheck" Style="{StaticResource AppCheckBox}" Content="行番号を表示する" />
-                            <CheckBox x:Name="CurrentLineCheck" Style="{StaticResource AppCheckBox}" Content="現在の行をハイライトする" />
-                            <CheckBox x:Name="WhitespaceCheck" Style="{StaticResource AppCheckBox}"
-                                      Content="空白（半角・全角スペース、タブ）を可視化する" />
-                            <CheckBox x:Name="EndOfLineCheck" Style="{StaticResource AppCheckBox}" Content="改行記号を表示する" />
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="フォント" Style="{StaticResource FieldLabel}" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                                <ComboBox x:Name="FontCombo" Width="420" Style="{StaticResource AppComboBox}"
+                                                          IsEditable="False" MaxDropDownHeight="320" />
+                                                <TextBox x:Name="FontSizeBox" Width="72" Margin="10,0,0,0"
+                                                         Style="{StaticResource AppTextBox}" TextAlignment="Right"
+                                                         ToolTip="フォントサイズ（Ctrl + マウスホイールでも変えられます）" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="48" /></Grid.ColumnDefinitions>
+                                            <TextBlock Text="折り返して表示する" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="WordWrapCheck" Grid.Column="1" Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="48" /></Grid.ColumnDefinitions>
+                                            <TextBlock Text="行番号を表示する" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="LineNumbersCheck" Grid.Column="1" Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="48" /></Grid.ColumnDefinitions>
+                                            <TextBlock Text="現在の行をハイライトする" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="CurrentLineCheck" Grid.Column="1" Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="48" /></Grid.ColumnDefinitions>
+                                            <TextBlock Text="空白（半角・全角スペース、タブ）を可視化する" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="WhitespaceCheck" Grid.Column="1" Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsLastRow}">
+                                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="48" /></Grid.ColumnDefinitions>
+                                            <TextBlock Text="改行記号を表示する" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="EndOfLineCheck" Grid.Column="1" Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -204,121 +320,145 @@
 
                             <TextBlock Text="校正" Style="{StaticResource SectionHeader}" Margin="0,0,0,6" />
 
-                            <Grid Margin="0,0,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="使用モデル" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="ProofreadingModelCombo"
-                                          Grid.Column="1"
-                                          Style="{StaticResource AppComboBox}" />
-                            </Grid>
-
-                            <CheckBox x:Name="AutoProofreadingCheck"
-                                      Style="{StaticResource AppCheckBox}"
-                                      Content="入力停止後に自動で校正する" />
-
-                            <CheckBox x:Name="ConfirmPaidApiCallsCheck"
-                                      Style="{StaticResource AppCheckBox}"
-                                      Content="課金API実行前の確認を表示する"
-                                      ToolTip="オフにすると、校正・別案生成の前に確認せず実行します。" />
-
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="80" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="入力停止後の待ち時間" Style="{StaticResource FieldLabel}" />
-                                <TextBox x:Name="ProofreadingDebounceBox"
-                                         Grid.Column="1"
-                                         Style="{StaticResource AppTextBox}"
-                                         TextAlignment="Right" />
-                                <TextBlock Grid.Column="2"
-                                           Text="ミリ秒"
-                                           Style="{StaticResource FieldLabel}"
-                                           Margin="8,0,0,0" />
-                            </Grid>
-
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="80" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="最小送信間隔" Style="{StaticResource FieldLabel}" />
-                                <TextBox x:Name="ProofreadingIntervalBox"
-                                         Grid.Column="1"
-                                         Style="{StaticResource AppTextBox}"
-                                         TextAlignment="Right" />
-                                <TextBlock Grid.Column="2"
-                                           Text="秒"
-                                           Style="{StaticResource FieldLabel}"
-                                           Margin="8,0,0,0" />
-                            </Grid>
-
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="80" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="月間上限額"
-                                           Style="{StaticResource FieldLabel}"
-                                           ToolTip="当月の累計がこの額以上になると自動校正を停止します。0で無制限。" />
-                                <TextBox x:Name="MonthlyLimitBox"
-                                         Grid.Column="1"
-                                         Style="{StaticResource AppTextBox}"
-                                         TextAlignment="Right" />
-                                <TextBlock Grid.Column="2"
-                                           Text="USD（0で無制限）"
-                                           Style="{StaticResource FieldLabel}"
-                                           Margin="8,0,0,0" />
-                            </Grid>
-
-                            <Grid Margin="0,4,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="80" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="上限接近の警告"
-                                           Style="{StaticResource FieldLabel}"
-                                           ToolTip="当月の累計がこの割合を超えたら、ステータスバーの進捗バーを警告色にします。" />
-                                <TextBox x:Name="MonthlyLimitWarningBox"
-                                         Grid.Column="1"
-                                         Style="{StaticResource AppTextBox}"
-                                         TextAlignment="Right" />
-                                <TextBlock Grid.Column="2"
-                                           Text="%"
-                                           Style="{StaticResource FieldLabel}"
-                                           Margin="8,0,0,0" />
-                            </Grid>
-
-                            <Grid Margin="0,4,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="80" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="明細の保持期間"
-                                           Style="{StaticResource FieldLabel}"
-                                           ToolTip="{StaticResource ApiLogRetentionHelp}" />
-                                <TextBox x:Name="ApiLogRetentionBox"
-                                         Grid.Column="1"
-                                         Style="{StaticResource AppTextBox}"
-                                         TextAlignment="Right"
-                                         ToolTip="{StaticResource ApiLogRetentionHelp}" />
-                                <!-- 補足は必ずウィンドウ幅に収まる長さにする。長い説明をここへ置くと
-                                     TextTrimming も Wrap も無いこの列で右端が黙って切れる（実機で踏んだ）。
-                                     詳しい説明は ToolTip 側に置く。 -->
-                                <TextBlock Grid.Column="2"
-                                           Text="か月（0で無期限）"
-                                           Style="{StaticResource FieldLabel}"
-                                           Margin="8,0,0,0"
-                                           ToolTip="{StaticResource ApiLogRetentionHelp}" />
-                            </Grid>
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="320" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="使用モデル" Style="{StaticResource FieldLabel}" />
+                                            <ComboBox x:Name="ProofreadingModelCombo"
+                                                      Grid.Column="1"
+                                                      Style="{StaticResource AppComboBox}"
+                                                      HorizontalAlignment="Stretch" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="入力停止後に自動で校正する" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="AutoProofreadingCheck" Grid.Column="1" Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="課金API実行前の確認を表示する" Style="{StaticResource FieldLabel}"
+                                                       ToolTip="オフにすると、校正・別案生成の前に確認せず実行します。" />
+                                            <CheckBox x:Name="ConfirmPaidApiCallsCheck" Grid.Column="1" Style="{StaticResource AppToggleCheckBox}"
+                                                      ToolTip="オフにすると、校正・別案生成の前に確認せず実行します。" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="320" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="入力停止後の待ち時間" Style="{StaticResource FieldLabel}" />
+                                            <Grid Grid.Column="1" Width="210" HorizontalAlignment="Right">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="130" />
+                                                    <ColumnDefinition Width="10" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="ProofreadingDebounceBox" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
+                                                <TextBlock Grid.Column="2" Text="ミリ秒" Style="{StaticResource FieldLabel}" Margin="0" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="320" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="最小送信間隔" Style="{StaticResource FieldLabel}" />
+                                            <Grid Grid.Column="1" Width="210" HorizontalAlignment="Right">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="130" />
+                                                    <ColumnDefinition Width="10" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="ProofreadingIntervalBox" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
+                                                <TextBlock Grid.Column="2" Text="秒" Style="{StaticResource FieldLabel}" Margin="0" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="320" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="月間上限額" Style="{StaticResource FieldLabel}" />
+                                                <TextBlock Text="0で無制限" Style="{StaticResource SettingsDescription}" Margin="0,4,12,0" />
+                                            </StackPanel>
+                                            <Grid Grid.Column="1" Width="210" HorizontalAlignment="Right">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="130" />
+                                                    <ColumnDefinition Width="10" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="MonthlyLimitBox" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
+                                                <TextBlock Grid.Column="2" Text="USD" Style="{StaticResource FieldLabel}" Margin="0" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="320" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="上限接近の警告"
+                                                       Style="{StaticResource FieldLabel}"
+                                                       ToolTip="当月の累計がこの割合を超えたら、ステータスバーの進捗バーを警告色にします。" />
+                                            <Grid Grid.Column="1" Width="210" HorizontalAlignment="Right">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="130" />
+                                                    <ColumnDefinition Width="10" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="MonthlyLimitWarningBox" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
+                                                <TextBlock Grid.Column="2" Text="%" Style="{StaticResource FieldLabel}" Margin="0" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsLastRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="320" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel ToolTip="{StaticResource ApiLogRetentionHelp}">
+                                                <TextBlock Text="明細の保持期間" Style="{StaticResource FieldLabel}" />
+                                                <TextBlock Text="0で無期限" Style="{StaticResource SettingsDescription}" Margin="0,4,12,0" />
+                                            </StackPanel>
+                                            <Grid Grid.Column="1" Width="210" HorizontalAlignment="Right">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="130" />
+                                                    <ColumnDefinition Width="10" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="ApiLogRetentionBox" Style="{StaticResource AppTextBox}"
+                                                         TextAlignment="Right" ToolTip="{StaticResource ApiLogRetentionHelp}" />
+                                                <TextBlock Grid.Column="2" Text="か月" Style="{StaticResource FieldLabel}"
+                                                           Margin="0" ToolTip="{StaticResource ApiLogRetentionHelp}" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -330,81 +470,94 @@
 
                             <TextBlock Text="学習（文体の適応）" Style="{StaticResource SectionHeader}" Margin="0,0,0,6" />
 
-                            <TextBlock Text="カスタム指示" Style="{StaticResource FieldLabel}" Margin="0,0,0,2" />
-                            <TextBlock Text="校正のたびに必ず伝える、あなた自身の指示です。自動生成スタイルガイドより優先されます。"
-                                       TextWrapping="Wrap"
-                                       Foreground="{DynamicResource SubtleTextBrush}"
-                                       FontSize="11"
-                                       Margin="0,0,0,4" />
-                            <TextBox x:Name="CustomInstructionBox"
-                                     Style="{StaticResource AppTextBox}"
-                                     Height="60"
-                                     TextWrapping="Wrap"
-                                     AcceptsReturn="True"
-                                     VerticalScrollBarVisibility="Auto"
-                                     Margin="0,0,0,8" />
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <StackPanel>
+                                            <TextBlock Text="カスタム指示" Style="{StaticResource FieldLabel}" Margin="0,0,0,4" />
+                                            <TextBlock Text="校正のたびに必ず伝える、あなた自身の指示です。自動生成スタイルガイドより優先されます。"
+                                                       Style="{StaticResource SettingsDescription}" />
+                                            <TextBox x:Name="CustomInstructionBox"
+                                                     Style="{StaticResource AppTextBox}"
+                                                     Height="60"
+                                                     Margin="0,10,0,0"
+                                                     TextWrapping="Wrap"
+                                                     AcceptsReturn="True"
+                                                     VerticalScrollBarVisibility="Auto" />
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="リアクションが一定件数たまったらスタイルガイドの生成を提案する"
+                                                       Style="{StaticResource FieldLabel}"
+                                                       ToolTip="OFFでも「学習」セクションの手編集は引き続き可能です。生成は課金APIを呼ぶため、この設定に関わらず毎回確認します。" />
+                                            <CheckBox x:Name="StyleGuideAutoGenerateCheck" Grid.Column="1"
+                                                      Style="{StaticResource AppToggleCheckBox}"
+                                                      ToolTip="OFFでも「学習」セクションの手編集は引き続き可能です。生成は課金APIを呼ぶため、この設定に関わらず毎回確認します。" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsLastRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="320" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="生成を提案する件数"
+                                                       Style="{StaticResource FieldLabel}"
+                                                       ToolTip="前回の確認時点から、これだけ新しいリアクションが積まれたら生成を提案します。" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                                <TextBox x:Name="StyleGuideThresholdBox" Width="130" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
+                                                <TextBlock Text="件ごと" Style="{StaticResource FieldLabel}" Margin="10,0,0,0" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
 
-                            <CheckBox x:Name="StyleGuideAutoGenerateCheck"
-                                      Style="{StaticResource AppCheckBox}"
-                                      Content="リアクションが一定件数たまったらスタイルガイドの生成を提案する"
-                                      ToolTip="OFFでも「学習」セクションの手編集は引き続き可能です。生成は課金APIを呼ぶため、この設定に関わらず毎回確認します。" />
-
-                            <Grid Margin="0,4,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="80" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="生成を提案する件数"
-                                           Style="{StaticResource FieldLabel}"
-                                           ToolTip="前回の確認時点から、これだけ新しいリアクションが積まれたら生成を提案します。" />
-                                <TextBox x:Name="StyleGuideThresholdBox"
-                                         Grid.Column="1"
-                                         Style="{StaticResource AppTextBox}"
-                                         TextAlignment="Right" />
-                                <TextBlock Grid.Column="2"
-                                           Text="件ごと"
-                                           Style="{StaticResource FieldLabel}"
-                                           Margin="8,0,0,0" />
-                            </Grid>
-
-                            <Grid Margin="0,0,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="スタイルガイドの世代" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="StyleGuideHistoryCombo"
-                                          Grid.Column="1"
-                                          Style="{StaticResource AppComboBox}"
-                                          SelectionChanged="StyleGuideHistoryCombo_SelectionChanged" />
-                            </Grid>
-
-                            <TextBlock x:Name="StyleGuideStatusText"
-                                       Margin="150,2,0,4"
-                                       TextWrapping="Wrap"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource SubtleTextBrush}" />
-
-                            <TextBox x:Name="StyleGuideContentBox"
-                                     Style="{StaticResource AppTextBox}"
-                                     Height="100"
-                                     TextWrapping="Wrap"
-                                     AcceptsReturn="True"
-                                     VerticalScrollBarVisibility="Auto"
-                                     Margin="0,0,0,4"
-                                     ToolTip="生成された（または編集した）ルール文です。自由に書き換えられます。" />
-
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,8">
-                                <Button x:Name="StyleGuideSaveButton" Style="{StaticResource AppButton}"
-                                        Content="保存" Click="StyleGuideSaveButton_Click" />
-                                <Button x:Name="StyleGuideActivateButton" Style="{StaticResource AppButton}"
-                                        Content="この世代を使う" Margin="8,0,0,0" Click="StyleGuideActivateButton_Click" />
-                                <Button x:Name="StyleGuideDeactivateButton" Style="{StaticResource AppButton}"
-                                        Content="無効化" Margin="8,0,0,0" Click="StyleGuideDeactivateButton_Click" />
-                                <Button x:Name="StyleGuideDeleteButton" Style="{StaticResource AppButton}"
-                                        Content="この世代を削除" Margin="8,0,0,0" Click="StyleGuideDeleteButton_Click" />
-                            </StackPanel>
+                            <TextBlock Text="スタイルガイド" Style="{StaticResource SectionHeader}" />
+                            <Border Style="{StaticResource SettingsCard}">
+                                <Border Style="{StaticResource SettingsLastRow}">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="420" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="スタイルガイドの世代" Style="{StaticResource FieldLabel}" />
+                                            <ComboBox x:Name="StyleGuideHistoryCombo"
+                                                      Grid.Column="1"
+                                                      Style="{StaticResource AppComboBox}"
+                                                      SelectionChanged="StyleGuideHistoryCombo_SelectionChanged" />
+                                        </Grid>
+                                        <TextBlock x:Name="StyleGuideStatusText"
+                                                   Margin="0,10,0,0"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SettingsDescription}" />
+                                        <TextBox x:Name="StyleGuideContentBox"
+                                                 Style="{StaticResource AppTextBox}"
+                                                 Height="100"
+                                                 Margin="0,10,0,0"
+                                                 TextWrapping="Wrap"
+                                                 AcceptsReturn="True"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 ToolTip="生成された（または編集した）ルール文です。自由に書き換えられます。" />
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                                            <Button x:Name="StyleGuideSaveButton" Style="{StaticResource AppButton}"
+                                                    Content="保存" Click="StyleGuideSaveButton_Click" />
+                                            <Button x:Name="StyleGuideActivateButton" Style="{StaticResource AppButton}"
+                                                    Content="この世代を使う" Margin="8,0,0,0" Click="StyleGuideActivateButton_Click" />
+                                            <Button x:Name="StyleGuideDeactivateButton" Style="{StaticResource AppButton}"
+                                                    Content="無効化" Margin="8,0,0,0" Click="StyleGuideDeactivateButton_Click" />
+                                            <Button x:Name="StyleGuideDeleteButton" Style="{StaticResource AppButton}"
+                                                    Content="この世代を削除" Margin="8,0,0,0" Click="StyleGuideDeleteButton_Click" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </Border>
 
                             <!-- ===== 学習効果 ===== -->
                             <TextBlock Text="学習効果" Style="{StaticResource SectionHeader}" />
@@ -413,7 +566,7 @@
                                        Foreground="{DynamicResource SubtleTextBrush}"
                                        FontSize="11"
                                        Margin="0,0,0,6" />
-                            <StackPanel x:Name="RejectionTrendPanel" />
+                            <StackPanel x:Name="RejectionTrendPanel" Margin="0,4,0,0" />
                         </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -423,163 +576,201 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="0,10,0,0">
 
-                            <TextBlock Text="モデル単価" Style="{StaticResource SectionHeader}" Margin="0,0,0,6" />
-                            <TextBlock Text="各サービス公式の価格が変わったときに更新します。1M tokensあたりのUSDです。"
+                            <TextBlock Text="モデル設定" Style="{StaticResource SectionHeader}" Margin="0,0,0,6" />
+                            <TextBlock Text="設定するモデルを選択すると、そのモデル専用のAPIキーと単価設定が下に表示されます。"
                                        TextWrapping="Wrap"
-                                       Foreground="{DynamicResource SubtleTextBrush}"
-                                       FontSize="11"
+                                       Style="{StaticResource SettingsDescription}"
                                        Margin="0,0,0,6" />
 
-                            <Grid Margin="0,0,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="モデル" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="PricingModelCombo"
-                                          Grid.Column="1"
-                                          Style="{StaticResource AppComboBox}"
-                                          SelectionChanged="PricingModelCombo_SelectionChanged" />
-                            </Grid>
+                            <Border Style="{StaticResource SettingsCard}">
+                                <Border Style="{StaticResource SettingsLastRow}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="420" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="モデル" Style="{StaticResource FieldLabel}" />
+                                        <ComboBox x:Name="PricingModelCombo"
+                                                  Grid.Column="1"
+                                                  Style="{StaticResource AppComboBox}"
+                                                  SelectionChanged="PricingModelCombo_SelectionChanged" />
+                                    </Grid>
+                                </Border>
+                            </Border>
 
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="80" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="入力単価" Style="{StaticResource FieldLabel}" />
-                                <TextBox x:Name="PricingInputBox"
-                                         Grid.Column="1"
-                                         Style="{StaticResource AppTextBox}"
-                                         TextAlignment="Right" />
-                                <TextBlock Grid.Column="2"
-                                           Text="USD / 1M tokens"
-                                           Style="{StaticResource FieldLabel}"
-                                           Margin="8,0,0,0" />
-                            </Grid>
+                            <Border Margin="18,10,0,0"
+                                    Padding="14,0,0,0"
+                                    BorderBrush="{DynamicResource AccentBrush}"
+                                    BorderThickness="3,0,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="選択したモデルの設定" Style="{StaticResource FieldLabel}" Margin="0,0,0,4" />
+                                    <TextBlock Text="最初にAPIキーを用意してください。料金表示は入力・出力トークン数と設定単価だけで算出した概算で、キャッシュ関連料金などは考慮していません。実際の請求額が表示額を上回る場合があります。"
+                                               Style="{StaticResource SettingsDescription}"
+                                               Margin="0,0,0,8" />
 
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="80" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="出力単価" Style="{StaticResource FieldLabel}" />
-                                <TextBox x:Name="PricingOutputBox"
-                                         Grid.Column="1"
-                                         Style="{StaticResource AppTextBox}"
-                                         TextAlignment="Right" />
-                                <TextBlock Grid.Column="2"
-                                           Text="USD / 1M tokens（thinking を含む）"
-                                           Style="{StaticResource FieldLabel}"
-                                           Margin="8,0,0,0" />
-                            </Grid>
+                                    <Border Style="{StaticResource SettingsCard}">
+                                    <StackPanel>
+                                    <StackPanel x:Name="GeminiCredentialPanel">
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="420" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="Gemini APIキーの取得元" Style="{StaticResource FieldLabel}" />
+                                            <ComboBox x:Name="CredentialSourceCombo"
+                                                      Grid.Column="1"
+                                                      Style="{StaticResource AppComboBox}"
+                                                      SelectionChanged="CredentialSourceCombo_SelectionChanged" />
+                                        </Grid>
+                                        <Grid Margin="0,10,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="420" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="新しい API キー" Style="{StaticResource FieldLabel}" />
+                                            <Grid Grid.Column="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <PasswordBox x:Name="ApiKeyBox"
+                                                             Style="{StaticResource AppPasswordBox}"
+                                                             PasswordChar="●"
+                                                             PasswordChanged="ApiKeyBox_PasswordChanged"
+                                                             ToolTip="既存のキーは表示しません。未入力のままなら変更しません。" />
+                                                <Button x:Name="DeleteStoredKeyButton"
+                                                        Grid.Column="1"
+                                                        Margin="8,0,0,0"
+                                                        Style="{StaticResource AppButton}"
+                                                        Content="保存済みキーを削除"
+                                                        Click="DeleteStoredKeyButton_Click" />
+                                            </Grid>
+                                        </Grid>
+                                        <TextBlock x:Name="CredentialStatusText"
+                                                   Margin="0,8,0,0"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SettingsDescription}" />
+                                        </StackPanel>
+                                    </Border>
+                                    </StackPanel>
 
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="80" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="更新日" Style="{StaticResource FieldLabel}" />
-                                <TextBox x:Name="PricingUpdatedAtBox"
-                                         Grid.Column="1"
-                                         Style="{StaticResource AppTextBox}"
-                                         TextAlignment="Right" />
-                                <TextBlock Grid.Column="2"
-                                           Text="yyyy-MM-dd"
-                                           Style="{StaticResource FieldLabel}"
-                                           Margin="8,0,0,0" />
-                            </Grid>
+                                    <StackPanel x:Name="OpenAiCredentialPanel">
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="420" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="OpenAI APIキーの取得元" Style="{StaticResource FieldLabel}" />
+                                            <ComboBox x:Name="OpenAiCredentialSourceCombo"
+                                                      Grid.Column="1"
+                                                      Style="{StaticResource AppComboBox}"
+                                                      SelectionChanged="OpenAiCredentialSourceCombo_SelectionChanged" />
+                                        </Grid>
+                                        <Grid Margin="0,10,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="420" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="新しいOpenAIキー" Style="{StaticResource FieldLabel}" />
+                                            <Grid Grid.Column="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <PasswordBox x:Name="OpenAiApiKeyBox"
+                                                             Style="{StaticResource AppPasswordBox}"
+                                                             PasswordChar="●"
+                                                             PasswordChanged="OpenAiApiKeyBox_PasswordChanged"
+                                                             ToolTip="既存のキーは表示しません。未入力のままなら変更しません。" />
+                                                <Button x:Name="DeleteOpenAiStoredKeyButton"
+                                                        Grid.Column="1"
+                                                        Margin="8,0,0,0"
+                                                        Style="{StaticResource AppButton}"
+                                                        Content="保存済みキーを削除"
+                                                        Click="DeleteOpenAiStoredKeyButton_Click" />
+                                            </Grid>
+                                        </Grid>
+                                        <TextBlock x:Name="OpenAiCredentialStatusText"
+                                                   Margin="0,8,0,0"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SettingsDescription}" />
+                                        </StackPanel>
+                                    </Border>
+                                    </StackPanel>
 
-                            <TextBlock x:Name="PricingErrorText"
-                                       Margin="150,2,0,8"
-                                       TextWrapping="Wrap"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource DangerBrush}"
-                                       Visibility="Collapsed" />
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="420" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="入力単価" Style="{StaticResource FieldLabel}" />
+                                            <Grid Grid.Column="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="130" />
+                                                    <ColumnDefinition Width="10" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="PricingInputBox" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
+                                                <TextBlock Grid.Column="2" Text="USD / 1M tokens" Style="{StaticResource FieldLabel}" Margin="0" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="420" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="出力単価" Style="{StaticResource FieldLabel}" />
+                                            <Grid Grid.Column="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="130" />
+                                                    <ColumnDefinition Width="10" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="PricingOutputBox" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
+                                                <TextBlock Grid.Column="2" Text="USD / 1M tokens（thinking を含む）" Style="{StaticResource FieldLabel}" Margin="0" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsLastRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="420" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Text="単価の更新日" Style="{StaticResource FieldLabel}" />
+                                                <TextBlock Text="モデルの公式API料金が変更され、上の単価を更新した日を入力します。"
+                                                           Style="{StaticResource SettingsDescription}" Margin="0,4,12,0" />
+                                            </StackPanel>
+                                            <Grid Grid.Column="1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="130" />
+                                                    <ColumnDefinition Width="10" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBox x:Name="PricingUpdatedAtBox" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
+                                                <TextBlock Grid.Column="2" Text="yyyy-MM-dd" Style="{StaticResource FieldLabel}" Margin="0" />
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                    </StackPanel>
+                                    </Border>
 
-                            <!-- ===== APIキー ===== -->
-                            <TextBlock Text="APIキー" Style="{StaticResource SectionHeader}" />
-
-                            <Grid Margin="0,0,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="Gemini APIキーの取得元" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="CredentialSourceCombo"
-                                          Grid.Column="1"
-                                          Style="{StaticResource AppComboBox}"
-                                          SelectionChanged="CredentialSourceCombo_SelectionChanged" />
-                            </Grid>
-
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="新しい API キー" Style="{StaticResource FieldLabel}" />
-                                <PasswordBox x:Name="ApiKeyBox"
-                                             Grid.Column="1"
-                                             Style="{StaticResource AppPasswordBox}"
-                                             PasswordChar="●"
-                                             PasswordChanged="ApiKeyBox_PasswordChanged"
-                                             ToolTip="既存のキーは表示しません。未入力のままなら変更しません。" />
-                                <Button x:Name="DeleteStoredKeyButton"
-                                        Grid.Column="2"
-                                        Margin="8,0,0,0"
-                                        Style="{StaticResource AppButton}"
-                                        Content="保存済みキーを削除"
-                                        Click="DeleteStoredKeyButton_Click" />
-                            </Grid>
-
-                            <TextBlock x:Name="CredentialStatusText"
-                                       Margin="150,2,0,2"
-                                       TextWrapping="Wrap"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource SubtleTextBrush}" />
-
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="OpenAI APIキーの取得元" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="OpenAiCredentialSourceCombo"
-                                          Grid.Column="1"
-                                          Style="{StaticResource AppComboBox}"
-                                          SelectionChanged="OpenAiCredentialSourceCombo_SelectionChanged" />
-                            </Grid>
-
-                            <Grid Margin="0,4,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="新しいOpenAIキー" Style="{StaticResource FieldLabel}" />
-                                <PasswordBox x:Name="OpenAiApiKeyBox"
-                                             Grid.Column="1"
-                                             Style="{StaticResource AppPasswordBox}"
-                                             PasswordChar="●"
-                                             PasswordChanged="OpenAiApiKeyBox_PasswordChanged"
-                                             ToolTip="既存のキーは表示しません。未入力のままなら変更しません。" />
-                                <Button x:Name="DeleteOpenAiStoredKeyButton"
-                                        Grid.Column="2"
-                                        Margin="8,0,0,0"
-                                        Style="{StaticResource AppButton}"
-                                        Content="保存済みキーを削除"
-                                        Click="DeleteOpenAiStoredKeyButton_Click" />
-                            </Grid>
-
-                            <TextBlock x:Name="OpenAiCredentialStatusText"
-                                       Margin="150,2,0,2"
-                                       TextWrapping="Wrap"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource SubtleTextBrush}" />
+                                    <TextBlock x:Name="PricingErrorText"
+                                               Margin="16,2,16,8"
+                                               TextWrapping="Wrap"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource DangerBrush}"
+                                               Visibility="Collapsed" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -594,10 +785,11 @@
                     MinWidth="140"
                     Click="OpenFolderButton_Click" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button x:Name="CancelButton" Style="{StaticResource AppButton}" Content="キャンセル"
-                        MinWidth="90" IsCancel="True" Click="CancelButton_Click" />
                 <Button x:Name="OkButton" Style="{StaticResource AppButton}" Content="OK"
-                        MinWidth="90" Margin="8,0,0,0" IsDefault="True" Click="OkButton_Click" />
+                        MinWidth="120" Height="38" Margin="8,0,0,0" IsDefault="True"
+                        Background="{DynamicResource AccentBrush}"
+                        Foreground="{DynamicResource AccentTextBrush}"
+                        Click="OkButton_Click" />
             </StackPanel>
                 </DockPanel>
             </Grid>

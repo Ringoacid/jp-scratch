@@ -1920,7 +1920,9 @@ public partial class MainWindow : Window
         return
             $"{ProofreadingModelCatalog.DisplayName(_proofreadingClient.Model)} 単価（{pricing.UpdatedAt}）: " +
             $"入力 ${pricing.InputUsdPerMillion:0.####}／100万トークン、" +
-            $"出力・推論 ${pricing.OutputUsdPerMillion:0.####}／100万トークン";
+            $"出力・推論 ${pricing.OutputUsdPerMillion:0.####}／100万トークン\n" +
+            "※ 表示料金は概算です。キャッシュ関連料金などは考慮していないため、" +
+            "実際の請求額が表示額を上回る場合があります。";
     }
 
     /// <summary>起動後に静かに日次レートを更新し、既存のUSD表示を壊さずに再描画する。</summary>
@@ -2271,6 +2273,14 @@ public partial class MainWindow : Window
         {
             var dialog = new SettingsWindow(_settings, _credentials, _pricing, _styleGuides, _reactions) { Owner = this };
             dialog.ShowDialog();
+
+            // GUI smoke test only: after the settings dialog has completed, exercise the
+            // same Application shutdown path as the tray's Exit command.
+            if (Environment.GetCommandLineArgs().Any(
+                    arg => string.Equals(arg, "--gui-test-exit-after-settings", StringComparison.Ordinal)))
+            {
+                Application.Current.Shutdown();
+            }
         }
         finally
         {

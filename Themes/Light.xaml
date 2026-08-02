@@ -29,6 +29,12 @@
     <SolidColorBrush x:Key="ControlHoverBrush" Color="#E0E0E0" />
     <SolidColorBrush x:Key="ControlPressedBrush" Color="#CFCFCF" />
 
+    <SolidColorBrush x:Key="SettingsCardBackgroundBrush" Color="#FBFBFB" />
+    <SolidColorBrush x:Key="SettingsSeparatorBrush" Color="#E1E1E1" />
+    <SolidColorBrush x:Key="ToggleOffBrush" Color="#C8C8C8" />
+    <SolidColorBrush x:Key="ToggleThumbBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="StrongTextBrush" Color="#000000" />
+
     <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="#E8E8E8" />
 
     <SolidColorBrush x:Key="ScrollBarThumbBrush" Color="#C4C4C4" />
