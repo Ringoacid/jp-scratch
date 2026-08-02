@@ -189,6 +189,18 @@ installer/         WiX v5 による MSI
   使う。`StrikeBrush` は Freeze 済みのデコレーションを後から色変更できないため、setter で
   `CreateDoubleStrikethrough` を作り直す（自動プロパティにするとテーマ切替で取り消し線の色だけ
   古いまま固まる）。
+- **許可による本文置換は、必ず `CarryForwardAppliedEdit` と `_applyingProposal` の対で扱う。**
+  片方だけだと「別の場所を1文字打った瞬間に同じ段落が再送・再課金される」バグが残る。
+  `TryApply` が段落ハッシュを変えるため、`CarryForwardAppliedEdit`（`ParagraphProofreadingPlanner`）で
+  送信済みハッシュを適用後の値へ引き継がない限り、`FindUnchangedCurrentIndexes` はその段落を
+  「未送信の変更」と判定し、次回の自動校正で再送・再課金される。同時に `_applyingProposal`
+  （`MainWindow`）で `OnTabTextChanged` のデバウンス再始動を止めないと、適用そのものが新しい変更として
+  数えられて即座に再校正が走る。引き継ぎの判定に迷いがある場合は no-op して「再校正される側」へ倒す
+  （抑止側へ倒すと誤字を見逃す）。新しく本文をプログラムから書き換える処理を足すときは、
+  この「送信済みハッシュの引き継ぎ ＋ 変更通知の抑止」の両方が要ることを毎回確認すること。
+  一括許可（`AcceptAllProposals`）では `using (tab.Document.RunUpdate())` を必ず `try` の内側に置く
+  （`EndUpdate` でまとめて発火する `TextChanged` がフラグ解除後に届くと、全変更がユーザーの入力として
+  数えられて自動校正が走る）。
 
 ## 環境の癖
 
@@ -772,6 +784,49 @@ requirements.md §3.3.5 の提示方法を「波線＋下部パネル」から�
 既知の制約（仕様として受け入れる）: 提案範囲の内側にキャレットを置けない・提案範囲の中では
 全角スペースの可視化が効かない・行をまたぐ提案はインライン表示されず下部パネルのみ・
 提案が極端に長いと修正前＋修正後の合計幅ぶん本文が横に押し出される。
+
+## 提案の許可による再校正ループの解消（2026-08-02 実装）
+
+requirements.md 3.3.1 発火条件の「許可後の再送・再課金」を解消した（作業A + B + D）。原因は独立した2つがあり、
+両方直した。
+
+- **原因1（トリガー）**: 許可による置換が `TextDocument.TextChanged` → `TabTextChanged` を同期で
+  上げ、デバウンスタイマーを再始動していた。**作業B**: `MainWindow` に `_applyingProposal` を追加し、
+  `OnTabTextChanged` はこの間 `_proofreadingSchedule.NotifyChanged` を呼ばない
+  （`ScheduleAutomaticProofreading()` 自体は残す。冪等で、以前から溜まっている未送信の変更への
+  タイマーを壊さないため）。`TabManager` 側は抑止しない（`IsDirty` の更新と自動保存タイマーの
+  再始動も担っているため）。
+- **原因2（同一性・本丸）**: 許可で段落ハッシュが変わり、`_lastSentHashes` と一致しなくなるため、
+  次に別の場所を1文字打っただけで同じ段落が再送・再課金される。**作業A**:
+  `ParagraphProofreadingPlanner.CarryForwardAppliedEdit(beforeText, afterText, appliedOffset)` を新設。
+  適用前後の段落数が等しく・適用段落以外のハッシュが全て一致し・適用段落が送信済み集合に含まれる
+  ときだけ、送信済みハッシュを適用後の値へ引き継ぐ。判定に迷いがあれば no-op して再校正される側へ
+  倒す。単体許可は `TryApplyWithCarryForward`（`_applyingProposal` と対）から呼ぶ。
+  `ProofreadingProposal.Start` / `Length` は失効後に例外を投げるため、`TryApply` の前にオフセットと
+  適用前全文を控える。
+- **作業D（一括許可）**: 提案パネルのボタン列先頭に「すべて許可」（`Ctrl+Shift+.`）を追加。
+  `AcceptAllProposals` は `using (tab.Document.RunUpdate())` で1回の更新にまとめ、提案ごとに
+  リアクション記録→`TryApply`→`CarryForwardAppliedEdit` をループする。`using` は必ず `try` の内側
+  （`EndUpdate` でまとめて発火する `TextChanged` がフラグ解除後に届くと、全変更がユーザー入力として
+  数えられて自動校正が走る＝機能ごと元のバグへ戻る）。API を呼ばないので確認ダイアログは出さない。
+  提案は `TextAnchor` で位置追従するため適用順序は正しさに影響しない。
+  入口には `_proofreadingRunInProgress` のガードを置く（実行中はボタンが無効化されてもキーバインドは
+  素通りする。実行中に本文を変えると `MarkSent(plan, index)` が `_lastSentHashes` を丸ごと置き換えるため、
+  適用した引き継ぎが全て消えて N 段落が次回再送・再課金される。単体許可の fail open「余分に1回」を
+  N 倍にしないためのガード）。
+- **自己テスト**: `PromptValidation/ParagraphProofreadingPlannerValidation.cs` に8件追加
+  （許可の引き継ぎ・引き継ぎ後の別段落編集・段落数が変わる場合は引き継がない・未送信段落は
+  引き継がない・適用段落以外が変わっていたら引き継がない・オフセットが段落外なら引き継がない・
+  連続適用の同一段落2回・連続適用の別段落2箇所。後者2件は一括許可のループ呼び出し＝
+  「前回の after を次回の before として」の不変条件を固定する）。
+  `--self-test` は 116 行 → **124 行すべて PASS、FAIL 0、exit code 0**（本体ビルドも警告0・エラー0）。
+
+**未確認のまま残っていること**: 次はすべて実機未確認（この環境では実キー入力・IME 挙動を自動検証
+できないため、ユーザーの実機確認待ち）。
+- **許可直後に自動校正が走らないこと**（ステータスバーに校正中の表示が出ない・課金が増えない）
+- **許可した後に別の段落を1文字打ったとき、走る校正がその段落だけであること**（許可した段落が再送されない）
+- 一括許可の Undo が1回の `Ctrl+Z` でまとまるか（グループ化が効かない場合は N 回の Undo に劣化する可能性がある）
+- 校正実行中に `Ctrl+Shift+.` を押しても何も起きないこと（入口ガードの実効確認）
 
 ## 次の WIP と、その判断理由
 

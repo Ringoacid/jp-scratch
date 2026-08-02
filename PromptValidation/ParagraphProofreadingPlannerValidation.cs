@@ -16,6 +16,14 @@ internal static class ParagraphProofreadingPlannerValidation
             ("選択範囲", TestSelection),
             ("複数応答の全文統合", TestResultMerge),
             ("中断時の部分送信済み記録", TestPartialMarkSent),
+            ("許可の引き継ぎ", TestCarryForwardAppliedEdit),
+            ("引き継ぎ後の別段落編集", TestCarryForwardThenEditAnother),
+            ("段落数が変わる場合は引き継がない", TestCarryForwardRejectedOnCountChange),
+            ("未送信段落は引き継がない", TestCarryForwardRejectedWhenUnsent),
+            ("適用段落以外が変わっていたら引き継がない", TestCarryForwardRejectedOnOtherChange),
+            ("オフセットが段落外なら引き継がない", TestCarryForwardRejectedOnOffsetOutside),
+            ("連続適用（同一段落2回）", TestCarryForwardSequentialSameParagraph),
+            ("連続適用（別段落2箇所）", TestCarryForwardSequentialDifferentParagraphs),
         ];
 
         bool passed = true;
@@ -195,5 +203,166 @@ internal static class ParagraphProofreadingPlannerValidation
         bool noneWorks = replanNone.Requests.Count == 2;
 
         return partialWorks && noneWorks;
+    }
+
+    /// <summary>
+    /// 「許可」による本文置換を送信済みハッシュへ引き継ぐ。適用後の全文でプランを立て直しても
+    /// 該当段落が再送されない（0件）ことを確認する。本文は3段落、中央を1文字だけ書き換えた
+    /// after を渡す。appliedOffset は適用前の座標（中央段落の先頭 = 6）。
+    /// </summary>
+    private static bool TestCarryForwardAppliedEdit()
+    {
+        const string before = "甲です。\n\n乙です。\n\n丙です。";
+        const string after = "甲です。\n\n乙です！\n\n丙です。";
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan initial = planner.CreateAutomaticPlan(before);
+        if (initial.Requests.Count != 3)
+            return false;
+        planner.MarkSent(initial);
+
+        planner.CarryForwardAppliedEdit(before, after, appliedOffset: 6);
+        ProofreadingPlan replan = planner.CreateAutomaticPlan(after);
+        return replan.Requests.Count == 0;
+    }
+
+    /// <summary>
+    /// 引き継ぎの後、別の段落を編集したときはその段落だけが再送対象になる
+    /// （引き継いだ段落は再送されない）。
+    /// </summary>
+    private static bool TestCarryForwardThenEditAnother()
+    {
+        const string before = "甲です。\n\n乙です。\n\n丙です。";
+        const string afterAccept = "甲です。\n\n乙です！\n\n丙です。";
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan initial = planner.CreateAutomaticPlan(before);
+        planner.MarkSent(initial);
+        planner.CarryForwardAppliedEdit(before, afterAccept, appliedOffset: 6);
+        if (planner.CreateAutomaticPlan(afterAccept).Requests.Count != 0)
+            return false;
+
+        const string afterEdit = "甲です。\n\n乙です！\n\n丙です！";
+        ProofreadingPlan replan = planner.CreateAutomaticPlan(afterEdit);
+        return replan.Requests.Count == 1 &&
+               replan.Requests[0].SourceText == "丙です！";
+    }
+
+    /// <summary>
+    /// 適用前後で段落数が変わる（空行の挿入で1段落が2つに割れる）場合は引き継がず、
+    /// 適用後のプランに該当段落が再送対象として残る。
+    /// </summary>
+    private static bool TestCarryForwardRejectedOnCountChange()
+    {
+        const string before = "甲です。\n\n乙です。乙です。\n\n丙です。";
+        const string after = "甲です。\n\n乙です。\n\n乙です。\n\n丙です。";
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan initial = planner.CreateAutomaticPlan(before);
+        if (initial.Requests.Count != 3)
+            return false;
+        planner.MarkSent(initial);
+
+        // before の中央段落（Start=6）に適用した想定。after では段落数が4へ増える。
+        planner.CarryForwardAppliedEdit(before, after, appliedOffset: 6);
+
+        ProofreadingPlan replan = planner.CreateAutomaticPlan(after);
+        return replan.Requests.Count == 2 &&
+               replan.Requests.Any(request => request.SourceText == "乙です。");
+    }
+
+    /// <summary>
+    /// MarkSent を一度も呼んでいない（＝手動の選択範囲校正相当）状態では引き継がず、
+    /// プランが従来どおり全段落ぶん出る（未送信の段落を送信済みに化けさせない）。
+    /// </summary>
+    private static bool TestCarryForwardRejectedWhenUnsent()
+    {
+        const string before = "甲です。\n\n乙です。\n\n丙です。";
+        const string after = "甲です。\n\n乙です！\n\n丙です。";
+        var planner = new ParagraphProofreadingPlanner();
+
+        planner.CarryForwardAppliedEdit(before, after, appliedOffset: 6);
+
+        ProofreadingPlan replan = planner.CreateAutomaticPlan(after);
+        return replan.Requests.Count == 3 &&
+               replan.Requests.Any(request => request.SourceText == "乙です！");
+    }
+
+    /// <summary>
+    /// 適用段落以外の段落も変わっている場合は引き継がない（想定外の状態）。
+    /// 適用段落は再送対象のまま残る。
+    /// </summary>
+    private static bool TestCarryForwardRejectedOnOtherChange()
+    {
+        const string before = "甲です。\n\n乙です。\n\n丙です。";
+        const string after = "甲です！\n\n乙です！\n\n丙です。";
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan initial = planner.CreateAutomaticPlan(before);
+        planner.MarkSent(initial);
+
+        planner.CarryForwardAppliedEdit(before, after, appliedOffset: 6);
+
+        ProofreadingPlan replan = planner.CreateAutomaticPlan(after);
+        return replan.Requests.Count == 2 &&
+               replan.Requests.Any(request => request.SourceText == "乙です！");
+    }
+
+    /// <summary>
+    /// appliedOffset がどの段落にも含まれない（空行位置など）場合は引き継がない。
+    /// 該当段落は再送対象のまま残る。
+    /// </summary>
+    private static bool TestCarryForwardRejectedOnOffsetOutside()
+    {
+        const string before = "甲です。\n\n乙です。\n\n丙です。";
+        const string after = "甲です。\n\n乙です！\n\n丙です。";
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan initial = planner.CreateAutomaticPlan(before);
+        planner.MarkSent(initial);
+
+        // オフセット5は「甲です。」と「乙です。」の間の空行（どの段落にも属さない）。
+        planner.CarryForwardAppliedEdit(before, after, appliedOffset: 5);
+
+        ProofreadingPlan replan = planner.CreateAutomaticPlan(after);
+        return replan.Requests.Count == 1 &&
+               replan.Requests[0].SourceText == "乙です！";
+    }
+
+    /// <summary>
+    /// 一括許可（AcceptAllProposals）のループを再現する。同一段落に2回連続で適用しても
+    /// （前回の after を次回の before として CarryForwardAppliedEdit を連続呼び出し）、
+    /// 最終的なプランは0件（引き継ぎが失われず再送されない）。
+    /// </summary>
+    private static bool TestCarryForwardSequentialSameParagraph()
+    {
+        const string before = "甲です。\n\n乙です。\n\n丙です。";
+        const string after1 = "甲です。\n\n乙です！\n\n丙です。";
+        const string after2 = "甲です。\n\n乙です！！\n\n丙です。";
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan initial = planner.CreateAutomaticPlan(before);
+        planner.MarkSent(initial);
+
+        // 1回目の適用（中央段落の先頭 = 6）。
+        planner.CarryForwardAppliedEdit(before, after1, appliedOffset: 6);
+        // 2回目の適用（同じ段落。適用後も先頭 = 6）。
+        planner.CarryForwardAppliedEdit(after1, after2, appliedOffset: 6);
+
+        return planner.CreateAutomaticPlan(after2).Requests.Count == 0;
+    }
+
+    /// <summary>
+    /// 一括許可（AcceptAllProposals）のループを再現する。別の段落（P1 → P3）へ順に適用しても、
+    /// 最終的なプランは0件（各適用の引き継ぎが保持される）。
+    /// </summary>
+    private static bool TestCarryForwardSequentialDifferentParagraphs()
+    {
+        const string before = "甲です。\n\n乙です。\n\n丙です。";
+        const string after1 = "甲です。\n\n乙です！\n\n丙です。";
+        const string after2 = "甲です。\n\n乙です！\n\n丙です！";
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan initial = planner.CreateAutomaticPlan(before);
+        planner.MarkSent(initial);
+
+        // P1（offset 6）→ P3（offset 12）の順に適用。
+        planner.CarryForwardAppliedEdit(before, after1, appliedOffset: 6);
+        planner.CarryForwardAppliedEdit(after1, after2, appliedOffset: 12);
+
+        return planner.CreateAutomaticPlan(after2).Requests.Count == 0;
     }
 }

@@ -107,6 +107,12 @@ public partial class MainWindow : Window
     private bool _proofreadingRunInProgress;
 
     /// <summary>
+    /// 「許可」による本文置換の最中だけ true。この間の TabTextChanged では自動校正の
+    /// デバウンスを再始動しない（モデル自身の出力であり、ユーザーの新しい入力ではない）。
+    /// </summary>
+    private bool _applyingProposal;
+
+    /// <summary>
     /// スタイルガイド自動生成（要件3.4.2）が課金APIの応答待ちか。校正・別案生成と同じく
     /// トレイの「校正中」表示・_apiErrorStickyを共有するので、互いに排他させる。
     /// </summary>
@@ -500,7 +506,9 @@ public partial class MainWindow : Window
 
     private void OnTabTextChanged(ScratchTab tab)
     {
-        _proofreadingSchedule.NotifyChanged(tab.Id, DateTimeOffset.Now);
+        // 「許可」による置換はモデル自身の出力なので、新しい変更として数えない（作業A・Bの対）。
+        if (!_applyingProposal)
+            _proofreadingSchedule.NotifyChanged(tab.Id, DateTimeOffset.Now);
         if (ReferenceEquals(tab, _tabs.Active))
             ScheduleAutomaticProofreading();
     }
@@ -756,6 +764,7 @@ public partial class MainWindow : Window
         Bind(Key.F8, ModifierKeys.None, () => SelectRelativeProposal(1));
         Bind(Key.F8, ModifierKeys.Shift, () => SelectRelativeProposal(-1));
         Bind(Key.OemPeriod, ModifierKeys.Control, AcceptSelectedProposal);
+        Bind(Key.OemPeriod, ModifierKeys.Control | ModifierKeys.Shift, AcceptAllProposals);
         Bind(Key.OemComma, ModifierKeys.Control, RejectSelectedProposal);
     }
 
@@ -833,6 +842,9 @@ public partial class MainWindow : Window
 
     private void AcceptProposalButton_Click(object sender, RoutedEventArgs e)
         => AcceptSelectedProposal();
+
+    private void AcceptAllProposalsButton_Click(object sender, RoutedEventArgs e)
+        => AcceptAllProposals();
 
     private void RejectProposalButton_Click(object sender, RoutedEventArgs e)
         => RejectSelectedProposal();
@@ -1020,11 +1032,119 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_tabs.Active is not { } tab)
+            return;
+
+        // TryApply 後は proposal.Start が失効して例外を投げるため、先に控える。
+        int appliedOffset = proposal.Start;
+        string beforeText = tab.Document.Text;
+
         bool recorded = TryAddReaction(proposal, ProofreadingReaction.Accept);
-        if (_activeProofreading?.TryApply(proposal) == true)
+        if (TryApplyWithCarryForward(tab, proposal, appliedOffset, beforeText))
             SetTransientStatus(
                 recorded ? "修正を許可しました" : "修正を許可しました（リアクション記録は失敗）");
         Editor.TextArea.Focus();
+        MaybeOfferStyleGuideGeneration();
+    }
+
+    /// <summary>
+    /// 提案を適用し、送信済みハッシュを引き継ぐ。適用中は自動校正のデバウンスを止める。
+    /// 作業A（送信済みへの引き継ぎ）と作業B（変更通知の抑止）の対。片方だけでは
+    /// 「別の場所を1文字打った瞬間に同じ段落が再送・再課金される」バグが残る。
+    /// 注意: このヘルパーは finally で無条件に _applyingProposal を false へ戻すため、
+    /// 既に _applyingProposal スコープ内（一括許可 AcceptAllProposals のループ）から呼んではいけない。
+    /// 一括許可側は TryApply + CarryForwardAppliedEdit をインライン展開している（DRY に直す際も
+    /// この制約を守ること）。
+    /// </summary>
+    private bool TryApplyWithCarryForward(
+        ScratchTab tab,
+        ProofreadingProposal proposal,
+        int appliedOffset,
+        string beforeText)
+    {
+        _applyingProposal = true;
+        try
+        {
+            if (_activeProofreading?.TryApply(proposal) != true)
+                return false;
+            tab.ProofreadingPlanner.CarryForwardAppliedEdit(
+                beforeText,
+                tab.Document.Text,
+                appliedOffset);
+            return true;
+        }
+        finally
+        {
+            _applyingProposal = false;
+        }
+    }
+
+    /// <summary>
+    /// 現在アクティブな提案をすべて許可する。1件ずつ許可すると本文変更が N 回起きるため、
+    /// 1回の更新にまとめる。リアクションは学習データなので提案ごとに個別に記録する。
+    /// </summary>
+    private void AcceptAllProposals()
+    {
+        // 校正実行中（_proofreadingRunInProgress）はキーバインドがボタン無効化を素通りするため、
+        // 入口で同じガードを置く。実行中に本文を変えると MarkSent(plan, index) が _lastSentHashes を
+        // スナップショット時点の段落ハッシュで丸ごと置き換えるため、適用した引き継ぎが全て消え、
+        // N段落が次回再送・再課金される（単体許可の fail open「余分に1回」を N 倍にしないため）。
+        if (_proofreadingRunInProgress ||
+            _activeProofreading is not { } session || _tabs.Active is not { } tab)
+            return;
+
+        // 適用中に session.Proposals が変化する（TryApply が Remove する）ため、先にコピーする。
+        ProofreadingProposal[] targets = session.Proposals
+            .Where(proposal => proposal.IsActive)
+            .OrderBy(proposal => proposal.Start)
+            .ToArray();
+        if (targets.Length == 0)
+            return;
+
+        int applied = 0;
+        int recordFailures = 0;
+        _applyingProposal = true;
+        try
+        {
+            // 1回の Ctrl+Z でまとめて戻せるように Undo をグループ化する。
+            // using は必ず try の内側に置く（EndUpdate でまとめて発火する TextChanged が
+            // フラグ解除後に届くと、一括許可の全変更がユーザーの入力として数えられる）。
+            using (tab.Document.RunUpdate())
+            {
+                foreach (ProofreadingProposal proposal in targets)
+                {
+                    // 直前の適用で失効している場合があるため毎回確認する。
+                    if (!proposal.IsActive || !CanReactTo(proposal))
+                        continue;
+
+                    int appliedOffset = proposal.Start;
+                    string beforeText = tab.Document.Text;
+                    // 記録は適用より先。既存の単体許可と同じ順序で、
+                    // リアクション（学習データ）の記録は適用の成否と独立に行う。直さないこと。
+                    if (!TryAddReaction(proposal, ProofreadingReaction.Accept))
+                        recordFailures++;
+                    if (session.TryApply(proposal) != true)
+                        continue;
+
+                    // 適用のたびに呼ぶ（まとめて1回では「適用段落以外のハッシュ一致」が成立しない）。
+                    tab.ProofreadingPlanner.CarryForwardAppliedEdit(
+                        beforeText,
+                        tab.Document.Text,
+                        appliedOffset);
+                    applied++;
+                }
+            }
+        }
+        finally
+        {
+            _applyingProposal = false;
+        }
+
+        SetTransientStatus(recordFailures == 0
+            ? $"{applied}件の修正を許可しました"
+            : $"{applied}件の修正を許可しました（リアクション記録は{recordFailures}件失敗）");
+        Editor.TextArea.Focus();
+        // ループ内で N 回呼ばず、最後に1回だけ判定する。
         MaybeOfferStyleGuideGeneration();
     }
 
@@ -1076,6 +1196,7 @@ public partial class MainWindow : Window
 
     private void SetProposalActionsEnabled(bool enabled)
     {
+        AcceptAllProposalsButton.IsEnabled = enabled;
         AcceptProposalButton.IsEnabled = enabled;
         RejectProposalButton.IsEnabled = enabled;
         ReasonProposalButton.IsEnabled = enabled;

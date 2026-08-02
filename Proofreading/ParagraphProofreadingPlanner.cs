@@ -149,6 +149,79 @@ internal sealed class ParagraphProofreadingPlanner
             .ToArray();
     }
 
+    /// <summary>
+    /// 「許可」による本文置換は、モデル自身が返した修正案をそのまま採用したもので、
+    /// ユーザーが新しく書いた文章ではない。そのまま放置すると段落ハッシュが変わって
+    /// 「未送信の変更」と判定され、次に別の場所を1文字打った時点で同じ段落が再送・再課金される。
+    /// 適用前後の段落構成が一致しているときだけ、送信済みハッシュを適用後の値へ引き継ぐ。
+    /// 判定に少しでも迷いがある場合は何もしない（＝再校正される側へ倒す。抑止側へ倒すと誤字を見逃す）。
+    /// </summary>
+    /// <param name="beforeText">適用直前の本文全文。</param>
+    /// <param name="afterText">適用直後の本文全文。</param>
+    /// <param name="appliedOffset">適用した提案の開始オフセット（**適用前**の座標）。</param>
+    internal void CarryForwardAppliedEdit(string beforeText, string afterText, int appliedOffset)
+    {
+        ArgumentNullException.ThrowIfNull(beforeText);
+        ArgumentNullException.ThrowIfNull(afterText);
+        if (appliedOffset < 0)
+            return;
+
+        IReadOnlyList<ProofreadingParagraph> before = SplitParagraphs(beforeText);
+        IReadOnlyList<ProofreadingParagraph> after = SplitParagraphs(afterText);
+
+        // 段落数が違えば1対1の対応が付かない（修正案が空行を増減させた等）ので引き継がない。
+        if (before.Count != after.Count || before.Count == 0)
+            return;
+
+        // 適用した提案を含む段落の index を before 側から探す。
+        int appliedIndex = -1;
+        for (int index = 0; index < before.Count; index++)
+        {
+            ProofreadingParagraph paragraph = before[index];
+            if (paragraph.Start <= appliedOffset &&
+                appliedOffset < paragraph.Start + paragraph.Length)
+            {
+                appliedIndex = index;
+                break;
+            }
+        }
+        if (appliedIndex < 0)
+            return;
+
+        // 適用段落以外のハッシュが before と after で全て一致すること。
+        // 1つでも違えば段落境界がずれた等の想定外の状態なので引き継がない。
+        for (int index = 0; index < before.Count; index++)
+        {
+            if (index == appliedIndex)
+                continue;
+            if (!string.Equals(
+                    before[index].ContentHash,
+                    after[index].ContentHash,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+        }
+
+        // 「適用前の時点で送信済みだった段落」の index 集合を得る。
+        HashSet<int> sentBefore = FindUnchangedCurrentIndexes(
+            _lastSentHashes,
+            before.Select(paragraph => paragraph.ContentHash).ToArray());
+
+        // 適用段落が未送信だったなら送信済みに化けさせない（手動の選択範囲校正は MarkSent を
+        // 呼ばないため、その提案由来の段落は未送信でありうる）。no-op して再校正される側へ倒す。
+        if (!sentBefore.Contains(appliedIndex))
+            return;
+
+        // 段落数が等しく適用段落以外のハッシュも一致しているので、index の対応はそのまま使える。
+        // 送信済み集合に入らない段落（未送信）と文書から消えた段落のハッシュは落ちるが、
+        // いずれも「余分に1回校正する」方向のずれで安全。
+        _lastSentHashes = after
+            .Where((paragraph, index) => sentBefore.Contains(index))
+            .Select(paragraph => paragraph.ContentHash)
+            .ToArray();
+    }
+
     internal static IReadOnlyList<ProofreadingParagraph> SplitParagraphs(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
