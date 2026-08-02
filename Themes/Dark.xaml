@@ -42,7 +42,11 @@
 
     <SolidColorBrush x:Key="SearchMatchBrush" Color="#5B4A1E" />
     <SolidColorBrush x:Key="SearchCurrentMatchBrush" Color="#9A6A15" />
-    <SolidColorBrush x:Key="ProofreadingUnderlineBrush" Color="#F0A43A" />
+    <!-- 校正提案のインライン差分（要件 3.3.5）。色だけに頼らず、
+         修正前は取り消し線という「形」でも区別できるようにしてある。 -->
+    <SolidColorBrush x:Key="ProofreadingOriginalBrush" Color="#8C8C8C" />
+    <SolidColorBrush x:Key="ProofreadingStrikeBrush" Color="#EF6B6B" />
+    <SolidColorBrush x:Key="ProofreadingSuggestionBrush" Color="#56D364" />
     <SolidColorBrush x:Key="ProofreadingSelectionBrush" Color="#335B3A12" />
 
     <!-- 課金ガード（要件 3.6.3）: ステータスバーの月間上限進捗バー -->

@@ -68,6 +68,10 @@
              Link="Services\StyleGuideRepository.cs" />
     <Compile Include="..\Services\SettingsFieldFormatting.cs"
              Link="Services\SettingsFieldFormatting.cs" />
+    <!-- generator 本体は WPF の TextFormatter に依存するため取り込めない。
+         位置決めロジックだけを純粋関数として切り出したこのファイルを検証する。 -->
+    <Compile Include="..\Editor\ProofreadingInlineDiffLayout.cs"
+             Link="Editor\ProofreadingInlineDiffLayout.cs" />
     <!-- TrayIconService本体はWinFormsのNotifyIconに依存するため取り込めない。
          状態の決定だけを純粋関数として切り出したこのファイルを検証する。 -->
     <Compile Include="..\Services\TrayIconStateResolver.cs"

@@ -173,6 +173,22 @@ installer/         WiX v5 による MSI
   例外を投げさせると unobserved task exception として消え、課金だけ発生してユーザーに何も
   伝わらない最悪の状態になる。`try/catch` で保存の成否を確認し、失敗時は生成本文をメッセージへ
   含めて手元に残せるようにする。
+- **描画層へ渡すのは `ProofreadingProposal` ではなく、不変のスナップショット**
+  （`Editor/ProofreadingInlineDiffLayout.cs` の `ProofreadingInlineDiff`）。`ProofreadingProposal` の
+  `Start` / `Length` は失効後に例外を投げるため、`VisualLine` の構築中（描画中）に読むと
+  描画ごと落ちる。`MainWindow.RefreshProofreadingPresentation` が `IsActive` で絞った直後の同期処理で
+  だけ位置を読み、以後はスナップショットのみを `ProofreadingInlineDiffGenerator` と
+  `ProofreadingSelectionRenderer` へ渡す。`diffs` は `proposals` と1対1・同じ順序であることが前提で、
+  片方にだけ filter や並べ替えを足すと選択中と別の提案がハイライトされる。
+- **`TextDecoration` の `PenOffsetUnit` / `PenThicknessUnit` は `Pixel` を明示する**
+  （`Editor/ProofreadingInlineDiffGenerator.cs` の `CreateDoubleStrikethrough`）。既定の
+  `FontRecommended` では `PenOffset` がフォント推奨単位で解釈され、取り消し線が文字の外へ飛ぶ
+  （実測で確認）。二重線は `±1.2` px で実測した値。あわせて **`FormattedTextElement(FormattedText, int)`
+  は AvalonEdit 6.3.1 では使えない**（`CreateTextRun` が `ArgumentNullException` で落ちる）。
+  `TextLine` を `TextFormatter.FormatLine` で自前に組み立てて `FormattedTextElement(TextLine, int)` を
+  使う。`StrikeBrush` は Freeze 済みのデコレーションを後から色変更できないため、setter で
+  `CreateDoubleStrikethrough` を作り直す（自動プロパティにするとテーマ切替で取り消し線の色だけ
+  古いまま固まる）。
 
 ## 環境の癖
 
@@ -704,6 +720,58 @@ API・料金（モデル単価・APIキー）」の5タブへ分割した。WPF�
 **「学習効果」セクションは2026-07-31にユーザーが実機（ダークテーマ）で確認済み。**
 実データ19件（進行中の第1区間、1〜19件目）で「拒否 3/19件（16%）」・青色バー（拒否率20%未満＝
 `UsageProgressNormalBrush`）・「進行中」ラベルが設計どおりに表示された。
+
+## 校正提案のインライン差分表示（2026-08-02 実装）
+
+requirements.md §3.3.5 の提示方法を「波線＋下部パネル」から「修正前＝薄色＋赤い二重取り消し線、
+修正後＝緑をその場に差し込んで描く」インライン表示へ変更した。実装計画は
+`plan-inline-diff-ui.md` にあり、方式は実機相当の描画テストで検証済みのものをそのまま使った。
+
+- **`Editor/ProofreadingInlineDiffLayout.cs`（新規）**: 描画用スナップショット
+  （`ProofreadingInlineDiff` レコード）と位置決めの純粋関数。WPF 非依存で自己テスト対象。
+- **`Editor/ProofreadingInlineDiffGenerator.cs`（新規）**: `VisualLineElementGenerator` 本体。
+  提案範囲を1つの `FormattedTextElement(TextLine, int)` に置き換え、`TextFormatter.FormatLine` で
+  自前の `TextLine` を組み立てて「修正前（薄色＋二重取り消し線）→修正後（緑）」を続けて描く。
+  実測で分かった2点（`FormattedTextElement(FormattedText, int)` が使えない・
+  `PenOffsetUnit` を `Pixel` にしないと線が外へ飛ぶ）は「壊しやすい不変条件」に記録済み。
+- **`Editor/ProofreadingSelectionRenderer.cs`（新規）**: 選択中の提案にだけ薄い背景を敷く。
+  旧 `Editor/ProofreadingUnderlineRenderer.cs` は削除（波線は廃止）。
+- **`Themes/Dark.xaml` / `Themes/Light.xaml`**: `ProofreadingOriginalBrush` /
+  `ProofreadingStrikeBrush` / `ProofreadingSuggestionBrush` を追加し、
+  `ProofreadingUnderlineBrush` は削除。`ProofreadingSelectionBrush` は据え置き。
+- **`Views/MainWindow.xaml.cs`**: generator を `ElementGenerators` へ1つだけ登録（タブ切替では
+  何もしない）。`RefreshProofreadingPresentation` は `IsActive` で絞った直後の同期処理でだけ
+  位置を読み、以後はスナップショットを描画層へ渡す。クリック選択は範囲の終端オフセットが返る
+  場合に備え、1文字手前でも探すフォールバックを足した。下部パネル・本文（`TextDocument`）は
+  変更しない（本文はプレーンテキストのまま。`許可` のときだけ従来どおり `TryApply` が置き換える）。
+- **自己テスト**: `PromptValidation/ProofreadingInlineDiffLayoutValidation.cs` を追加
+  （`FirstInterestedOffset` の最小値・境界 `>=`・行またぎ/行頭前/長さ0の除外・`TryFindAt` の
+  完全一致/範囲途中の除外/行またぎ除外・削除提案の判定）。`--self-test` は全行 PASS、FAIL 0、
+  exit code 0（本体ビルドも警告0・エラー0。検証は出力先を `bin\verify-build` へ変えて実施。
+  常駐中の `JpScratch.exe` が `bin\Debug` の exe をロックしているため）。
+
+**未確認のまま残っていること（実機確認済みと書かないこと）**:
+この環境では画面キャプチャが使えず、見た目・実キー入力・IME 挙動は自動検証できない。
+ユーザーへの実機確認依頼は次のとおり。
+
+**必須（これだけは見てもらう）**
+1. ライトテーマ / ダークテーマ双方で、修正前（薄色＋赤い二重取り消し線）と修正後（緑）が
+   読みやすいか。色が濃すぎる・薄すぎる場合はブラシ値を調整する
+2. 提案をクリックして選択できるか（範囲の左寄り・右寄りの両方をクリック）
+3. `許可` / `拒否` / `理由をつけて…` の結果が、これまでどおりインライン表示に反映されるか
+
+**気づいたら見てもらう**
+4. 修正前・修正後の文字の縦位置が周囲の本文とずれていないか、行の高さが変わっていないか
+5. 提案のある行での**折り返し**（`WordWrap` ON）の見え方
+6. 選択中の提案の背景が、修正前・修正後の**両方**を覆っているか
+7. 提案の直前・直後で日本語を入力したとき（IME 変換中を含む）に表示が壊れないか
+8. 提案範囲の直後で `BackSpace` を押したとき（範囲全体が消えて提案が失効し、通常表示に戻る想定）
+9. テーマ切替の直後に色が正しく変わるか
+10. タブを切り替えて戻ったときに正しく表示されるか
+
+既知の制約（仕様として受け入れる）: 提案範囲の内側にキャレットを置けない・提案範囲の中では
+全角スペースの可視化が効かない・行をまたぐ提案はインライン表示されず下部パネルのみ・
+提案が極端に長いと修正前＋修正後の合計幅ぶん本文が横に押し出される。
 
 ## 次の WIP と、その判断理由
 

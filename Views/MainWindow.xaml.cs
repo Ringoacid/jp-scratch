@@ -50,7 +50,8 @@ public partial class MainWindow : Window
     private sealed record RecordedApiCall(long? Id, ApiUsageCost Cost);
 
     private readonly IdeographicSpaceColorizer _ideographicSpace = new();
-    private readonly ProofreadingUnderlineRenderer _proofreadingRenderer = new();
+    private readonly ProofreadingInlineDiffGenerator _proofreadingInline = new();
+    private readonly ProofreadingSelectionRenderer _proofreadingSelection = new();
     private readonly DispatcherTimer _statusTimer;
     private readonly DispatcherTimer _usageRolloverTimer;
     private readonly DispatcherTimer _proofreadingTimer;
@@ -157,7 +158,8 @@ public partial class MainWindow : Window
         _tabs.TabRemoved += OnTabRemoved;
 
         Editor.TextArea.TextView.LineTransformers.Add(_ideographicSpace);
-        Editor.TextArea.TextView.BackgroundRenderers.Add(_proofreadingRenderer);
+        Editor.TextArea.TextView.BackgroundRenderers.Add(_proofreadingSelection);
+        Editor.TextArea.TextView.ElementGenerators.Add(_proofreadingInline);
         Editor.TextArea.Caret.PositionChanged += (_, _) =>
         {
             // どの保存経路を通っても復元できるよう、キャレット位置は常にタブへ写しておく
@@ -458,8 +460,10 @@ public partial class MainWindow : Window
         Editor.TextArea.TextView.NonPrintableCharacterBrush = Brush("WhitespaceBrush");
 
         _ideographicSpace.Background = Brush("WhitespaceBrush");
-        _proofreadingRenderer.UnderlineBrush = Brush("ProofreadingUnderlineBrush");
-        _proofreadingRenderer.SelectedBackgroundBrush = Brush("ProofreadingSelectionBrush");
+        _proofreadingInline.OriginalBrush = Brush("ProofreadingOriginalBrush");
+        _proofreadingInline.StrikeBrush = Brush("ProofreadingStrikeBrush");
+        _proofreadingInline.SuggestionBrush = Brush("ProofreadingSuggestionBrush");
+        _proofreadingSelection.SelectedBackgroundBrush = Brush("ProofreadingSelectionBrush");
 
         FindPanel.ApplyTheme(Brush("SearchMatchBrush"), Brush("SearchCurrentMatchBrush"));
 
@@ -525,11 +529,23 @@ public partial class MainWindow : Window
             _selectedProposal = proposals.FirstOrDefault();
         }
 
-        _proofreadingRenderer.Proposals = proposals;
-        _proofreadingRenderer.Selected = _selectedProposal;
+        // 描画層は失効した提案に触れないよう、必ず不変のスナップショットを経由させる。
+        // ProofreadingProposal.Start / Length は失効後に例外を投げるため、
+        // 描画の途中で読むと VisualLine の構築ごと落ちる。
+        // diffs は proposals と1対1・同じ順序であることが前提。片方にだけ
+        // filter や並べ替えを足すと、選択中と別の提案がハイライトされる。
+        ProofreadingInlineDiff[] diffs = proposals
+            .Select(proposal => new ProofreadingInlineDiff(
+                proposal.Start,
+                proposal.Length,
+                proposal.Original,
+                proposal.Suggestion))
+            .ToArray();
+        _proofreadingInline.Diffs = diffs;
 
         if (_selectedProposal is null)
         {
+            _proofreadingSelection.Selected = null;
             ProofreadingPanel.Visibility = Visibility.Collapsed;
             ProposalPositionText.Text = "";
             ProposalChangeText.Text = "";
@@ -537,6 +553,7 @@ public partial class MainWindow : Window
         else
         {
             int index = IndexOfProposal(proposals, _selectedProposal);
+            _proofreadingSelection.Selected = index >= 0 ? diffs[index] : null;
             ProposalPositionText.Text = $"{index + 1}/{proposals.Count}";
             ProposalChangeText.Text =
                 $"「{_selectedProposal.Original}」→「{_selectedProposal.Suggestion}」";
@@ -790,7 +807,10 @@ public partial class MainWindow : Window
             return;
 
         int offset = Editor.Document.GetOffset(position.Value.Location);
-        ProofreadingProposal? proposal = _activeProofreading.FindAtOffset(offset);
+        // インライン差分は範囲全体が1つの表示要素になるため、クリック位置によっては
+        // 範囲の終端オフセットが返る。1文字手前でも探して取りこぼさない。
+        ProofreadingProposal? proposal = _activeProofreading.FindAtOffset(offset)
+            ?? (offset > 0 ? _activeProofreading.FindAtOffset(offset - 1) : null);
         if (proposal is null)
             return;
 
