@@ -30,11 +30,16 @@ internal static class FewShotSelectorValidation
         var now = DateTimeOffset.Now;
         var accepted = new FewShotCandidate("同じ", "違う", ProofreadingReaction.Accept, null, now);
         var rejected = new FewShotCandidate("同じ", "違う", ProofreadingReaction.Reject, null, now.AddDays(-10));
+        // 校正漏れ報告（ユーザーの手訂正）は拒否と同じ最優先カテゴリ。
+        // 同一カテゴリ内は新しい順なので、reject（newer）→ missed → accept の並びになる。
+        var missed = new FewShotCandidate(
+            "負具合", "不具合", ProofreadingReaction.MissedCorrection, null, now.AddDays(-20));
 
-        FewShotSelection selection = FewShotSelector.Select([accepted, rejected], "無関係なテキスト");
-        return selection.Examples.Count == 2 &&
+        FewShotSelection selection = FewShotSelector.Select([accepted, rejected, missed], "無関係なテキスト");
+        return selection.Examples.Count == 3 &&
                selection.Examples[0].Reaction == ProofreadingReaction.Reject &&
-               selection.Examples[1].Reaction == ProofreadingReaction.Accept;
+               selection.Examples[1].Reaction == ProofreadingReaction.MissedCorrection &&
+               selection.Examples[2].Reaction == ProofreadingReaction.Accept;
     }
 
     private static bool RunOverlapTest()
@@ -90,11 +95,17 @@ internal static class FewShotSelectorValidation
         var reject = new FewShotExample("思ってた", "思っていた", ProofreadingReaction.Reject, null);
         var rejectWithReason = new FewShotExample(
             "思ってた", "思っていた", ProofreadingReaction.RejectWithReason, "話し言葉として意図的");
+        var missed = new FewShotExample("負具合", "不具合", ProofreadingReaction.MissedCorrection, null);
+        var missedWithReason = new FewShotExample(
+            "急増っいたしました", "急増いたしました", ProofreadingReaction.MissedCorrection, "脱字の修正");
 
         return accept.FormatLine() == "- 「文章ア」→「文章が」: 許可された" &&
                reject.FormatLine() == "- 「思ってた」→「思っていた」: 拒否された" &&
                rejectWithReason.FormatLine() ==
-                   "- 「思ってた」→「思っていた」: 拒否された（理由: 話し言葉として意図的）";
+                   "- 「思ってた」→「思っていた」: 拒否された（理由: 話し言葉として意図的）" &&
+               missed.FormatLine() == "- 「負具合」→「不具合」: ユーザーが手動で訂正した" &&
+               missedWithReason.FormatLine() ==
+                   "- 「急増っいたしました」→「急増いたしました」: ユーザーが手動で訂正した（理由: 脱字の修正）";
     }
 
     private static bool RunStyleGuideSourceTest()

@@ -261,6 +261,8 @@ internal static class Program
         bool styleGuidePass = StyleGuideRepositoryValidation.RunSelfTests();
         bool promptV3Pass = ProofreadingPromptV3Validation.RunSelfTests();
         bool inlineDiffPass = ProofreadingInlineDiffLayoutValidation.RunSelfTests();
+        bool statusBarFormatterPass = StatusBarUsageFormatterValidation.RunSelfTests();
+        bool missedCorrectionPass = MissedCorrectionActionValidation.RunSelfTests();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
                credentialPass && pricingPass && apiCallPass && apiCallHistoryPass &&
                apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
@@ -269,7 +271,8 @@ internal static class Program
                geminiClientPass && openAiClientPass && appPathsPass && singleInstancePass &&
                billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&
                apiLogCompactionPass && trayIconStatePass &&
-               fewShotPass && styleGuidePass && promptV3Pass && inlineDiffPass ? 0 : 1;
+               fewShotPass && styleGuidePass && promptV3Pass && inlineDiffPass &&
+               statusBarFormatterPass && missedCorrectionPass ? 0 : 1;
     }
 
     private static void PrintHelp()

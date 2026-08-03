@@ -105,6 +105,15 @@ public partial class SettingsWindow : Window
         MonthlyLimitWarningBox.Text = SettingsFieldFormatting.FormatWarningPercent(s.MonthlyLimitWarningRatio);
         ApiLogRetentionBox.Text = s.ApiLogRetentionMonths.ToString(CultureInfo.InvariantCulture);
 
+        // ステータスバーの課金表示（proofreading-ux-fixes-plan.md §8）
+        StatusBarLatestCheck.IsChecked = s.StatusBarShowLatest;
+        StatusBarSessionCheck.IsChecked = s.StatusBarShowSession;
+        StatusBarTodayCheck.IsChecked = s.StatusBarShowToday;
+        StatusBarMonthCheck.IsChecked = s.StatusBarShowMonth;
+        StatusBarFxCheck.IsChecked = s.StatusBarShowFx;
+        StatusBarCurrencyCombo.ItemsSource = new[] { "円表示", "ドル表示", "両方表示" };
+        StatusBarCurrencyCombo.SelectedIndex = (int)s.StatusBarCurrency;
+
         _loadingCredentialControls = true;
         CredentialSourceCombo.ItemsSource = new[]
         {
@@ -197,6 +206,15 @@ public partial class SettingsWindow : Window
         s.MonthlyLimitWarningRatio = warningPercent / 100m;
         s.ApiLogRetentionMonths = (int)ParseNumber(
             ApiLogRetentionBox.Text, s.ApiLogRetentionMonths);
+
+        s.StatusBarShowLatest = StatusBarLatestCheck.IsChecked == true;
+        s.StatusBarShowSession = StatusBarSessionCheck.IsChecked == true;
+        s.StatusBarShowToday = StatusBarTodayCheck.IsChecked == true;
+        s.StatusBarShowMonth = StatusBarMonthCheck.IsChecked == true;
+        s.StatusBarShowFx = StatusBarFxCheck.IsChecked == true;
+        // 未知値は円表示（0）へ正規化する（SettingsService.Normalize と同一の規約）。
+        s.StatusBarCurrency = (StatusBarCurrencyFormat)Math.Clamp(
+            StatusBarCurrencyCombo.SelectedIndex, 0, 2);
 
         s.GeminiApiKeySource = CredentialSourceCombo.SelectedIndex == 1
             ? GeminiApiKeySource.EnvironmentVariable

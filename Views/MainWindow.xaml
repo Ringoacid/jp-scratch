@@ -193,7 +193,28 @@
                                    Background="{DynamicResource EditorBackgroundBrush}"
                                    Foreground="{DynamicResource EditorForegroundBrush}"
                                    PreviewMouseLeftButtonDown="Editor_PreviewMouseLeftButtonDown"
-                                   PreviewMouseWheel="Editor_PreviewMouseWheel" />
+                                   PreviewMouseWheel="Editor_PreviewMouseWheel"
+                                   ContextMenuOpening="Editor_ContextMenuOpening">
+                    <avalon:TextEditor.ContextMenu>
+                        <!-- proofreading-ux-fixes-plan.md §10。「元に戻す」「やり直し」は追加しない。
+                             切り取り・コピー・貼り付け・削除・すべて選択は標準コマンドのため、
+                             選択やクリップボード状態に応じて自動で有効・無効が切り替わる。 -->
+                        <ContextMenu>
+                            <MenuItem Header="切り取り" Command="ApplicationCommands.Cut" InputGestureText="Ctrl+X" />
+                            <MenuItem Header="コピー" Command="ApplicationCommands.Copy" InputGestureText="Ctrl+C" />
+                            <MenuItem Header="貼り付け" Command="ApplicationCommands.Paste" InputGestureText="Ctrl+V" />
+                            <MenuItem Header="削除" Command="ApplicationCommands.Delete" InputGestureText="Del" />
+                            <MenuItem Header="すべて選択" Command="ApplicationCommands.SelectAll" InputGestureText="Ctrl+A" />
+                            <Separator />
+                            <MenuItem Tag="upper" Header="大文字に変換" Click="Editor_UppercaseMenuItem_Click" />
+                            <MenuItem Tag="lower" Header="小文字に変換" Click="Editor_LowercaseMenuItem_Click" />
+                            <Separator />
+                            <MenuItem Tag="missed" Header="校正漏れを報告…"
+                                      InputGestureText="Ctrl+Shift+M"
+                                      Click="MissedCorrectionMenuItem_Click" />
+                        </ContextMenu>
+                    </avalon:TextEditor.ContextMenu>
+                </avalon:TextEditor>
 
                 <Border x:Name="ProofreadingPanel"
                         Grid.Row="2"

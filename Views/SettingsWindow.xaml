@@ -459,6 +459,81 @@
                                     </Border>
                                 </StackPanel>
                             </Border>
+
+                            <!-- ===== ステータスバー（課金表示） ===== -->
+                            <TextBlock Text="ステータスバー（課金表示）" Style="{StaticResource SectionHeader}" />
+                            <TextBlock Text="下段に表示する課金情報です。項目の並び順は固定で、料金表示形式は有効にした全項目へ共通適用されます。月間上限の進捗バーと上限到達警告は、この設定に関係なく従来どおり表示されます。課金履歴の内容はこの設定で変わりません。"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource SettingsDescription}"
+                                       Margin="0,0,0,6" />
+                            <Border Style="{StaticResource SettingsCard}">
+                                <StackPanel>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="直近の入出力トークンと料金を表示" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="StatusBarLatestCheck" Grid.Column="1" Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="起動後の料金を表示" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="StatusBarSessionCheck" Grid.Column="1" Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="当日の料金を表示" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="StatusBarTodayCheck" Grid.Column="1" Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="当月の料金を表示" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="StatusBarMonthCheck" Grid.Column="1" Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="48" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="為替情報を表示" Style="{StaticResource FieldLabel}" />
+                                            <CheckBox x:Name="StatusBarFxCheck" Grid.Column="1" Style="{StaticResource AppToggleCheckBox}" />
+                                        </Grid>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsLastRow}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="320" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="料金表示形式" Style="{StaticResource FieldLabel}" />
+                                            <ComboBox x:Name="StatusBarCurrencyCombo"
+                                                      Grid.Column="1"
+                                                      Style="{StaticResource AppComboBox}"
+                                                      HorizontalAlignment="Right"
+                                                      Width="200" />
+                                        </Grid>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                         </ScrollViewer>
                     </TabItem>

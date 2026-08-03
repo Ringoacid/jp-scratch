@@ -150,6 +150,28 @@ internal sealed class ParagraphProofreadingPlanner
     }
 
     /// <summary>
+    /// 校正ループが途中で中断された（本文編集で未送信リクエストを中止した）ときの送信済み記録。
+    /// <paramref name="unsentParagraphIndexes"/> に含まれる段落だけを未送信として残し、
+    /// それ以外（送信完了・変更なしと判定された段落）は送信済みのまま記録する。
+    /// <see cref="MarkSent(ProofreadingPlan, int)"/> が「未送信＝完了位置以降のサフィックス」と
+    /// 決め打ちなのに対し、こちらは任意の段落集合を未送信にできる。部分結果保持
+    /// （proofreading-ux-fixes-plan.md §7.2）では、本文編集で個別に破棄された段落だけを
+    /// 未送信にしたいため、サフィックス表現では済まない。
+    /// 注意: <see cref="_lastSentHashes"/> は過去の実行ぶんも含む累積状態なので、丸ごと置き換えては
+    /// いけない。「今回完了した段落だけを入れる」方式だと、前回送信済みで今回のプランに現れない
+    /// （＝変更なしと判定された）段落が未送信に戻り、次回再送＝二重課金になる。
+    /// </summary>
+    internal void MarkSent(ProofreadingPlan plan, IReadOnlySet<int> unsentParagraphIndexes)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        _lastSentHashes = plan.Paragraphs
+            .Where(paragraph => !unsentParagraphIndexes.Contains(paragraph.Index))
+            .Select(paragraph => paragraph.ContentHash)
+            .ToArray();
+    }
+
+    /// <summary>
     /// 「許可」による本文置換は、モデル自身が返した修正案をそのまま採用したもので、
     /// ユーザーが新しく書いた文章ではない。そのまま放置すると段落ハッシュが変わって
     /// 「未送信の変更」と判定され、次に別の場所を1文字打った時点で同じ段落が再送・再課金される。
@@ -228,13 +250,14 @@ internal sealed class ParagraphProofreadingPlanner
         if (text.Length == 0)
             return [];
 
+        // proofreading-ux-fixes-plan.md §6: 常に空行を文章ブロックの区切りとして扱う。
+        // 空行が無い複数行は一つの文章ブロック、連続する複数の空行は一つの区切り、
+        // 先頭・末尾の空行はブロックを作らない。
+        // 従来は「空行が一つでもあれば空行区切り、無ければ改行単位」と分岐していたため、
+        // 末尾へ空行を追加するだけで「各行15件」から「全体1件」へリクエスト数が変わっていた。
+        // この分岐を廃止し、文末改行や空行の有無が校正単位数に影響しないようにする。
         IReadOnlyList<TextLine> lines = SplitLines(text);
-        bool hasBlankLine = lines.Any(line => line.IsBlank);
-        List<(int Start, int End)> ranges = hasBlankLine
-            ? CreateBlankLineSeparatedRanges(lines)
-            : lines.Where(line => !line.IsBlank)
-                .Select(line => (line.Start, line.ContentEnd))
-                .ToList();
+        List<(int Start, int End)> ranges = CreateBlankLineSeparatedRanges(lines);
 
         List<ProofreadingParagraph> paragraphs = [];
         foreach ((int start, int end) in ranges.Where(range => range.End > range.Start))

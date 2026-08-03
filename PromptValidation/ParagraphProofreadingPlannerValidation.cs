@@ -9,7 +9,13 @@ internal static class ParagraphProofreadingPlannerValidation
         (string Name, Func<bool> Test)[] tests =
         [
             ("空行区切り", TestBlankLineParagraphs),
-            ("改行単位フォールバック", TestLineFallback),
+            ("空行なし複数行は1ブロック", TestNoBlankLineSingleBlock),
+            ("文末改行・空行の不変性", TestTrailingLineBreakInvariance),
+            ("15行は1リクエスト", TestFifteenLinesSingleRequest),
+            ("空行1つで2ブロック", TestOneBlankLineTwoBlocks),
+            ("空行だけの文書は0リクエスト", TestBlankOnlyDocument),
+            ("先頭の空行は無視", TestLeadingBlankLines),
+            ("2,000文字境界の分割", TestBoundarySplit),
             ("変更段落と前後文脈", TestChangedParagraphContext),
             ("段落挿入時の重複抑止", TestInsertedParagraph),
             ("2,000文字分割", TestLongParagraph),
@@ -48,12 +54,102 @@ internal static class ParagraphProofreadingPlannerValidation
                text.Substring(paragraphs[1].Start, paragraphs[1].Length) == "三行目";
     }
 
-    private static bool TestLineFallback()
+    private static bool TestNoBlankLineSingleBlock()
     {
+        // 空行が無い複数行は一つの文章ブロックとして扱う
+        // （proofreading-ux-fixes-plan.md §6.2。従来の「改行単位フォールバック」は廃止）。
         IReadOnlyList<ProofreadingParagraph> paragraphs =
             ParagraphProofreadingPlanner.SplitParagraphs("一行目\r\n二行目\n三行目");
-        return paragraphs.Select(paragraph => paragraph.Text)
-            .SequenceEqual(["一行目", "二行目", "三行目"]);
+        return paragraphs.Count == 1 &&
+               paragraphs[0].Text == "一行目\r\n二行目\n三行目" &&
+               paragraphs[0].Start == 0;
+    }
+
+    /// <summary>
+    /// 文末の改行・空行は校正単位数（リクエスト数）に影響させない（proofreading-ux-fixes-plan.md §6.4）。
+    /// 同じ本文について、文末改行なし・LF・CRLF・空行1つ・空行複数のすべてでリクエスト数が一致する。
+    /// </summary>
+    private static bool TestTrailingLineBreakInvariance()
+    {
+        string[] variants =
+        [
+            "一行目\r\n二行目\n三行目",
+            "一行目\r\n二行目\n三行目\n",
+            "一行目\r\n二行目\n三行目\r\n",
+            "一行目\r\n二行目\n三行目\n\n",
+            "一行目\r\n二行目\n三行目\n\n\n",
+        ];
+
+        int? expected = null;
+        foreach (string variant in variants)
+        {
+            var planner = new ParagraphProofreadingPlanner();
+            ProofreadingPlan plan = planner.CreateAutomaticPlan(variant);
+            if (expected is null)
+                expected = plan.Requests.Count;
+            else if (plan.Requests.Count != expected.Value)
+                return false;
+        }
+
+        return expected == 1;
+    }
+
+    private static bool TestFifteenLinesSingleRequest()
+    {
+        var planner = new ParagraphProofreadingPlanner();
+        string text = string.Join("\n", Enumerable.Range(1, 15).Select(i => $"行{i}"));
+        ProofreadingPlan plan = planner.CreateAutomaticPlan(text);
+        return plan.Requests.Count == 1 &&
+               plan.Paragraphs.Count == 1 &&
+               plan.Requests[0].SourceText == text;
+    }
+
+    private static bool TestOneBlankLineTwoBlocks()
+    {
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan plan = planner.CreateAutomaticPlan("前段\n\n後段");
+        return plan.Paragraphs.Count == 2 &&
+               plan.Requests.Count == 2 &&
+               plan.Requests[0].SourceText == "前段" &&
+               plan.Requests[1].SourceText == "後段";
+    }
+
+    private static bool TestBlankOnlyDocument()
+    {
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan plan = planner.CreateAutomaticPlan("\n\n\n");
+        return plan.Paragraphs.Count == 0 && plan.Requests.Count == 0;
+    }
+
+    private static bool TestLeadingBlankLines()
+    {
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan plan = planner.CreateAutomaticPlan("\n\n本文");
+        return plan.Paragraphs.Count == 1 &&
+               plan.Requests.Count == 1 &&
+               plan.Requests[0].SourceText == "本文";
+    }
+
+    /// <summary>
+    /// 2,000文字を超えるブロックだけが追加分割される（proofreading-ux-fixes-plan.md §6.2）。
+    /// 2,000文字ちょうどは分割せず、2,001文字以上は書記素を壊さずに分割する。
+    /// </summary>
+    private static bool TestBoundarySplit()
+    {
+        var plannerWithin = new ParagraphProofreadingPlanner();
+        if (plannerWithin.CreateAutomaticPlan(new string('あ', 2000)).Requests.Count != 1)
+            return false;
+
+        // 2,000 + 1 の「あ」に、結合濁点つき「が」を足す。分割は書記素境界で行われなければならない。
+        string over = new string('あ', 2001) + "か\u3099";
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan plan = planner.CreateAutomaticPlan(over);
+        return plan.Requests.Count == 2 &&
+               plan.Requests.All(request =>
+                   request.SourceLength <= ParagraphProofreadingPlanner.MaxTargetLength) &&
+               !char.IsHighSurrogate(plan.Requests[0].SourceText[^1]) &&
+               !char.IsLowSurrogate(plan.Requests[1].SourceText[0]) &&
+               string.Concat(plan.Requests.Select(request => request.SourceText)) == over;
     }
 
     private static bool TestChangedParagraphContext()

@@ -42,11 +42,14 @@
 
     <SolidColorBrush x:Key="SearchMatchBrush" Color="#FFE9A8" />
     <SolidColorBrush x:Key="SearchCurrentMatchBrush" Color="#FFB454" />
-    <!-- 校正提案のインライン差分（要件 3.3.5）。 -->
+    <!-- 校正提案のインライン差分（要件 3.3.5 / proofreading-ux-fixes-plan.md §4・§5）。色だけに頼らず、
+         修正前は取り消し線という「形」でも区別できるようにしてある。選択中は背景＋枠線で
+         変更単位全体（修正前＋修正後）を囲む。 -->
     <SolidColorBrush x:Key="ProofreadingOriginalBrush" Color="#8C8C8C" />
     <SolidColorBrush x:Key="ProofreadingStrikeBrush" Color="#CC3B3B" />
     <SolidColorBrush x:Key="ProofreadingSuggestionBrush" Color="#1A7F37" />
-    <SolidColorBrush x:Key="ProofreadingSelectionBrush" Color="#26F59E0B" />
+    <SolidColorBrush x:Key="ProofreadingSelectionBackgroundBrush" Color="#38D97706" />
+    <SolidColorBrush x:Key="ProofreadingSelectionBorderBrush" Color="#D97706" />
 
     <!-- 課金ガード（要件 3.6.3）: ステータスバーの月間上限進捗バー -->
     <SolidColorBrush x:Key="UsageProgressTrackBrush" Color="#D8D8D8" />

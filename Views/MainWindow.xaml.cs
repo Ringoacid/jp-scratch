@@ -8,6 +8,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
+using ICSharpCode.AvalonEdit.Document;
 using JpScratch.Editor;
 using JpScratch.Infrastructure;
 using JpScratch.Models;
@@ -51,7 +52,6 @@ public partial class MainWindow : Window
 
     private readonly IdeographicSpaceColorizer _ideographicSpace = new();
     private readonly ProofreadingInlineDiffGenerator _proofreadingInline = new();
-    private readonly ProofreadingSelectionRenderer _proofreadingSelection = new();
     private readonly DispatcherTimer _statusTimer;
     private readonly DispatcherTimer _usageRolloverTimer;
     private readonly DispatcherTimer _proofreadingTimer;
@@ -164,7 +164,6 @@ public partial class MainWindow : Window
         _tabs.TabRemoved += OnTabRemoved;
 
         Editor.TextArea.TextView.LineTransformers.Add(_ideographicSpace);
-        Editor.TextArea.TextView.BackgroundRenderers.Add(_proofreadingSelection);
         Editor.TextArea.TextView.ElementGenerators.Add(_proofreadingInline);
         Editor.TextArea.Caret.PositionChanged += (_, _) =>
         {
@@ -469,7 +468,8 @@ public partial class MainWindow : Window
         _proofreadingInline.OriginalBrush = Brush("ProofreadingOriginalBrush");
         _proofreadingInline.StrikeBrush = Brush("ProofreadingStrikeBrush");
         _proofreadingInline.SuggestionBrush = Brush("ProofreadingSuggestionBrush");
-        _proofreadingSelection.SelectedBackgroundBrush = Brush("ProofreadingSelectionBrush");
+        _proofreadingInline.SelectedBackgroundBrush = Brush("ProofreadingSelectionBackgroundBrush");
+        _proofreadingInline.SelectedBorderBrush = Brush("ProofreadingSelectionBorderBrush");
 
         FindPanel.ApplyTheme(Brush("SearchMatchBrush"), Brush("SearchCurrentMatchBrush"));
 
@@ -553,7 +553,7 @@ public partial class MainWindow : Window
 
         if (_selectedProposal is null)
         {
-            _proofreadingSelection.Selected = null;
+            _proofreadingInline.Selected = null;
             ProofreadingPanel.Visibility = Visibility.Collapsed;
             ProposalPositionText.Text = "";
             ProposalChangeText.Text = "";
@@ -561,7 +561,7 @@ public partial class MainWindow : Window
         else
         {
             int index = IndexOfProposal(proposals, _selectedProposal);
-            _proofreadingSelection.Selected = index >= 0 ? diffs[index] : null;
+            _proofreadingInline.Selected = index >= 0 ? diffs[index] : null;
             ProposalPositionText.Text = $"{index + 1}/{proposals.Count}";
             ProposalChangeText.Text =
                 $"「{_selectedProposal.Original}」→「{_selectedProposal.Suggestion}」";
@@ -761,6 +761,7 @@ public partial class MainWindow : Window
 
         Bind(Key.S, ModifierKeys.Control | ModifierKeys.Shift, ExportActiveTab);
         Bind(Key.Enter, ModifierKeys.Control, RunManualProofreading);
+        Bind(Key.M, ModifierKeys.Control | ModifierKeys.Shift, ReportMissedCorrection);
         Bind(Key.F8, ModifierKeys.None, () => SelectRelativeProposal(1));
         Bind(Key.F8, ModifierKeys.Shift, () => SelectRelativeProposal(-1));
         Bind(Key.OemPeriod, ModifierKeys.Control, AcceptSelectedProposal);
@@ -828,6 +829,84 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>
+    /// 右クリックメニュー（proofreading-ux-fixes-plan.md §10）の表示直前処理。
+    /// - 右クリック位置が既存選択範囲内なら選択を維持する。選択外なら通常のエディタ動作に
+    ///   合わせてキャレットを移動する。
+    /// - 大文字・小文字変換は選択がないとき無効化する（切り取り・コピー・貼り付け・削除・
+    ///   すべて選択は標準コマンドのため、選択・クリップボード状態で自動的に切り替わる）。
+    /// </summary>
+    private void Editor_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (Editor.ContextMenu is not { } menu)
+            return;
+
+        // ContextMenuEventArgs にはカーソル位置が無いため、マウス位置を直接取得する。
+        var position = Editor.GetPositionFromPoint(Mouse.GetPosition(Editor));
+        if (position is not null)
+        {
+            int offset = Editor.Document.GetOffset(position.Value.Location);
+            int selectionStart = Editor.SelectionStart;
+            int selectionEnd = selectionStart + Editor.SelectionLength;
+            if (Editor.SelectionLength == 0 ||
+                offset < selectionStart ||
+                offset >= selectionEnd)
+            {
+                Editor.Select(offset, 0);
+                Editor.CaretOffset = offset;
+            }
+        }
+
+        bool hasSelection = Editor.SelectionLength > 0;
+        foreach (object item in menu.Items)
+        {
+            if (item is not MenuItem menuItem)
+                continue;
+            if (menuItem.Tag is "upper" or "lower")
+                menuItem.IsEnabled = hasSelection;
+        }
+    }
+
+    private void Editor_UppercaseMenuItem_Click(object sender, RoutedEventArgs e)
+        => TransformSelectionCase(upper: true);
+
+    private void Editor_LowercaseMenuItem_Click(object sender, RoutedEventArgs e)
+        => TransformSelectionCase(upper: false);
+
+    /// <summary>
+    /// 選択範囲の英字だけを大文字/小文字へ変換する（proofreading-ux-fixes-plan.md §10.2）。
+    /// 日本語や記号は保持し、invariant な1文字単位の変換で文字数変化を起こさない
+    /// （ß の大文字化のような文化依存の拡張をしない）。変換は1回の Undo で戻せる。
+    /// </summary>
+    private void TransformSelectionCase(bool upper)
+    {
+        if (Editor.SelectionLength == 0)
+            return;
+
+        int start = Editor.SelectionStart;
+        int length = Editor.SelectionLength;
+        string selected = Editor.SelectedText;
+
+        var builder = new System.Text.StringBuilder(selected.Length);
+        foreach (char character in selected)
+        {
+            builder.Append(upper
+                ? char.IsLower(character) ? char.ToUpperInvariant(character) : character
+                : char.IsUpper(character) ? char.ToLowerInvariant(character) : character);
+        }
+
+        string transformed = builder.ToString();
+        if (string.Equals(transformed, selected, StringComparison.Ordinal))
+            return;
+
+        Editor.Document.Replace(start, length, transformed);
+        Editor.Select(start, transformed.Length);
+        Editor.TextArea.Focus();
+    }
+
+    private void MissedCorrectionMenuItem_Click(object sender, RoutedEventArgs e)
+        => ReportMissedCorrection();
+
     private void PreviousProposalButton_Click(object sender, RoutedEventArgs e)
     {
         SelectRelativeProposal(-1);
@@ -876,6 +955,89 @@ public partial class MainWindow : Window
         Editor.TextArea.Focus();
         MaybeOfferStyleGuideGeneration();
     }
+
+    /// <summary>
+    /// 校正漏れ報告（proofreading-ux-fixes-plan.md §9）。選択範囲の置換・挿入・削除を
+    /// 学習データ（reactions）へ記録し、その後に本文を変更する。この操作自体は API を呼ばない。
+    /// 保存に失敗した場合は本文も変更しない（記録だけ失敗して本文だけ変わる状態を作らない）。
+    /// 本文の変更は1回の Undo で戻せる。Undo しても記録は残る。
+    /// </summary>
+    private void ReportMissedCorrection()
+    {
+        if (_tabs.Active is not { } tab)
+            return;
+
+        bool hasSelection = Editor.SelectionLength > 0;
+        int selectionStart = Editor.SelectionStart;
+        int selectionLength = Editor.SelectionLength;
+        string original = hasSelection ? Editor.SelectedText : "";
+
+        // 左文脈・右文脈（§9.4）。空・空白のみなら null として保存する。
+        string leftContext = tab.Document.GetText(0, selectionStart);
+        string rightContext = tab.Document.GetText(
+            selectionStart + selectionLength,
+            tab.Document.TextLength - selectionStart - selectionLength);
+
+        SuppressAutoHide();
+        try
+        {
+            // プレビュー用に前後の文脈（改行を含む原文）も渡す。
+            var dialog = new MissedCorrectionDialog(
+                original,
+                hasSelection,
+                leftContext,
+                rightContext)
+            {
+                Owner = this,
+            };
+            if (dialog.ShowDialog() != true)
+                return;
+
+            string corrected = dialog.Corrected;
+            MissedCorrectionAction.Determine(original, corrected, out bool allowed);
+            if (!allowed)
+                return;
+
+            // 記録（学習データ）を先に保存する。失敗したら本文は変更しない。
+            try
+            {
+                _reactions.AddMissedCorrection(
+                    tab.Id,
+                    original,
+                    corrected,
+                    NormalizeContext(leftContext),
+                    NormalizeContext(rightContext),
+                    dialog.Reason);
+            }
+            catch (Exception)
+            {
+                MessageBox.Show(
+                    this,
+                    "校正漏れの記録に失敗したため、本文は変更しませんでした。",
+                    "JP Scratch",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            // 本文を一回の Undo で戻せるよう、1回の変更にまとめる。
+            if (hasSelection)
+                tab.Document.Replace(selectionStart, selectionLength, corrected);
+            else
+                tab.Document.Insert(selectionStart, corrected);
+
+            SetTransientStatus("校正漏れを記録しました");
+            Editor.TextArea.Focus();
+            MaybeOfferStyleGuideGeneration();
+        }
+        finally
+        {
+            ReleaseAutoHide();
+        }
+    }
+
+    private static string? NormalizeContext(string context)
+        => string.IsNullOrWhiteSpace(context) ? null : context.Trim();
 
     private async void AlternativeWithReasonMenuItem_Click(
         object sender,
@@ -1696,11 +1858,26 @@ public partial class MainWindow : Window
         }
 
         _proofreadingRunInProgress = true;
-        List<(ProofreadingRequest Request, GeminiProofreadingResult Result)> results = [];
+        List<(ProofreadingRequest Request, GeminiProofreadingResult Result, long ApiCallId, TextAnchor? Anchor)> completed = [];
         List<long> successfulApiCallIds = [];
         List<ApiUsageCost> responseCosts = [];
         ApiCallTrigger trigger = manual ? ApiCallTrigger.Manual : ApiCallTrigger.Auto;
         bool resultsApplied = false;
+
+        // 部分結果保持（proofreading-ux-fixes-plan.md §7.2）用の状態。
+        // 各リクエストの対象範囲（パート）の先頭へ TextAnchor を張り、本文編集による位置の
+        // ずれをアンカーに追従させる。送信直前と適用時に「アンカー位置の原文が今も
+        // request.SourceText と一致するか」を見ることで、**リクエスト対象の内部が編集された場合だけ**
+        // その結果を破棄する（段落全体のハッシュ照合だと、2,000文字超で複数リクエストに分割された
+        // 段落の後半を編集しただけで、無関係な前半の課金済み結果まで破棄されてしまう）。
+        TextAnchor?[]? requestAnchors = null;
+        // 未送信（＝再校正対象）に残す段落 index の集合。本文編集で破棄・中止した段落だけを入れる。
+        HashSet<int> unsentParagraphIndexes = [];
+        // 「編集された部分は、入力が止まってから再校正します」を一度だけ出すためのフラグ。
+        bool editDiscardHappened = false;
+        // 校正中に別タブへ切り替わったか（結果は元タブのセッションへ安全に保持できる）。
+        bool tabSwitchedDuringRun = false;
+
         try
         {
             // 進行中フラグを立てた行と try の間には何も置かない（CLAUDE.md の不変条件）。
@@ -1711,18 +1888,30 @@ public partial class MainWindow : Window
             PinModelForRun();
             SetProposalActionsEnabled(false);
             UpdateTrayIconState();
+
+            // プランは送信時スナップショット基準の座標を持つ。確認ダイアログなどの間に本文が
+            // 変わっていた場合、この座標は失効しておりアンカーを範囲外へ作ると例外になる。
+            // その場合は全リクエストを未送信として中止する（編集は OnTabTextChanged がデバウンスを
+            // 再始動済みなので、finally の ScheduleAutomaticProofreading が再送する）。
+            if (string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
+            {
+                requestAnchors = new TextAnchor?[plan.Requests.Count];
+                for (int index = 0; index < plan.Requests.Count; index++)
+                {
+                    requestAnchors[index] = CreateAnchor(tab.Document, plan.Requests[index].SourceStart);
+                }
+            }
+            else
+            {
+                editDiscardHappened = true;
+            }
+
             for (int index = 0; index < plan.Requests.Count; index++)
             {
-                if (!ReferenceEquals(tab, _tabs.Active) ||
-                    !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
+                if (!ReferenceEquals(tab, _tabs.Active))
                 {
-                    MarkApiCallsDiscarded(successfulApiCallIds);
-                    // 完了済みの段落だけ送信済みとして記録し、内容が変わっていない段落の
-                    // 再送（二重課金）を防ぐ。未送信の段落は次回の自動プランで再試行される。
-                    if (!selectionRun)
-                        tab.ProofreadingPlanner.MarkSent(plan, index);
-                    SetProofreadingStatus("本文が変更されたため校正結果を破棄しました", force: true);
-                    return;
+                    tabSwitchedDuringRun = true;
+                    break;
                 }
 
                 TimeSpan intervalDelay =
@@ -1734,14 +1923,31 @@ public partial class MainWindow : Window
                     await Task.Delay(intervalDelay);
                 }
 
-                if (!ReferenceEquals(tab, _tabs.Active) ||
-                    !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
+                if (!ReferenceEquals(tab, _tabs.Active))
                 {
-                    MarkApiCallsDiscarded(successfulApiCallIds);
-                    if (!selectionRun)
-                        tab.ProofreadingPlanner.MarkSent(plan, index);
-                    SetProofreadingStatus("本文が変更されたため残りの校正を中止しました", force: true);
-                    return;
+                    tabSwitchedDuringRun = true;
+                    break;
+                }
+
+                // 送信直前に対象範囲（パート）が今も無変更かを確認する。編集されていた場合は、
+                // まだ送信していない残りの API 呼び出しを中止し、編集ブロックは入力停止後の自動
+                // 再校正へ委ねる。選択範囲の手動校正は従来どおり全文一致を要求する。
+                TextAnchor? validatedAnchor = null;
+                if (!selectionRun)
+                {
+                    if (requestAnchors is null ||
+                        requestAnchors[index] is not { } anchor ||
+                        !IsPartIntact(anchor, plan.Requests[index]))
+                    {
+                        editDiscardHappened = true;
+                        break;
+                    }
+                    validatedAnchor = anchor;
+                }
+                else if (!string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
+                {
+                    editDiscardHappened = true;
+                    break;
                 }
 
                 SetProofreadingStatus(
@@ -1782,39 +1988,71 @@ public partial class MainWindow : Window
                     successfulApiCallIds.Add(id);
                 responseCosts.Add(recordedApiCall.Cost);
                 _proofreadingSchedule.MarkSent(DateTimeOffset.Now);
-                results.Add((request, result));
+                completed.Add((request, result, recordedApiCall.Id ?? -1, validatedAnchor));
             }
+
+            // 中止された（送信しなかった）リクエストの段落は未送信として残し、次回の自動プランで
+            // 再試行させる。本文編集で中断した場合、その編集は OnTabTextChanged がデバウンスを
+            // 再始動済みなので、finally の ScheduleAutomaticProofreading が入力停止後に再送する。
+            for (int index = completed.Count; index < plan.Requests.Count; index++)
+                unsentParagraphIndexes.Add(plan.Requests[index].ParagraphIndex);
+
+            // 完了済みリクエストを現在の本文と照合し、編集されていない範囲の結果だけを現在位置へ
+            // 対応付けて保持する。編集された範囲の結果は破棄し、既に課金された呼び出しは
+            // discarded_cnt へ正確に記録する（料金の詳細は課金履歴で確認できる）。
+            List<(int CurrentPartStart, GeminiProofreadingResult Result)> validResults = [];
+            List<long> discardedCallIds = [];
+            foreach ((ProofreadingRequest request, GeminiProofreadingResult result, long apiCallId, TextAnchor? anchor) in completed)
+            {
+                if (selectionRun)
+                {
+                    if (editDiscardHappened)
+                    {
+                        if (apiCallId >= 0) discardedCallIds.Add(apiCallId);
+                        continue;
+                    }
+                    validResults.Add((request.SourceStart, result));
+                    continue;
+                }
+
+                if (anchor is not { } intactAnchor || !IsPartIntact(intactAnchor, request))
+                {
+                    // 対象範囲（パート）が編集された＝結果を破棄。同じ段落の別パート（無変更）の
+                    // 結果は保持する。編集された場合は未送信として次回再校正する。
+                    if (apiCallId >= 0) discardedCallIds.Add(apiCallId);
+                    unsentParagraphIndexes.Add(request.ParagraphIndex);
+                    editDiscardHappened = true;
+                    continue;
+                }
+
+                validResults.Add((intactAnchor.Offset, result));
+            }
+
+            if (discardedCallIds.Count > 0)
+                MarkApiCallsDiscarded(discardedCallIds);
 
             if (!selectionRun)
             {
-                // API が成功したので、送信時スナップショットの段落ハッシュを送信済みとして記録する。
-                // これは本文変更チェックより前に済ませてよい（変更された段落はハッシュが変わり
-                // 次回再送され、変更されていない段落は二重課金を避けるため再送しない）。
-                tab.ProofreadingPlanner.MarkSent(plan);
+                // 送信成功した段落（破棄・中止されていない段落）だけを送信済みとして記録する。
+                // 破棄・中止された段落は未送信のまま残り、次回の自動プラン（または入力停止後の
+                // 再スケジュール）で再送される。二重課金を防ぐため、無変更段落の再送はしない。
+                tab.ProofreadingPlanner.MarkSent(plan, unsentParagraphIndexes);
             }
 
-            if (!ReferenceEquals(tab, _tabs.Active) ||
-                !string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
-            {
-                MarkApiCallsDiscarded(successfulApiCallIds);
-                SetProofreadingStatus("本文が変更されたため校正結果を破棄しました", force: true);
-                return;
-            }
-
-            if (!selectionRun)
-            {
-                // pending 変更の消費は「結果が実際に適用された」ことを確認した後で行う。
-                // 本文変更により結果を破棄した場合はここに到達せず、送信中に打った最後のキーの
-                // pending が残るため、finally の ScheduleAutomaticProofreading が変更された段落を
-                // 自動で再送する（次のキー入力まで待たされない）。
+            // 編集・中止が無く全リクエストが完了した場合は pending を消費する。編集があった場合は
+            // 消費しない（入力停止後の再校正を finally の ScheduleAutomaticProofreading が担う）。
+            if (!editDiscardHappened && !tabSwitchedDuringRun)
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
-            }
 
-            string corrected = ProofreadingResultMerger.Merge(plan, results);
+            string corrected = selectionRun && editDiscardHappened
+                ? tab.Document.Text
+                : ProofreadingResultMerger.MergePartial(tab.Document.Text, validResults);
             DocumentDiffResult loaded =
                 tab.Proofreading.LoadCorrectedDocument(corrected);
             if (!loaded.Accepted)
             {
+                // 安全検査に失敗した場合、この実行の結果は適用されない。課金済みの呼び出しは
+                // 破棄として記録する（破棄件数と金額は課金履歴で確認できる）。
                 MarkApiCallsDiscarded(successfulApiCallIds);
                 SetProofreadingStatus("安全検査に失敗したため校正結果を破棄しました", force: true);
                 return;
@@ -1822,8 +2060,17 @@ public partial class MainWindow : Window
 
             // ここ以降の例外は、提案（0件を含む）が既にUIへ反映された後のもの。
             resultsApplied = true;
-            int proposals = loaded.Accepted ? loaded.Changes.Count : 0;
-            ShowProofreadingUsage(proposals, responseCosts);
+            if (editDiscardHappened)
+            {
+                // 破棄通知は一回の処理につき一度だけ表示する。料金・破棄件数の詳細は課金履歴で
+                // 確認できるようにする（proofreading-ux-fixes-plan.md §7.3）。
+                SetProofreadingStatus("編集された部分は、入力が止まってから再校正します", force: true);
+            }
+            else
+            {
+                int proposals = loaded.Accepted ? loaded.Changes.Count : 0;
+                ShowProofreadingUsage(proposals, responseCosts);
+            }
         }
         catch (GeminiClientException ex)
         {
@@ -1869,6 +2116,44 @@ public partial class MainWindow : Window
             UpdateTrayIconState();
             ScheduleAutomaticProofreading();
         }
+    }
+
+    /// <summary>
+    /// 校正実行の間、本文編集による位置のずれを追従させるアンカーを張る。
+    /// 挿入はアンカー位置より前（＝対象範囲の外）として扱い、削除で消えても対象の
+    /// 原文が無くなるので IsDeleted として判定できるようにする。
+    /// </summary>
+    private static TextAnchor CreateAnchor(TextDocument document, int offset)
+    {
+        TextAnchor anchor = document.CreateAnchor(offset);
+        anchor.MovementType = AnchorMovementType.AfterInsertion;
+        anchor.SurviveDeletion = true;
+        return anchor;
+    }
+
+    /// <summary>
+    /// リクエストの対象範囲（パート）が今も無変更かどうかを判定する。
+    /// アンカー位置の現在オフセットから <see cref="ProofreadingRequest.SourceLength"/> 文字が
+    /// <see cref="ProofreadingRequest.SourceText"/> と一致するかを見る（部分結果保持の単位は
+    /// 段落ではなくリクエストごと。2,000文字超で分割された段落の別パートが無関係に破棄されない）。
+    /// </summary>
+    private static bool IsPartIntact(TextAnchor anchor, ProofreadingRequest request)
+    {
+        if (anchor.IsDeleted)
+            return false;
+
+        int offset = anchor.Offset;
+        if (offset < 0 ||
+            request.SourceLength <= 0 ||
+            offset + request.SourceLength > anchor.Document.TextLength)
+        {
+            return false;
+        }
+
+        return string.Equals(
+            anchor.Document.GetText(offset, request.SourceLength),
+            request.SourceText,
+            StringComparison.Ordinal);
     }
 
     private bool ConfirmProofreadingApiUse(int requestCount, bool manual)
@@ -2147,15 +2432,22 @@ public partial class MainWindow : Window
             UsageLimitState limitState = UsageLimitService.Evaluate(
                 _monthUsageUsd, limit, _settings.Current.MonthlyLimitWarningRatio);
 
-            string latestText = latest is null
-                ? "直—"
-                : $"直↑{latest.PromptTokens:N0}↓{latest.OutputTokens:N0}" +
-                  $"${UsageFormatting.FormatUsd(latest.UsdCost)} " +
-                  $"({UsageFormatting.FormatJpy(latest)}{UsageFormatting.FormatRateDateSuffix(latest)})";
-            StatusUsage.Text =
-                $"{latestText}｜起${UsageFormatting.FormatUsd(session.UsdCost)} ({UsageFormatting.FormatJpy(session)})｜" +
-                $"日${UsageFormatting.FormatUsd(today.UsdCost)} ({UsageFormatting.FormatJpy(today)})｜" +
-                $"月${UsageFormatting.FormatUsd(month.UsdCost)} ({UsageFormatting.FormatJpy(month)})";
+            // 主表示は設定で選択された項目・通貨だけを出す（proofreading-ux-fixes-plan.md §8）。
+            // 既定は「当月＋為替、円表示」。ツールチップには選択されていない詳細項目も含める
+            // （主表示を再び過密にしない）。
+            StatusUsage.Text = StatusBarUsageFormatter.Format(
+                new StatusBarDisplayOptions(
+                    _settings.Current.StatusBarShowLatest,
+                    _settings.Current.StatusBarShowSession,
+                    _settings.Current.StatusBarShowToday,
+                    _settings.Current.StatusBarShowMonth,
+                    _settings.Current.StatusBarShowFx,
+                    _settings.Current.StatusBarCurrency),
+                latest,
+                session,
+                today,
+                month,
+                _fxRates.GetCachedRate());
             // 上限到達の警告は StatusUsage とは別の固定要素に出す。狭いウィンドウで StatusUsage が
             // CharacterEllipsis により省略されても、「自動停止」の理由が読めなくなることがないように
             // するため（実機で幅480px程度のとき、末尾に連結した文言ごと消えていた）。

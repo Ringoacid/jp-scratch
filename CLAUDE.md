@@ -177,18 +177,18 @@ installer/         WiX v5 による MSI
   （`Editor/ProofreadingInlineDiffLayout.cs` の `ProofreadingInlineDiff`）。`ProofreadingProposal` の
   `Start` / `Length` は失効後に例外を投げるため、`VisualLine` の構築中（描画中）に読むと
   描画ごと落ちる。`MainWindow.RefreshProofreadingPresentation` が `IsActive` で絞った直後の同期処理で
-  だけ位置を読み、以後はスナップショットのみを `ProofreadingInlineDiffGenerator` と
-  `ProofreadingSelectionRenderer` へ渡す。`diffs` は `proposals` と1対1・同じ順序であることが前提で、
-  片方にだけ filter や並べ替えを足すと選択中と別の提案がハイライトされる。
+  だけ位置を読み、以後はスナップショットのみを `ProofreadingInlineDiffGenerator` へ渡す
+  （選択状態も `Selected` として同じスナップショットで渡す）。`diffs` は `proposals` と1対1・
+  同じ順序であることが前提で、片方にだけ filter や並べ替えを足すと選択中と別の提案がハイライトされる。
 - **`TextDecoration` の `PenOffsetUnit` / `PenThicknessUnit` は `Pixel` を明示する**
-  （`Editor/ProofreadingInlineDiffGenerator.cs` の `CreateDoubleStrikethrough`）。既定の
-  `FontRecommended` では `PenOffset` がフォント推奨単位で解釈され、取り消し線が文字の外へ飛ぶ
-  （実測で確認）。二重線は `±1.2` px で実測した値。あわせて **`FormattedTextElement(FormattedText, int)`
-  は AvalonEdit 6.3.1 では使えない**（`CreateTextRun` が `ArgumentNullException` で落ちる）。
-  `TextLine` を `TextFormatter.FormatLine` で自前に組み立てて `FormattedTextElement(TextLine, int)` を
-  使う。`StrikeBrush` は Freeze 済みのデコレーションを後から色変更できないため、setter で
-  `CreateDoubleStrikethrough` を作り直す（自動プロパティにするとテーマ切替で取り消し線の色だけ
-  古いまま固まる）。
+  （`Editor/ProofreadingInlineDiffGenerator.cs`）。既定の `FontRecommended` では `PenOffset` が
+  フォント推奨単位で解釈され、取り消し線が文字の外へ飛ぶ（実測で確認）。二重線は `±1.2` px で実測した値。
+  あわせて **`FormattedTextElement(FormattedText, int)` は AvalonEdit 6.3.1 では使えない**
+  （`CreateTextRun` が `ArgumentNullException` で落ちる）。`TextLine` を `TextFormatter.FormatLine` で
+  自前に組み立てて `FormattedTextElement(TextLine, int)` を使う。
+  **2026-08-02 以降、取り消し線は `TextDecoration` を廃止し、`FormattedTextRun.Draw` で全幅へ手描きする**
+  （WPF の `TextDecoration` は空白上で線を描かないため。`ProofreadingInlineDiffRun` が
+  `GlyphTypeface.StrikethroughPosition` から線の位置を求め、間隔 ±1.2px で二本引く）。
 - **許可による本文置換は、必ず `CarryForwardAppliedEdit` と `_applyingProposal` の対で扱う。**
   片方だけだと「別の場所を1文字打った瞬間に同じ段落が再送・再課金される」バグが残る。
   `TryApply` が段落ハッシュを変えるため、`CarryForwardAppliedEdit`（`ParagraphProofreadingPlanner`）で
@@ -201,6 +201,27 @@ installer/         WiX v5 による MSI
   一括許可（`AcceptAllProposals`）では `using (tab.Document.RunUpdate())` を必ず `try` の内側に置く
   （`EndUpdate` でまとめて発火する `TextChanged` がフラグ解除後に届くと、全変更がユーザーの入力として
   数えられて自動校正が走る）。
+- **文書分割は常に空行区切り**（`ParagraphProofreadingPlanner.SplitParagraphs`）。空行が無い複数行は
+  1ブロック、連続空行は1区切り、先頭・末尾の空行はブロックを作らない。文末改行・空行の有無で
+  校正リクエスト数が変わってはいけない（変わる＝分割規則を壊した）。2,000文字を超えるブロックだけが
+  `SplitTarget` で追加分割される。
+- **校正実行中の破棄は「全文一致」でも「段落ハッシュ」でもなく、リクエスト単位の `TextAnchor` で個別に判断する**（`RunProofreadingAsync`）。各リクエストの対象範囲（パート）の先頭へ `TextAnchor` を張り、送信直前と適用時に「アンカー位置の現在オフセットから `SourceLength` 文字が `SourceText` と一致するか」を見る。**対象内部が編集された場合だけ**そのリクエストの結果を破棄して `discarded_cnt` へ記録する。段落全体のハッシュ照合だと、2,000文字超で複数リクエストに分割された段落の後半を編集しただけで、無関係な前半の課金済み結果まで破棄される（レビュー指摘P2で修正）。残りの未送信リクエストは中止し、その段落は `MarkSent(plan, unsentSet)` で未送信のまま残す（入力停止後の再校正で再送される）。確認ダイアログ等の間に本文が変わっていた場合はアンカーを範囲外へ作らないよう、スナップショット一致を確認してから張る（不一致なら全リクエスト中止）。
+- **選択中の提案の背景・枠線は、インライン差分要素の `Draw` で変更単位全体（修正前＋修正後）に描く。**
+  文書上の原文範囲だけを塗る `IBackgroundRenderer` は廃止した（`ProofreadingSelectionRenderer.cs` は削除）。
+  併せて **取り消し線は `TextDecoration` に頼らず `DrawingContext` で手描きする**——WPF の
+  `TextDecoration` は空白（半角・全角・タブ）上で線を描かないため。垂直位置は
+  `GlyphTypeface.StrikethroughPosition` から求め、間隔は ±1.2px。**取り消し線は原文（修正前）の
+  描画幅にだけ引く**（`MeasureTextWidth` が `FormattedText.WidthIncludingTrailingWhitespace` で計測。
+  修正後の緑テキストへ線が伸びないようにするレビュー指摘P1）。背景と枠線は全幅のまま。ブラシ
+  （`StrikeBrush` / `SelectedBackgroundBrush` / `SelectedBorderBrush`）はテーマ切替に追従するよう
+  毎回 `Draw` 内で `Pen` を作り直す。
+- **校正漏れ報告は「記録（`reactions`）を先、本文変更を後」。** 保存に失敗したら本文も変更しない
+  （記録だけ失敗して本文だけ変わる状態を作らない）。本文の置換・挿入・削除は1回の Undo で戻せ、
+  Undo しても記録は残る。`missed_correction` は拒否率推移の**分母・分子のどちらにも含めず**
+  （バケット分割前に除外する。拒否数だけ除外すると「拒否10件＋校正漏れ10件」が拒否率50%に見える。
+  レビュー指摘P2）、few-shot では最優先カテゴリ（拒否と同じ順位）で使う。
+- **自動校正の既定デバウンスは 5000ms**（`AppSettings.ProofreadingDebounceMs`）。`ProofreadingSchedule`
+  の既定も5秒。4.9秒で送信せず5秒で送信対象になることが自己テストで固定されている。
 
 ## 環境の癖
 
@@ -827,6 +848,77 @@ requirements.md 3.3.1 発火条件の「許可後の再送・再課金」を解�
 - **許可した後に別の段落を1文字打ったとき、走る校正がその段落だけであること**（許可した段落が再送されない）
 - 一括許可の Undo が1回の `Ctrl+Z` でまとまるか（グループ化が効かない場合は N 回の Undo に劣化する可能性がある）
 - 校正実行中に `Ctrl+Shift+.` を押しても何も起きないこと（入口ガードの実効確認）
+
+## 校正UX・自動校正・課金表示の改修（2026-08-02 実装）
+
+`proofreading-ux-fixes-plan.md` の7項目を実装した。自己テストは **146 行すべて PASS、FAIL 0、
+exit code 0**（本体ビルドも警告0・エラー0。検証は `bin\verify-build` へ出力して実施）。
+
+- **文書分割規則の安定化**（`Proofreading/ParagraphProofreadingPlanner.SplitParagraphs`）:
+  空行が無い場合は「改行単位」へフォールバックしていた分岐を廃止し、常に空行を文章ブロックの
+  区切りとして扱う。空行が無い複数行は1ブロック、連続する空行は1区切り、先頭・末尾の空行は
+  ブロックを作らない。2,000文字を超えるブロックだけが既存の書記素安全な分割で追加分割される。
+  文末改行・空行の有無で校正リクエスト数が変わらなくなった（変更前は末尾へ空行を足すだけで
+  「各行15件」→「全体1件」に変わっていた）。
+- **自動校正の既定デバウンスを 2000ms → 5000ms へ**（`Models/AppSettings.ProofreadingDebounceMs`）。
+  入力中に校正結果が何度も破棄されて不要な API 呼び出しが発生しうる問題への対策。
+- **部分結果保持**（`Views/MainWindow.xaml.cs` の `RunProofreadingAsync`）:
+  「全文スナップショット一致」ではなく、各リクエストの対象範囲（パート）の先頭へ `TextAnchor` を張り、
+  送信直前と適用時に「アンカー位置の現在オフセットから `SourceLength` 文字が `SourceText` と一致するか」
+  を確認する。**対象内部が編集されたリクエストの結果だけを破棄**して `discarded_cnt` へ記録し、
+  編集されていない範囲の結果は現在位置へ対応付けて保持する（`ProofreadingResultMerger.MergePartial` を
+  追加。レビュー指摘P2: 段落全体のハッシュ照合だと、2,000文字超で分割された段落の後半を編集しただけで
+  無関係な前半の課金済み結果まで破棄されていた）。まだ送信していない残りの API 呼び出しは中止する。
+  破棄・中止された段落は `MarkSent(plan, unsentSet)`（新オーバーロード）で未送信のまま残し、入力停止後
+  の自動再校正で再送する。別タブへ切り替わっても元タブのセッションへ結果を保持する。破棄通知
+  「編集された部分は、入力が止まってから再校正します」は一回の処理につき一度だけ表示する。
+  選択範囲の手動校正は従来どおり全文一致を要求する。
+- **選択中提案の描画強化**（`Editor/ProofreadingInlineDiffGenerator.cs`）:
+  `ProofreadingSelectionRenderer`（原文範囲だけに薄い背景）を廃止し、インライン差分要素
+  （`ProofreadingInlineDiffElement` / `ProofreadingInlineDiffRun`）が**修正前＋修正後の変更単位全体**へ
+  アクセントカラーの背景と枠線を描く（色だけに頼らず、必ず枠線を出す）。テーマブラシは
+  `ProofreadingSelectionBackgroundBrush` / `ProofreadingSelectionBorderBrush` を新設。
+- **空白削除の二重取り消し線**（同ファイル）: WPF の `TextDecoration` は空白上で線を描かないため、
+  `TextDecoration` を廃止し、`FormattedTextRun.Draw` で**修正前の描画幅**へ二本の水平線を手描きする。
+  幅は `MeasureTextWidth`（`FormattedText.WidthIncludingTrailingWhitespace`、末尾空白を含む）で計測し、
+  修正後（緑）の文字へは線を引かない（レビュー指摘P1）。線の垂直位置はフォントメトリクス
+  （`GlyphTypeface.StrikethroughPosition`）から求め、間隔 ±1.2px は従来と同じ実測値。
+  半角・全角・タブ・連続空白の削除提案に確実に線が引かれる。
+- **課金ステータスバーの設定可能化**（`Models/AppSettings.cs` ほか）:
+  直近・起動後・当日・当月・為替の表示ON/OFF（既定: 当月＋為替のみ）と、料金表示形式（円/ドル/両方、
+  既定: 円表示）を追加。`Services/StatusBarUsageFormatter.cs`（WPF非依存の純粋関数）が表示を組み立て、
+  `Views/MainWindow.xaml.cs` の `RefreshUsageDisplay` と設定画面「校正」タブの「ステータスバー（課金表示）」
+  セクションから使う。既定の表示例: `今月 ¥4.80  為替 USD/JPY 155.00 (7/31)`。ツールチップには
+  表示設定に関係なく全項目を含める。月間上限の進捗バー・警告表示・課金履歴はこの設定の影響を受けない。
+- **校正漏れ報告**（`Views/MissedCorrectionDialog`、`Services/MissedCorrectionAction.cs`、
+  `Services/ReactionRepository.AddMissedCorrection`）: 選択範囲の置換・挿入・削除を
+  `reactions` へ `missed_correction` として保存し、**保存成功後にだけ**本文を1回の Undo で変更する。
+  原文・修正後・左文脈・右文脈・任意理由を記録し、few-shot 候補として将来の校正へ使う（最優先カテゴリ）。
+  拒否率推移の分母・分子のどちらにも含めない（バケット分割前に除外。レビュー指摘P2）。`Ctrl+Shift+M` と右クリックメニューから開く。
+  ダイアログは「修正後」の入力に応じて**前後の文脈を込めたライブプレビュー**を描く（置換・削除は
+  原文を赤の二重取り消し線、修正後・挿入文字は緑の太字）。切り詰め・改行の平坦化は
+  `MissedCorrectionPreview`（純粋関数）に集約し、自己テストで固定している。
+- **エディタの右クリックメニュー**（`Views/MainWindow.xaml`）: 切り取り・コピー・貼り付け・削除・
+  すべて選択（標準コマンド）→ 区切り → 大文字・小文字変換（選択なしで無効化、invariant な1文字単位で
+  日本語を保持）→ 区切り → 校正漏れを報告…（`Ctrl+Shift+M`）。右クリック位置が既存選択範囲外なら
+  キャレットを移動する。「元に戻す」「やり直し」は追加しない。
+- **自己テスト**: `ParagraphProofreadingPlannerValidation`（空行区切りの一意化・文末改行不変性・
+  15行1リクエスト・空行のみ0件・2,000文字境界）、`ProofreadingScheduleValidation`（既定5秒の境界）、
+  `StatusBarUsageFormatterValidation`（新規、表示項目・通貨・既定値・欠損表示）、
+  `MissedCorrectionActionValidation`（新規、置換/挿入/削除/実行不可・ボタン文言）、
+  `ReactionRepositoryValidation`（校正漏れの保存・few-shot候補・拒否率非計上）、
+  `FewShotSelectorValidation`（校正漏れの最優先カテゴリ・送信例フォーマット）を追加・更新。
+
+**未確認のまま残っていること**（この環境では画面キャプチャ・実キー入力・IME 挙動を自動検証できないため、
+ユーザーの実機確認待ち）:
+- インライン差分の選択背景・枠線がライト/ダーク双方で読みやすいか（修正前・修正後の両方に枠が
+  かかっているか含む）
+- 空白（半角・全角・タブ）の削除提案に二重取り消し線が確実に表示されるか
+- 校正実行中に別ブロックを編集したとき、編集されていないブロックの提案が残り、編集ブロックだけが
+  5秒後に再校正されるか（二重課金されないか）
+- 課金ステータスバーの表示項目・通貨形式の全組み合わせと、狭いウィンドウでの見た目
+- 校正漏れ報告の置換・挿入・削除、Undo で本文だけ戻ること、`Ctrl+Shift+M` と右クリックの両方
+- 右クリックメニューの各項目の有効・無効状態と、大文字・小文字変換の結果
 
 ## 次の WIP と、その判断理由
 

@@ -7,6 +7,13 @@ internal enum ProofreadingReaction
     Accept,
     Reject,
     RejectWithReason,
+
+    /// <summary>
+    /// 校正漏れ報告（proofreading-ux-fixes-plan.md §9）。モデルが見逃した誤字・脱字・余分な文字を
+    /// ユーザー自身が訂正して記録したもの。既存の許可・拒否リアクションと区別し、few-shot の
+    /// 強い学習例として使う。
+    /// </summary>
+    MissedCorrection,
 }
 
 /// <summary>
@@ -69,6 +76,39 @@ internal sealed class ReactionRepository
             ("$right_context", proposal.RightContext),
             ("$reaction", ToStorageValue(reaction)),
             ("$user_reason", normalizedReason));
+    }
+
+    /// <summary>
+    /// 校正漏れ報告（proofreading-ux-fixes-plan.md §9.4）の記録。
+    /// 選択範囲の置換・挿入・削除を、左文脈・右文脈・任意理由とともに <c>reactions</c> へ保存する。
+    /// 本文の編集とは独立しており、呼び出し側（MainWindow）が「保存に成功してから本文を変更する」
+    /// 順序を守る（記録だけ失敗して本文だけ変わる状態を作らない）。
+    /// </summary>
+    internal void AddMissedCorrection(
+        string? tabId,
+        string original,
+        string corrected,
+        string? leftContext,
+        string? rightContext,
+        string? reason = null)
+    {
+        _database.Execute(
+            """
+            INSERT INTO reactions (
+                reacted_at, api_call_id, tab_id, original, suggestion,
+                left_context, right_context, reaction, user_reason)
+            VALUES (
+                $reacted_at, NULL, $tab_id, $original, $suggestion,
+                $left_context, $right_context, $reaction, $user_reason);
+            """,
+            ("$reacted_at", DateTimeOffset.Now.ToString("O")),
+            ("$tab_id", tabId),
+            ("$original", original),
+            ("$suggestion", corrected),
+            ("$left_context", leftContext),
+            ("$right_context", rightContext),
+            ("$reaction", ToStorageValue(ProofreadingReaction.MissedCorrection)),
+            ("$user_reason", string.IsNullOrWhiteSpace(reason) ? null : reason.Trim()));
     }
 
     /// <summary>蓄積された全リアクション件数（スタイルガイド生成のしきい値判定に使う）。</summary>
@@ -151,13 +191,26 @@ internal sealed class ReactionRepository
             });
 
         List<RejectionRateBucket> buckets = [];
-        for (int start = 0; start < reactions.Count; start += safeBlockSize)
+        // 「拒否率」は提案を拒否した割合なので、校正漏れ報告（MissedCorrection）は提案への
+        // 拒否ではなくユーザー自身の手訂正として、分母・分子のどちらにも含めない。
+        // 拒否数だけから除外するのでは分母に残ってしまう（「拒否10件＋校正漏れ10件」が
+        // 拒否率50%に見える）ため、バケット分割**前**に一覧から除外する。
+        List<ProofreadingReaction> trendReactions = [];
+        foreach (ProofreadingReaction reaction in reactions)
         {
-            int count = Math.Min(safeBlockSize, reactions.Count - start);
+            if (reaction == ProofreadingReaction.MissedCorrection)
+                continue;
+            trendReactions.Add(reaction);
+        }
+
+        for (int start = 0; start < trendReactions.Count; start += safeBlockSize)
+        {
+            int count = Math.Min(safeBlockSize, trendReactions.Count - start);
             int rejected = 0;
             for (int i = start; i < start + count; i++)
             {
-                if (reactions[i] != ProofreadingReaction.Accept) rejected++;
+                if (trendReactions[i] is ProofreadingReaction.Reject or ProofreadingReaction.RejectWithReason)
+                    rejected++;
             }
             buckets.Add(new RejectionRateBucket(start + 1, start + count, count, rejected, count == safeBlockSize));
         }
@@ -193,6 +246,7 @@ internal sealed class ReactionRepository
             ProofreadingReaction.Accept => "accept",
             ProofreadingReaction.Reject => "reject",
             ProofreadingReaction.RejectWithReason => "reject_with_reason",
+            ProofreadingReaction.MissedCorrection => "missed_correction",
             _ => throw new ArgumentOutOfRangeException(nameof(reaction)),
         };
 
@@ -203,8 +257,9 @@ internal sealed class ReactionRepository
             "accept" => ProofreadingReaction.Accept,
             "reject" => ProofreadingReaction.Reject,
             "reject_with_reason" => ProofreadingReaction.RejectWithReason,
+            "missed_correction" => ProofreadingReaction.MissedCorrection,
             _ => default,
         };
-        return value is "accept" or "reject" or "reject_with_reason";
+        return value is "accept" or "reject" or "reject_with_reason" or "missed_correction";
     }
 }

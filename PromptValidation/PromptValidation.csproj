@@ -26,6 +26,8 @@
              Link="Models\GeminiApiKeySource.cs" />
     <Compile Include="..\Models\ProofreadingModelCatalog.cs"
              Link="Models\ProofreadingModelCatalog.cs" />
+    <Compile Include="..\Models\StatusBarCurrencyFormat.cs"
+             Link="Models\StatusBarCurrencyFormat.cs" />
     <Compile Include="..\Proofreading\DocumentDiff.cs" Link="Proofreading\DocumentDiff.cs" />
     <Compile Include="..\Proofreading\FewShotSelector.cs" Link="Proofreading\FewShotSelector.cs" />
     <Compile Include="..\Proofreading\GeminiProofreadingClient.cs"
@@ -58,6 +60,8 @@
              Link="Services\FxRateService.cs" />
     <Compile Include="..\Services\HideSuppressionCounter.cs"
              Link="Services\HideSuppressionCounter.cs" />
+    <Compile Include="..\Services\MissedCorrectionAction.cs"
+             Link="Services\MissedCorrectionAction.cs" />
     <Compile Include="..\Services\ApiCallRepository.cs"
              Link="Services\ApiCallRepository.cs" />
     <Compile Include="..\Services\PricingService.cs"
@@ -78,6 +82,8 @@
              Link="Services\TrayIconStateResolver.cs" />
     <Compile Include="..\Services\UsageFormatting.cs"
              Link="Services\UsageFormatting.cs" />
+    <Compile Include="..\Services\StatusBarUsageFormatter.cs"
+             Link="Services\StatusBarUsageFormatter.cs" />
     <Compile Include="..\Services\UsageLimitService.cs"
              Link="Services\UsageLimitService.cs" />
     <Compile Include="..\Services\UsagePeriod.cs"

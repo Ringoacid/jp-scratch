@@ -27,6 +27,10 @@ internal sealed record FewShotExample(
             ProofreadingReaction.RejectWithReason => string.IsNullOrWhiteSpace(UserReason)
                 ? "拒否された"
                 : $"拒否された（理由: {UserReason}）",
+            // 校正漏れ報告はユーザー自身の手訂正＝最も強い学習例。
+            ProofreadingReaction.MissedCorrection => string.IsNullOrWhiteSpace(UserReason)
+                ? "ユーザーが手動で訂正した"
+                : $"ユーザーが手動で訂正した（理由: {UserReason}）",
             _ => "拒否された",
         };
         return $"- 「{Original}」→「{Suggestion}」: {verdict}";
@@ -116,6 +120,9 @@ internal static class FewShotSelector
     private static int CategoryRank(ProofreadingReaction reaction)
         => reaction switch
         {
+            // 校正漏れ報告はユーザー自身の手訂正であり、モデルが見逃した誤りを示す最も強い信号。
+            // 拒否と同じ最優先カテゴリへ入れる。
+            ProofreadingReaction.MissedCorrection => 0,
             ProofreadingReaction.Reject => 0,
             ProofreadingReaction.RejectWithReason => 0,
             ProofreadingReaction.Accept => 1,

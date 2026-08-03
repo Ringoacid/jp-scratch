@@ -137,6 +137,11 @@ internal sealed class SettingsService
         s.CustomInstruction ??= "";
         // 0件では判定が常に真になり毎回生成を提案してしまうため、下限を1に固定する。
         s.StyleGuideGenerationThreshold = Math.Clamp(s.StyleGuideGenerationThreshold, 1, 10_000);
+
+        // 未知の値（settings.json を手で壊した等）は円表示へ正規化する
+        // （proofreading-ux-fixes-plan.md §8.5: 料金表示形式は文字列を直接比較せず enum で持つ）。
+        if (!Enum.IsDefined(s.StatusBarCurrency))
+            s.StatusBarCurrency = StatusBarCurrencyFormat.Jpy;
     }
 
     private static void QuarantineBrokenFile()
