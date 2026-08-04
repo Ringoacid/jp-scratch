@@ -1,61 +1,53 @@
 # CLAUDE.md
 
-WSL や一部アプリで日本語が打てない問題を解消する、Windows 常駐型の日本語スクラッチパッド。
-Gemini / GPT-5.6 Luna による誤字脱字校正と、文体を壊さない学習機能を備える。
-- 仕様の正典: [requirements.md](requirements.md)（全 8 章）。判断に迷ったらまずこれを読む。
-- 使い方とビルド: [README.md](README.md)
-- 使用モデル: [gemini-3.5-flash-lite.md](gemini-3.5-flash-lite.md) / [gpt-5.6-luna.md](gpt-5.6-luna.md)
+このファイルは Claude Code がこのリポジトリを操作する際のガイドです。
 
-## 現在地
-| 段階 | 内容 | 状態 |
-|---|---|---|
-| v1 | 常駐エディタ（コールド 0.63s / 常駐 21.9MB / MSI 1.8MB） | **完了** |
-| v2 | Gemini / GPT-5.6 Luna による校正 | **完了**（実機確認済み） |
-| v3 | 文体の学習（few-shot・スタイルガイド・拒否率推移） | **完了**（実機確認済み。キャッシュは意図的に見送り） |
+## プロジェクト概要
 
-## コマンド
+- Windows 11 向け常駐型日本語スクラッチパッド「JP Scratch」。ホットキー（既定 `Alt+Space`）でどこからでも呼び出せるタスクトレイ常駐メモ帳。
+- 本文は `%APPDATA%\JpScratch\tabs\{id}.txt` に UTF-8 BOM なしのプレーンテキストで自動保存（メモ帳でサルベージ可能であることが要件）。
+- v1（常駐エディタ）・v2（校正＋課金管理）・v3（文体の学習＝few-shot・スタイルガイド自動生成・カスタム指示）はすべて実装済み。残るコンテキストキャッシュ適用は Gemini の単価が未確認のため意図的に見送り中。
+
+## 技術スタック
+
+- C# / .NET 10 (LTS)、WPF、AvalonEdit 6.x、SQLite (Microsoft.Data.Sqlite)。
+- WinForms はトレイアイコンのためだけに参照（暗黙 using は外してあり `TrayIconService` のみが明示的に using）。
+- 校正モデル: `gemini-3.5-flash-lite` / `gpt-5.6-luna`。API キーは DPAPI 暗号化で `credentials.dat` に保存。
+
+## ビルド・テスト
+
 ```powershell
-dotnet build / dotnet run                            # ビルド / 実行
-powershell -File tools\smoke-test.ps1 publish\fdd\JpScratch.exe   # 煙テスト（%APPDATA%\JpScratch を消してから）
-powershell -File installer\build.ps1                  # MSI（要 WiX v5）
-dotnet run --project PromptValidation -- --seed-billing <隔離dir> [--bulk] [--force]  # 課金画面の目視確認用データ投入
+dotnet build    # デバッグビルド / dotnet run で実行
+powershell -File tools\smoke-test.ps1 publish\fdd\JpScratch.exe   # 煙テスト（%APPDATA%\JpScratch を消すので注意）
+dotnet run --project PromptValidation -- --self-test   # オフライン回帰テスト（外部 API 不使用）
 ```
 
-## 構成
-```
-App.xaml.cs / Infrastructure / Models / Services / Editor / Controls /
-Views / Themes / Proofreading / PromptValidation / installer
-```
+- `PromptValidation/` は本体とソースを共有する独立コンソールアプリ。校正ロジック変更時は必ず `--self-test` を通す。
+- 状態アイコン: `tools\build-tray-icons.py`（`--check` で差分確認のみ）。MSI: `installer\build.ps1`（WiX v5 固定）。
 
-## 壊しやすい不変条件（触る前に理由まで理解する）
-- **本文は必ずプレーンテキスト。** 書き込みは一時ファイル → `File.Replace`（`AtomicFile.cs`）。
-- **ゴミ箱移動/復元は「ファイル操作を先、DB更新を後」。**
-- **本文が読めないとき `LoadBody` は例外**（空文字で開いて上書きしない）。
-- **DB行→モデルは `Parse` でなく `TryParse`**（壊れた1行で全体を落とさない）。
-- **`Migrate()` の新DDL は `IF NOT EXISTS`。** 版を上げたら `PromptValidation` の `CurrentVersion` も更新。
-- **テーマ辞書は `ThemeService` だけが差し込む。** 既定テンプレートは色指定を無視 → `Styles.xaml` で差し替え。
-- **ウィンドウ位置は物理ピクセル。IME 変換中は自動非表示を止める。**
-- **許可による本文置換は `CarryForwardAppliedEdit` と `_applyingProposal` の対。** 一括許可の `RunUpdate` は `try` の内側に。
-- **校正実行中の破棄は `TextAnchor` でリクエスト単位に判断。** 本文編集で未送信分は中止。
-- **送信済みの記録はパート（1リクエスト）単位。** 段落単位だと、2,000字超の段落で前半成功・後半失敗のとき課金済みの前半まで再送される。
-- **文書分割は常に空行区切り。自動校正の既定デバウンス 5000ms。**
-- **数値入力欄は表示→パースの往復不変性を確認。** 未編集欄は元の値をそのまま書き戻す。
-- **描画層へ渡すのは不変スナップショット。** 取り消し線は `DrawingContext` で手描き（`TextDecoration` は空白で描けない）。
-- **進行中フラグを `true` にする行と `try`/`finally` の間には何も置かない。** モーダル表示・`BeginUpdate()` も「何か」に含む。課金確認ダイアログはフラグを立てる**前**に出してはいけない（WPF のモーダルは入れ子のメッセージループを回すため、タイマーが発火して二重送信・二重課金になる）。
-- **`AtomicFile` の失敗は上位でタブ/ファイル単位に隔離し、必ずユーザーへ通知する。** 1件の共有違反で他タブの保存を巻き込まない。読めなかったものは既定値・空文字で上書きしない。
-- **`SettingsService.IsReadFailed` の起動では、設定値に依存する破壊的処理を一切走らせない**（ゴミ箱の期限削除・課金明細の圧縮・スタートアップ登録）。一時的な読み取り失敗が不可逆な削除・圧縮・設定変更に化ける。
-- **「保存できない」を知らせるだけで終わらせない。** 上限付きバックオフで自動再試行し、終了時は「再試行/このまま終了/取りやめ」を選ばせる。隠れている間の通知はステータスバーでなくトレイへ。
-- **ユーザーが編集しうるテキストファイルの読み取りは strict UTF-8（`AtomicFile.TryReadAllText`）。** 既定のデコーダは不正バイトを U+FFFD へ黙って置換するため、CP932 保存されたファイルが「読めた」ことになり、次の保存で原本を壊す。
-- **`IsDirty` を落とすのは本文とメタ情報の両方を書き切ってから。** 片方で落とすと、失敗したタブが未保存扱いから外れて通知にも再試行にも乗らない。
+## ディレクトリ構成
 
-## 環境の癖
-- **PowerShell スクリプトは UTF-8 BOM 付きで保存**（無いと日本語が CP932 化して壊れる）。
-- **Gemini へ送るシステム指示の改行は LF へ正規化。**
-- **`New-Object` より `[Type]::new()` を使う。**
-- **画面キャプチャ不可** → 見た目・実キー入力・IME は自動検証できないので実機確認を依頼する。
-- **`JPSCRATCH_DATA_DIR` で開発用データディレクトリを隔離**（未設定なら現行と完全に同一）。
+- `App.xaml.cs` 起動・常駐・単一インスタンス・クラッシュ時保存
+- `Controls/` 検索・置換パネル / `Editor/` AvalonEdit の拡張（検索・不可視文字・校正提案の描画）
+- `Infrastructure/` Win32 相互運用・原子的ファイル書き込み・パス解決
+- `Models/` 設定・タブ・ホットキー / `Proofreading/` 校正クライアント・プロンプト・段落計画・差分・提案セッション
+- `Services/` 設定・SQLite・資格情報・リアクション・タブ・ホットキー・配置・テーマ・トレイ
+- `Themes/` ライト / ダーク / 共通スタイル / `Views/` メインウィンドウ・設定・全タブ検索・ダイアログ
+- `installer/` WiX による MSI / `tools/` 煙テスト・アイコン生成スクリプト / `PromptValidation/` 検証アプリ
 
-## 開発時の課金 API 利用ルール
-- **実 API を呼ぶ前に必ずユーザーへ確認。** 実行後はトークン数と推定料金を提示する。
-- ビルド・自己テスト・ドライラン（`PromptValidation --self-test`）は確認不要。
-- ユーザー所有の未追跡 `.claude/` は変更・コミット対象にしない。
+## 重要な実装上の注意
+
+- **ウィンドウ位置は物理ピクセルで扱う**（`Services/WindowPlacer.cs`）。混在 DPI では WPF の `Window.Left/Top` を使わず `SetWindowPos` を直接呼ぶ。
+- **WinForms の暗黙 using を追加しない**（`Brush` / `Point` / `KeyEventArgs` が WPF 側と全面衝突する）。
+- **IME 変換中は自動非表示を止める**（`NativeMethods.HasImeComposition`）。
+- **テーマ辞書は `ThemeService` だけが差し込む**。App.xaml で読むと二重マージになり切り替えが効かない。
+- **二重起動の呼び戻しは名前付きイベント**（`Infrastructure/SingleInstance.cs`）。`PostMessage(HWND_BROADCAST)` は不可。
+- **`Assets/app.ico` は手作りの正典**。小サイズは DIB、256px のみ PNG 圧縮（`NotifyIcon` が PNG を展開できないため）。
+- **PowerShell スクリプトは UTF-8 BOM 付きで保存**（BOM なしだと CP932 として読まれコメントが壊れる）。
+- 書き込みは一時ファイル→`File.Replace`（`Infrastructure/AtomicFile.cs`）。SQLitePCLRaw は脆弱性対応で 2.1.12 に固定。
+
+## コーディング規約
+
+- UI 文言はすべて日本語ハードコード。サテライトリソースは使わない。
+- 校正プロンプトは `Proofreading/ProofreadingPrompt.cs` が正典。本体と検証アプリで共有する。
+- 変更後は `dotnet build` と `PromptValidation --self-test` で確認する。
