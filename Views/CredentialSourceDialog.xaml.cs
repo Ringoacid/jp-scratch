@@ -10,7 +10,7 @@ namespace JpScratch.Views;
 /// </summary>
 public partial class CredentialSourceDialog : Window
 {
-    internal GeminiApiKeySource SelectedSource { get; private set; } = GeminiApiKeySource.Stored;
+    internal ApiKeySource SelectedSource { get; private set; } = ApiKeySource.Stored;
 
     internal CredentialSourceDialog(
         StoredCredentialState storedKeyState,
@@ -32,13 +32,13 @@ public partial class CredentialSourceDialog : Window
 
     private void UseStoredButton_Click(object sender, RoutedEventArgs e)
     {
-        SelectedSource = GeminiApiKeySource.Stored;
+        SelectedSource = ApiKeySource.Stored;
         DialogResult = true;
     }
 
     private void UseEnvironmentButton_Click(object sender, RoutedEventArgs e)
     {
-        SelectedSource = GeminiApiKeySource.EnvironmentVariable;
+        SelectedSource = ApiKeySource.EnvironmentVariable;
         DialogResult = true;
     }
 

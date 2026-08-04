@@ -19,7 +19,7 @@ internal static class CredentialServiceValidation
 
             bool environmentPass =
                 service.EnvironmentKeyAvailable &&
-                service.GetApiKey(GeminiApiKeySource.EnvironmentVariable) == "environment-test-key";
+                service.GetApiKey(ApiKeySource.EnvironmentVariable) == "environment-test-key";
             bool missingPass = service.StoredKeyState == StoredCredentialState.Missing;
 
             service.SaveStoredApiKey(" stored-test-key ");
@@ -29,31 +29,31 @@ internal static class CredentialServiceValidation
             bool encryptedPass =
                 service.StoredKeyState == StoredCredentialState.Available &&
                 service.OpenAiStoredKeyState == StoredCredentialState.Available &&
-                service.GetApiKey(GeminiApiKeySource.Stored) == "stored-test-key" &&
-                service.GetApiKey(GeminiApiKeySource.Unspecified) == "stored-test-key" &&
-                service.GetOpenAiApiKey(GeminiApiKeySource.Stored) == "openai-test-key" &&
+                service.GetApiKey(ApiKeySource.Stored) == "stored-test-key" &&
+                service.GetApiKey(ApiKeySource.Unspecified) == "stored-test-key" &&
+                service.GetOpenAiApiKey(ApiKeySource.Stored) == "openai-test-key" &&
                 !Encoding.UTF8.GetString(encrypted).Contains("stored-test-key", StringComparison.Ordinal);
 
             var reloaded = new CredentialService(path, () => null);
             bool reloadPass =
                 !reloaded.EnvironmentKeyAvailable &&
-                reloaded.GetApiKey(GeminiApiKeySource.Stored) == "stored-test-key" &&
-                reloaded.GetOpenAiApiKey(GeminiApiKeySource.Stored) == "openai-test-key";
+                reloaded.GetApiKey(ApiKeySource.Stored) == "stored-test-key" &&
+                reloaded.GetOpenAiApiKey(ApiKeySource.Stored) == "openai-test-key";
 
             reloaded.DeleteStoredOpenAiApiKey();
             bool openAiDeletePass =
                 reloaded.OpenAiStoredKeyState == StoredCredentialState.Missing &&
-                reloaded.GetApiKey(GeminiApiKeySource.Stored) == "stored-test-key";
+                reloaded.GetApiKey(ApiKeySource.Stored) == "stored-test-key";
             reloaded.DeleteStoredApiKey();
             bool deletePass =
                 reloaded.StoredKeyState == StoredCredentialState.Missing &&
-                reloaded.GetApiKey(GeminiApiKeySource.Stored) is null;
+                reloaded.GetApiKey(ApiKeySource.Stored) is null;
 
             Directory.CreateDirectory(directory);
             File.WriteAllBytes(path, [1, 2, 3, 4]);
             bool corruptPass =
                 reloaded.StoredKeyState == StoredCredentialState.Unreadable &&
-                reloaded.GetApiKey(GeminiApiKeySource.Stored) is null;
+                reloaded.GetApiKey(ApiKeySource.Stored) is null;
 
             Console.WriteLine($"資格情報（環境変数）: {(environmentPass ? "PASS" : "FAIL")}");
             Console.WriteLine($"資格情報（未保存）: {(missingPass ? "PASS" : "FAIL")}");

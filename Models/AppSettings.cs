@@ -75,14 +75,40 @@ public sealed class AppSettings
     public int TrashRetentionDays { get; set; } = 30;
 
     // ---- 3.5.5 API キー ----
+    // プロパティ名は settings.json のキーそのものなので、型名を ApiKeySource へ改名した後も
+    // 既存ファイルとの互換のため変えない。
     /// <summary>キー本体は settings.json に入れず、取得元の選択だけを記録する。</summary>
-    public GeminiApiKeySource GeminiApiKeySource { get; set; } = GeminiApiKeySource.Unspecified;
-    /// <summary>OpenAI APIキーの取得元。Geminiとは別のキーを管理する。</summary>
-    public GeminiApiKeySource OpenAiApiKeySource { get; set; } = GeminiApiKeySource.Unspecified;
+    public ApiKeySource GeminiApiKeySource { get; set; } = ApiKeySource.Unspecified;
+    /// <summary>OpenAI APIキーの取得元。プロバイダーごとに別のキーを管理する。</summary>
+    public ApiKeySource OpenAiApiKeySource { get; set; } = ApiKeySource.Unspecified;
+    /// <summary>Anthropic APIキーの取得元。</summary>
+    public ApiKeySource AnthropicApiKeySource { get; set; } = ApiKeySource.Unspecified;
+    /// <summary>PLaMo APIキーの取得元。</summary>
+    public ApiKeySource PlamoApiKeySource { get; set; } = ApiKeySource.Unspecified;
 
-    // ---- 校正モデル ----
-    /// <summary>実際に校正へ使うモデルID。料金表のキーと一致させる。</summary>
-    public string ProofreadingModel { get; set; } = ProofreadingModelCatalog.GeminiModel;
+    // ---- 校正モデル（要件 3.5.1「用途別の 2 枠」） ----
+    /// <summary>
+    /// v3 までの単一モデル設定。読み込み時に自動用・手動用へ移行するためだけに残す。
+    /// 移行後は空文字になり、以降は参照しない。
+    /// </summary>
+    public string ProofreadingModel { get; set; } = "";
+
+    /// <summary>入力中の自動校正と、理由つき別案生成に使うモデルID。料金表のキーと一致させる。</summary>
+    public string AutoProofreadingModel { get; set; } =
+        ProofreadingModelCatalog.DefaultAutomaticModel;
+
+    /// <summary>明示的な校正実行と、スタイルガイド自動生成に使うモデルID。</summary>
+    public string ManualProofreadingModel { get; set; } =
+        ProofreadingModelCatalog.DefaultManualModel;
+
+    /// <summary>
+    /// 自動校正 1 リクエストのタイムアウト秒数（要件 3.5.1）。
+    /// 1 回の自動校正は複数リクエストに分割されうるため、実行時間の上限は「この値 × 分割数」。
+    /// </summary>
+    public int AutoProofreadingTimeoutSeconds { get; set; } = 15;
+
+    /// <summary>手動校正 1 リクエストのタイムアウト秒数。低速モデル向けに既定を長くとる。</summary>
+    public int ManualProofreadingTimeoutSeconds { get; set; } = 90;
 
     // ---- 3.3.1 自動校正 ----
     public bool AutoProofreadingEnabled { get; set; } = true;

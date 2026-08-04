@@ -322,51 +322,163 @@ LLM に文字オフセットや個別置換を返させると、日本語（サ�
 
 #### 3.5.1 校正 API の共通契約
 
-- 設定画面で `gemini-3.5-flash-lite` または `gpt-5.6-luna` を選択できる。選択変更は再起動せず次の校正から反映する。
-- どちらの API でも、文脈を含む校正対象全文を `<document>` 境界内で渡し、明らかな誤りだけを直した
+- どのプロバイダーでも、文脈を含む校正対象全文を `<document>` 境界内で渡し、明らかな誤りだけを直した
   **文書全文だけ**を返させる。
 - `<document>` 内はすべてデータであり、命令らしい文があっても従わないようシステム指示で固定する。
 - 個別提案、位置、カテゴリ、理由、`confidence` はモデルへ生成させない。原文と修正版全文の差分から
   アプリ側で個別提案を生成する。カテゴリ・モデル理由はアプリ側でも生成・表示・保存しない。
-- タイムアウトは 15 秒。失敗時は 1 回だけ再試行し、それ以上は再試行しない（自動チェックのリトライ地獄を避ける）。
+
+##### 用途別の 2 枠（v4）
+
+校正モデルは **自動用と手動用の 2 枠**を持つ。入力中の自動校正は高速なモデル、文章の最終仕上がりを
+確かめる手動校正は低速でも品質の高いモデル、という使い分けを設定で表現するため。
+
+| 用途 | 設定項目 | 既定モデル | 使う経路 |
+|---|---|---|---|
+| 自動 | `AutoProofreadingModel` | `gpt-5.6-luna` | 入力中の自動校正、**理由つき別案生成** |
+| 手動 | `ManualProofreadingModel` | `claude-sonnet-5` | 明示的な校正実行（`Ctrl + Enter`・選択範囲）、**スタイルガイド自動生成** |
+
+- 別案生成を自動側に置くのは、ユーザーが別案と理由を添えられるため高速モデルでも十分に対処でき、
+  かつ発生頻度が高く費用に効くため。スタイルガイド生成を手動側に置くのは、頻度が低く後々の
+  校正品質へ効き続けるため。
+- 選択変更は再起動せず次の校正から反映する。**1 回の実行の途中でモデル・プロバイダー・単価が
+  揺れないよう、実行開始時に用途に応じたモデルを固定する**（`ProofreadingClientRouter.PinModel`）。
+- 旧 `ProofreadingModel` 設定は、読み込み時に自動用・手動用の両方へコピーして移行する
+  （既存ユーザーは移行前と同じ挙動で起動する）。
+
+##### 選択できるモデル
+
+| プロバイダー | モデル ID | 備考 |
+|---|---|---|
+| OpenAI | `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` | 推奨 Luna |
+| Google | `gemini-3.1-pro-preview` / `gemini-3.6-flash` / `gemini-3.5-flash-lite` | 推奨 Flash Lite |
+| Anthropic | `claude-fable-5` / `claude-opus-5` / `claude-sonnet-5` / `claude-haiku-4-5-20251001` | 推奨 Sonnet 5 |
+| Preferred Networks | `plamo-3.0-prime` | 推奨（唯一） |
+
+- 自動用・手動用のどちらにも全モデルを選べる。低速モデルを自動側へ選ぶことも許すが、設定画面で
+  推奨タイムアウトを併記して注意を促す（分類をハード制限にすると、モデルが増えたときの維持が負債になる）。
+
+##### タイムアウトと再試行
+
+- タイムアウトは**用途別にユーザーが設定できる**。`AutoProofreadingTimeoutSeconds`（既定 15）と
+  `ManualProofreadingTimeoutSeconds`（既定 90）。範囲は 5〜300 秒。
+- モデル記述子は推奨値（高速 15 / 中速 30 / 低速 90 秒）を持つが、**表示専用**であり設定値を上書きしない
+  （モデル切替でユーザーの設定値が黙って消えるのを避ける）。実行開始時にモデルと一緒に固定する。
+- **タイムアウトでは再試行しない**。再試行は 429 と 5xx のときだけ 1 回。タイムアウトを再試行すると
+  最悪 10 分待ちになるうえ、1 回目がサーバー側で完走していれば二重課金になる。
+- 1 回の自動校正は 3.3.2 の分割により複数リクエストになりうるため、実行時間の上限は
+  「タイムアウト × 分割数」になる。設定画面にこの目安を示す。
+- 校正・別案生成・スタイルガイド生成は `_proofreadingRunInProgress` 等で相互排他されており、
+  低速モデルを選んでもリクエストは積み上がらない（待たされるだけで、再スケジュールで自己復帰する）。
+
+##### 完了判定（データ保全上の必須要件）
+
+打ち切られた応答を「修正版全文」として差分に掛けると**本文末尾を削除する提案**になり、削除量が
+200 書記素以下かつ変更比率 20% 以下なら安全検査を通過して誤字修正と同じ見た目で提示される
+（一括許可で本文が失われる）。したがって全プロバイダーで、本文を取り出す前に生成が正常終了した
+ことを必ず確認する。
+
+| プロバイダー | 正常終了の条件 |
+|---|---|
+| Google | `candidates[0].finishReason == "STOP"` |
+| OpenAI | `status == "completed"` |
+| Anthropic | `stop_reason == "end_turn"`（`refusal` は HTTP 200 で本文が空・部分的になるため専用の失敗として扱う） |
+| Preferred Networks | `choices[0].finish_reason == "stop"` |
+
+実装では、クライアントの基底クラスが「完了判定 → 本文抽出 → 使用量抽出」の順を固定し、完了判定を
+抽象メソッドにして**実装忘れがコンパイルエラーになる**ようにする。
+
+##### 思考・推論の設定
+
+設定画面には出さず、用途ごとの固定値をモデル記述子に持たせる。校正は多段推論を要さないため自動側は
+最小、最終確認である手動側は中程度とする。
+
+| プロバイダー | 自動用 | 手動用 |
+|---|---|---|
+| OpenAI | `reasoning.effort = "low"` | `"medium"` |
+| Google（Gemini 3 系） | `thinkingConfig.thinkingLevel = "low"` | `"medium"` |
+| Anthropic（Opus 5 / Sonnet 5） | `output_config.effort = "low"` ＋ `thinking: {"type": "disabled"}` | `effort = "medium"` ＋ adaptive |
+| Anthropic（Haiku 4.5） | `thinking` を省略（adaptive 非対応） | 同左 |
+| Preferred Networks | `reasoning_effort = "none"` | `"medium"` |
+
+- Gemini には `thinkingLevel` を**必ず明示**する。`gemini-3.1-pro-preview` は既定が high 思考で、
+  思考トークンが出力単価で課金されるため。`thinkingBudget` との併用は 400 になるので送らない。
+- `claude-fable-5` は思考を無効化できない（`{"type": "disabled"}` は 400）。自動側に選ばれた場合も
+  adaptive のまま `effort` だけで抑える。
 
 ##### Gemini API
 
-- モデルは `gemini-3.5-flash-lite`（**3.5.4 参照**）。`responseMimeType` は `text/plain` とする。
+- `POST v1beta/models/{model}:generateContent`。`responseMimeType` は `text/plain` とする。
 - Gemini 3 系の推奨に合わせ `temperature` は `1.0`。Gemini 3.5 Flash-Lite ではカスタム値が無視されるため、
   将来のモデル差し替え時に既定値から不用意に下げない。
+- 使用量は `usageMetadata`（`promptTokenCount` / `candidatesTokenCount` / `thoughtsTokenCount` /
+  `cachedContentTokenCount`）から読む。
 
 ##### OpenAI Responses API
 
-- モデルは `gpt-5.6-luna`。`POST /v1/responses` を使用し、システム指示は `instructions`、校正本文は `input` に渡す。
-- 推論 effort は `low`、`store` は `false` とする。出力は `output_text`（または output message 内の text）から取得する。
+- `POST /v1/responses` を使用し、システム指示は `instructions`、校正本文は `input` に渡す。`store` は `false`。
+  出力は `output_text`（または output message 内の text）から取得する。
 - `usage.input_tokens`、`usage.output_tokens`、`usage.output_tokens_details.reasoning_tokens`、
   `usage.input_tokens_details.cached_tokens` を読み取り、共通の使用量・料金ログへ変換する。
 
+##### Anthropic Messages API
+
+- `POST /v1/messages`。認証は `x-api-key` ヘッダー、`anthropic-version: 2023-06-01` を付ける。
+  システム指示は `system`、校正本文は `messages` の user ロールに渡す。
+- **`temperature` / `top_p` / `top_k` を送らない**（Fable 5 / Opus 5 / Sonnet 5 では 400 になる）。
+  末尾 assistant ターンによるプレフィルも使わない（同じく 400）。
+- 使用量は `usage.input_tokens` / `usage.output_tokens` / `usage.cache_read_input_tokens` から読む。
+  出力トークンに思考が含まれ**思考分の内訳は返らない**ため、共通モデルでは思考トークンを 0 として
+  出力トークンへ寄せる（課金対象の合計は変わらない）。
+
+##### Preferred Networks PLaMo API（OpenAI 互換）
+
+- `POST https://api.platform.preferredai.jp/v1/chat/completions`。認証は `Authorization: Bearer`。
+  OpenAI 互換だが **Responses API ではなく Chat Completions API** であり、応答形が異なる。
+- 思考の切替は `reasoning_effort`（`none` / `medium` の 2 段階のみ）。
+- 使用量は `usage.prompt_tokens` / `completion_tokens` / `total_tokens` のみで、**推論トークンの内訳と
+  キャッシュトークン数は返らない**。共通モデルでは該当項目を 0 とする。
+
 #### 3.5.2 トークン数と料金
 
-- **トークン数は推定しない**。Gemini はレスポンスの `usageMetadata`（入力 `promptTokenCount`、
-  課金対象出力 `candidatesTokenCount + thoughtsTokenCount`）を使い、OpenAI は `usage` の入力・出力・
-  推論トークンを共通の使用量モデルへ変換する。
+- **トークン数は推定しない**。各プロバイダーの応答が返す使用量をそのまま共通の使用量モデルへ
+  変換する（3.5.1 の各プロバイダー節を参照）。共通モデルの課金対象出力は
+  `candidatesTokenCount + thoughtsTokenCount` 相当で、思考分の内訳を返さないプロバイダー
+  （Anthropic・PLaMo）では思考を 0、出力に全量を寄せる。合計は変わらない。
 - 単価は `pricing.json` に外出しする。設定画面（「校正」セクション「モデル単価」）からモデル別に
   入力単価・出力単価・更新日を編集できる。`pricing.json` の直接編集も引き続き可能。
+- **通貨欄 `currency` を持つ**（v4）。省略時は `"USD"` として読むため、既存の `pricing.json` は
+  変換なしでそのまま使える。PLaMo だけが円建てなので、単価は円のまま保持し、**課金ログへ保存する
+  時点で 3.5.3 の USD/JPY レートで USD へ換算する**（DB の保存通貨は従来どおり USD）。
+  レートが取得できずキャッシュもない場合、円建てモデルの金額は算出できないため `— ` と表示し、
+  トークン数だけを記録する（推測レートで換算しない）。
 
 ```json
 {
-  "gemini-3.5-flash-lite": {
-    "input_usd_per_1m": 0.30,
-    "output_usd_per_1m": 2.50,
-    "updated_at": "2026-07-29"
-  },
   "gpt-5.6-luna": {
     "input_usd_per_1m": 0.20,
     "output_usd_per_1m": 1.20,
     "updated_at": "2026-07-31"
+  },
+  "claude-sonnet-5": {
+    "currency": "USD",
+    "input_usd_per_1m": 3.00,
+    "output_usd_per_1m": 15.00,
+    "updated_at": "2026-08-04"
+  },
+  "plamo-3.0-prime": {
+    "currency": "JPY",
+    "input_usd_per_1m": 60,
+    "output_usd_per_1m": 250,
+    "updated_at": "2026-08-04"
   }
 }
 ```
 
-- 料金 = `promptTokens / 1e6 × input単価 + billableOutputTokens / 1e6 × output単価`。`billableOutputTokens` は `candidatesTokenCount + thoughtsTokenCount`。
+> キー名の `_usd_` は既存ファイルとの互換のために残す（`currency` が実際の通貨を決める）。
+> 改名すると既存ユーザーが編集した単価が読めなくなるため。
+
+- 料金 = `promptTokens / 1e6 × input単価 + billableOutputTokens / 1e6 × output単価`。
 - 内部では `decimal` で保持し、丸めは表示時のみ行う。
 - 表示: $ は小数点以下最大8桁（例 `$0.000021`）。¥ は通常小数第2位まで、`0 < |¥| < 0.01` は
   微小額を隠さないため小数第3位まで（例 `¥0.003`）。表示用レートは小数点以下最大4桁。永続ログ値は表示時まで丸めない。
@@ -428,15 +540,62 @@ LLM に文字オフセットや個別置換を返させると、日本語（サ�
   `PricingService.Calculate`での割引適用だけで、現状は全入力トークンを通常単価で計算するため
   実際より高く表示される（安全な方向のずれ）。ユーザーの希望があれば別途実装する。
 
+**追加確認済み**（2026-08-04、v4 のプロバイダー拡張にあたり各社の公式ドキュメントを参照）:
+
+標準ティアの単価（1M トークンあたり）と上限。バッチ利用は各社おおむね 50% 引きだが、本アプリは
+対話的な校正なのでバッチは使わない。
+
+| プロバイダー | モデル ID | 入力 | 出力 | コンテキスト | 最大出力 |
+|---|---|---|---|---|---|
+| OpenAI | `gpt-5.6-sol` | $5.00 | $30.00 | — | — |
+| OpenAI | `gpt-5.6-terra` | $2.00 | $12.00 | — | — |
+| OpenAI | `gpt-5.6-luna` | $0.20 | $1.20 | 1,050,000 | 128,000 |
+| Google | `gemini-3.1-pro-preview` | $2.00（≤200K）/ $4.00（>200K） | $12.00 / $18.00 | 1,048,576 | 65,536 |
+| Google | `gemini-3.6-flash` | $1.50 | $7.50 | 1,048,576 | 65,536 |
+| Google | `gemini-3.5-flash-lite` | $0.30 | $2.50 | 1,048,576 | 65,536 |
+| Anthropic | `claude-fable-5` | $10.00 | $50.00 | 1,000,000 | 128,000 |
+| Anthropic | `claude-opus-5` | $5.00 | $25.00 | 1,000,000 | 128,000 |
+| Anthropic | `claude-sonnet-5` | $3.00 | $15.00 | 1,000,000 | 128,000 |
+| Anthropic | `claude-haiku-4-5-20251001` | $1.00 | $5.00 | 200,000 | 64,000 |
+| Preferred Networks | `plamo-3.0-prime` | **¥60** | **¥250** | 262,144 | 20,000 |
+
+- **Claude Sonnet 5 には 2026-08-31 までの導入価格 $2 / $10 がある**が、既定単価には標準の
+  $3 / $15 を登録する。`updated_at` は単なる文字列で失効の概念がなく、9 月以降に静かに過少計上する
+  ため。導入価格を使いたいユーザーは設定画面で編集できる。
+- `gemini-3.1-pro-preview` は preview 版であり、予告なく仕様・単価が変わりうる。長文の 2 段階単価は
+  1 リクエスト 2,000 文字上限（3.3.2）の本アプリでは到達しない。
+- OpenAI・Anthropic・Google はキャッシュ入力に割引単価があるが、3.5.2 のとおり単価表は入力・出力の
+  2 項目のみを保持する方針を維持する（v3 の見送り判断のまま。明示的キャッシュを使わない限り
+  実際より高い方向にずれるだけで、安全側）。
+- PLaMo の思考切替は `reasoning_effort` の `none` / `medium` の 2 段階のみ。ちょうど本アプリの
+  自動用・手動用の 2 枠に対応する。
+- PLaMo API は OpenAI 互換だが、提供されるのは `/v1/chat/completions` `/v1/tokenize` `/v1/models` で、
+  **`/v1/responses` は無い**。既存の OpenAI クライアント（Responses API）は流用できず、別実装が要る。
+
 **未確認**:
 
 - Gemini のコンテキストキャッシュの最小トークン数・割引単価。
+- `gpt-5.6-sol` / `gpt-5.6-terra` のコンテキスト長・最大出力（単価のみ確認済み）。単価が分かれば
+  料金計算には足りるため、実装のブロッカーにはならない。
 
 #### 3.5.5 API キーの管理
 
 - **既定は DPAPI（`ProtectedData`, `CurrentUser` スコープ）で暗号化し `%APPDATA%\JpScratch\credentials.dat` に保存**。
-- **Gemini と OpenAI は別の API キーとして管理する**。環境変数 `GEMINI_API_KEY` / `OPENAI_API_KEY` または
-  DPAPI で暗号化した保存キーから、モデルに対応する取得元を選択する。
+- **プロバイダーごとに別の API キーとして管理する**。環境変数または DPAPI で暗号化した保存キーから、
+  モデルに対応する取得元をプロバイダー別に選択する。
+
+| プロバイダー | 環境変数 |
+|---|---|
+| Google | `GEMINI_API_KEY` |
+| OpenAI | `OPENAI_API_KEY` |
+| Anthropic | `ANTHROPIC_API_KEY` |
+| Preferred Networks | `PLAMO_API_KEY` |
+
+- 保存形式は 1 ファイル（`credentials.dat`）内の JSON にプロバイダー別のスロットを持つ。既存ファイルは
+  欠けたスロットを未設定として読めるため、移行処理は不要。
+- 自動用と手動用で別プロバイダーを選べるため、**2 つのキーが必要になる**。設定画面ではキー欄に
+  「自動校正で使用中」「手動校正で使用中」を示し、未設定の警告もどちらの校正が止まるのか分かる
+  文言にする（「Gemini APIキーが設定されていません」だけでは判断できない）。
 - 起動時に対象の環境変数が設定されていることを検出したら、初回のみダイアログで確認する:
   > 環境変数の API キーが見つかりました。こちらを使用しますか？
   > `[環境変数を使う]` `[アプリに保存したキーを使う]`
@@ -779,6 +938,30 @@ GPT-5.6 Lunaでのスタイルガイド自動生成の確認ダイアログ〜�
 
 ---
 
+### v4 — プロバイダー拡張（自動用・手動用の 2 枠）
+
+OpenAI・Google に加えて Anthropic と Preferred Networks を選べるようにし、入力中の自動校正と
+最終仕上がりの手動校正で別のモデルを使えるようにする。詳細は 3.5.1 / 3.5.2 / 3.5.4 / 3.5.5。
+
+- [ ] 打ち切り・拒否検出をクライアント基底クラスで強制する（完了判定を抽象メソッド化し、実装忘れを
+      コンパイルエラーにする）。プロバイダー横断のテーブル駆動テストを `PromptValidation` に置く
+- [ ] `ProofreadingModelCatalog` をモデル記述子の表に変え、`ProofreadingClientRouter` を
+      プロバイダー辞書＋遅延生成にする（起動時に作る `HttpClient` は実際に使う分だけ）
+- [ ] 設定の 2 枠化（`AutoProofreadingModel` / `ManualProofreadingModel`、旧設定からの移行）、
+      用途別タイムアウト設定、`PinModelForRun` への用途の受け渡し、設定画面のモデル欄 2 つ
+- [ ] `CredentialService` に Anthropic / PLaMo のスロットと環境変数を追加、`GeminiApiKeySource` を
+      `ApiKeySource` へ改名（型名は JSON に現れないため設定互換は保たれる）
+- [ ] `PricingService` の `currency` 対応、既定単価のカタログ駆動化、既定モデル削除ガードを
+      「カタログ収録モデルは削除不可」へ置き換え
+- [ ] `AnthropicProofreadingClient`（`POST /v1/messages`）と `PlamoProofreadingClient`
+      （`POST /v1/chat/completions`）の実装
+- [ ] `PromptValidation --self-test` の拡張
+
+**完了の判断基準**: 4 プロバイダーのいずれを自動用・手動用に選んでも、校正・別案生成・
+スタイルガイド生成が動き、打ち切り応答が本文の削除提案に化けないこと。
+
+---
+
 ## 6. 想定外・非対象（v3 まで）
 
 以下は意図的にスコープ外とする。要望が出たら v4 以降で検討する。
@@ -787,7 +970,7 @@ GPT-5.6 Lunaでのスタイルガイド自動生成の確認ダイアログ〜�
 - クラウド同期・複数端末での共有
 - 言い回し・読みやすさの改善提案（3.3.3 参照）
 - 既存 `.txt` ファイルを開いて編集する「メモ帳型」の運用
-- Gemini / OpenAI 以外の LLM プロバイダ対応（ただし API クライアントは差し替え可能な形に切っておく）
+- ~~Gemini / OpenAI 以外の LLM プロバイダ対応~~ → **v4 でスコープ内**（Anthropic・Preferred Networks を追加）
 - 多言語対応（日本語専用）
 - 音声入力
 
@@ -797,7 +980,7 @@ GPT-5.6 Lunaでのスタイルガイド自動生成の確認ダイアログ〜�
 
 | # | リスク | 影響 | 対策 |
 |---|---|---|---|
-| R-1 | ~~モデル ID が存在しない~~ / 単価が変わる | 低 | Gemini と GPT-5.6 Luna のモデル ID と標準単価を確認済み（3.5.4）。`pricing.json` への外出しと更新日表示を実装し、変更へ追従する |
+| R-1 | ~~モデル ID が存在しない~~ / 単価が変わる | 低 | 4 プロバイダー 11 モデルのモデル ID と標準単価を確認済み（3.5.4）。`pricing.json` への外出しと更新日表示を実装し、変更へ追従する。Sonnet 5 の導入価格（2026-08-31 失効）は既定に含めない |
 | R-2 | 全文差分から安全な提案を作れない | **高** | 3.3.5 の再適用検査と過剰変更ガード。応答全体の破棄件数を `api_calls.discarded_cnt` に記録する |
 | R-3 | 文体保護が効かず、余計な修正が出続ける | **高** | 検証済みの厳格な全文プロンプトを固定し、迷う修正を禁止する。過剰変更ガードに触れた応答は全破棄する |
 | R-4 | 自動チェックでトークンを浪費する | 中 | デバウンス・最小送信間隔・ハッシュ重複抑止・月間上限の 4 段構え |
@@ -819,8 +1002,11 @@ GPT-5.6 Lunaでのスタイルガイド自動生成の確認ダイアログ〜�
 | フォーカス喪失時 | 設定で切替。クリップボードコピーの可否も設定項目 |
 | 提案 UI | インライン下線 ＋ 下部パネル |
 | 料金表示 | 直近 / セッション累計 / 当日・当月累計 / リクエスト単位のログ画面 |
-| API キー | Gemini / OpenAI を別々に DPAPI 暗号化。対応する環境変数があれば使用するか確認 |
-| 校正モデル | `gemini-3.5-flash-lite` / `gpt-5.6-luna` を設定画面で選択 |
+| API キー | プロバイダーごとに別々に DPAPI 暗号化。対応する環境変数があれば使用するか確認 |
+| 校正モデル | 自動用・手動用の 2 枠。4 プロバイダー 11 モデルから設定画面で選択（既定 自動 `gpt-5.6-luna` / 手動 `claude-sonnet-5`） |
+| 別案・スタイルガイド | 別案生成は自動用モデル、スタイルガイド自動生成は手動用モデルを使う |
+| タイムアウト | 用途別にユーザー設定（既定 自動 15 秒 / 手動 90 秒、範囲 5〜300）。タイムアウトでは再試行しない |
+| 単価の通貨 | `pricing.json` の `currency`（省略時 USD）。円建て単価は保存時に USD へ換算 |
 | 送信範囲 | 変更段落 ＋ 前後 1 段落を文脈として添付 |
 | 課金ガード | 月間上限額での自動停止 ＋ デバウンス・最小送信間隔 |
 | 課金確認 | 「課金API実行前の確認を表示する」で校正・理由付き別案生成の確認を一括切替。既定 ON |

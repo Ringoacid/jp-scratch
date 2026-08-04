@@ -15,92 +15,90 @@ internal enum StoredCredentialState
 }
 
 /// <summary>
-/// Gemini / OpenAI API キーの取得と DPAPI 保存（要件 3.5.5）。
+/// プロバイダー別 API キーの取得と DPAPI 保存（要件 3.5.5）。
 /// キーをログや例外文へ含めず、平文ファイルも作らない。
 /// </summary>
 internal sealed class CredentialService
 {
-    internal const string EnvironmentVariableName = "GEMINI_API_KEY";
-    internal const string OpenAiEnvironmentVariableName = "OPENAI_API_KEY";
-
     private const int MaxCredentialFileBytes = 64 * 1024;
     private static readonly byte[] AdditionalEntropy =
         Encoding.UTF8.GetBytes("JpScratch.GeminiApiKey.v1");
 
     private readonly string _credentialsFile;
-    private readonly Func<string?> _readEnvironmentKey;
-    private readonly Func<string?> _readOpenAiEnvironmentKey;
+    private readonly Func<ApiProvider, string?> _readEnvironmentKey;
 
+    /// <summary>
+    /// 保存形式。プロパティを足すだけで新プロバイダーへ対応できる
+    /// （System.Text.Json は欠けたプロパティを許容するので旧ファイルもそのまま読める）。
+    /// </summary>
     private sealed class StoredCredentials
     {
         public string? Gemini { get; set; }
         public string? OpenAi { get; set; }
-    }
+        public string? Anthropic { get; set; }
+        public string? Plamo { get; set; }
 
-    private enum CredentialKind
-    {
-        Gemini,
-        OpenAi,
+        public string? Get(ApiProvider provider)
+            => provider switch
+            {
+                ApiProvider.Google => Gemini,
+                ApiProvider.OpenAi => OpenAi,
+                ApiProvider.Anthropic => Anthropic,
+                ApiProvider.PreferredNetworks => Plamo,
+                _ => null,
+            };
+
+        public void Set(ApiProvider provider, string? value)
+        {
+            switch (provider)
+            {
+                case ApiProvider.Google: Gemini = value; break;
+                case ApiProvider.OpenAi: OpenAi = value; break;
+                case ApiProvider.Anthropic: Anthropic = value; break;
+                case ApiProvider.PreferredNetworks: Plamo = value; break;
+                default: throw new ArgumentOutOfRangeException(nameof(provider));
+            }
+        }
+
+        public bool IsEmpty
+            => string.IsNullOrWhiteSpace(Gemini) &&
+               string.IsNullOrWhiteSpace(OpenAi) &&
+               string.IsNullOrWhiteSpace(Anthropic) &&
+               string.IsNullOrWhiteSpace(Plamo);
     }
 
     internal CredentialService(
         string? credentialsFile = null,
-        Func<string?>? readEnvironmentKey = null,
-        Func<string?>? readOpenAiEnvironmentKey = null)
+        Func<ApiProvider, string?>? readEnvironmentKey = null)
     {
         _credentialsFile = credentialsFile ?? AppPaths.CredentialsFile;
         _readEnvironmentKey = readEnvironmentKey ??
-            (() => Environment.GetEnvironmentVariable(EnvironmentVariableName));
-        _readOpenAiEnvironmentKey = readOpenAiEnvironmentKey ??
-            (() => Environment.GetEnvironmentVariable(OpenAiEnvironmentVariableName));
+            (provider => Environment.GetEnvironmentVariable(
+                ProofreadingModelCatalog.EnvironmentVariableName(provider)));
     }
 
-    internal bool EnvironmentKeyAvailable => GetEnvironmentApiKey() is not null;
-    internal bool OpenAiEnvironmentKeyAvailable => GetEnvironmentOpenAiApiKey() is not null;
+    internal bool EnvironmentKeyAvailable(ApiProvider provider)
+        => GetEnvironmentApiKey(provider) is not null;
 
-    internal StoredCredentialState StoredKeyState
-    {
-        get
-        {
-            if (!File.Exists(_credentialsFile)) return StoredCredentialState.Missing;
-            return GetStoredKeyState(CredentialKind.Gemini);
-        }
-    }
-
-    internal StoredCredentialState OpenAiStoredKeyState =>
-        !File.Exists(_credentialsFile)
+    internal StoredCredentialState StoredKeyState(ApiProvider provider)
+        => !File.Exists(_credentialsFile)
             ? StoredCredentialState.Missing
-            : GetStoredKeyState(CredentialKind.OpenAi);
+            : GetStoredKeyState(provider);
 
     /// <summary>
     /// 選択された取得元からキーを返す。未選択時は環境変数を暗黙使用せず、
     /// 保存済みキーだけを使う。
     /// </summary>
-    internal string? GetApiKey(GeminiApiKeySource source)
+    internal string? GetApiKey(ApiProvider provider, ApiKeySource source)
         => source switch
         {
-            GeminiApiKeySource.EnvironmentVariable => GetEnvironmentApiKey(),
-            GeminiApiKeySource.Stored => GetStoredApiKey(CredentialKind.Gemini),
-            GeminiApiKeySource.Unspecified => GetStoredApiKey(CredentialKind.Gemini),
+            ApiKeySource.EnvironmentVariable => GetEnvironmentApiKey(provider),
+            ApiKeySource.Stored => GetStoredApiKey(provider),
+            ApiKeySource.Unspecified => GetStoredApiKey(provider),
             _ => null,
         };
 
-    internal string? GetOpenAiApiKey(GeminiApiKeySource source)
-        => source switch
-        {
-            GeminiApiKeySource.EnvironmentVariable => GetEnvironmentOpenAiApiKey(),
-            GeminiApiKeySource.Stored => GetStoredApiKey(CredentialKind.OpenAi),
-            GeminiApiKeySource.Unspecified => GetStoredApiKey(CredentialKind.OpenAi),
-            _ => null,
-        };
-
-    internal void SaveStoredApiKey(string apiKey)
-        => SaveStoredApiKey(CredentialKind.Gemini, apiKey);
-
-    internal void SaveStoredOpenAiApiKey(string apiKey)
-        => SaveStoredApiKey(CredentialKind.OpenAi, apiKey);
-
-    private void SaveStoredApiKey(CredentialKind kind, string apiKey)
+    internal void SaveStoredApiKey(ApiProvider provider, string apiKey)
     {
         string normalized = apiKey.Trim();
         if (normalized.Length == 0)
@@ -109,21 +107,11 @@ internal sealed class CredentialService
         StoredCredentials credentials = TryGetStoredCredentials(out StoredCredentials? existing)
             ? existing!
             : new StoredCredentials();
-        if (kind == CredentialKind.Gemini)
-            credentials.Gemini = normalized;
-        else
-            credentials.OpenAi = normalized;
-
+        credentials.Set(provider, normalized);
         SaveStoredCredentials(credentials);
     }
 
-    internal void DeleteStoredApiKey()
-        => DeleteStoredApiKey(CredentialKind.Gemini);
-
-    internal void DeleteStoredOpenAiApiKey()
-        => DeleteStoredApiKey(CredentialKind.OpenAi);
-
-    private void DeleteStoredApiKey(CredentialKind kind)
+    internal void DeleteStoredApiKey(ApiProvider provider)
     {
         if (!File.Exists(_credentialsFile)) return;
 
@@ -134,13 +122,9 @@ internal sealed class CredentialService
             return;
         }
 
-        if (kind == CredentialKind.Gemini)
-            credentials!.Gemini = null;
-        else
-            credentials!.OpenAi = null;
+        credentials!.Set(provider, null);
 
-        if (string.IsNullOrWhiteSpace(credentials.Gemini) &&
-            string.IsNullOrWhiteSpace(credentials.OpenAi))
+        if (credentials.IsEmpty)
         {
             File.Delete(_credentialsFile);
             return;
@@ -169,30 +153,23 @@ internal sealed class CredentialService
         }
     }
 
-    private string? GetEnvironmentApiKey()
+    private string? GetEnvironmentApiKey(ApiProvider provider)
     {
-        string? value = _readEnvironmentKey();
+        string? value = _readEnvironmentKey(provider);
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
-    private string? GetEnvironmentOpenAiApiKey()
-    {
-        string? value = _readOpenAiEnvironmentKey();
-        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    }
-
-    private string? GetStoredApiKey(CredentialKind kind)
+    private string? GetStoredApiKey(ApiProvider provider)
         => TryGetStoredCredentials(out StoredCredentials? credentials)
-            ? kind == CredentialKind.Gemini ? credentials!.Gemini : credentials!.OpenAi
+            ? credentials!.Get(provider)
             : null;
 
-    private StoredCredentialState GetStoredKeyState(CredentialKind kind)
+    private StoredCredentialState GetStoredKeyState(ApiProvider provider)
     {
         if (!TryGetStoredCredentials(out StoredCredentials? credentials))
             return StoredCredentialState.Unreadable;
 
-        string? value = kind == CredentialKind.Gemini ? credentials!.Gemini : credentials!.OpenAi;
-        return string.IsNullOrWhiteSpace(value)
+        return string.IsNullOrWhiteSpace(credentials!.Get(provider))
             ? StoredCredentialState.Missing
             : StoredCredentialState.Available;
     }
@@ -219,7 +196,7 @@ internal sealed class CredentialService
 
             if (!decoded.StartsWith("{", StringComparison.Ordinal))
             {
-                // 既存版はGeminiキー単体を暗号化していたため、移行時はGeminiとして読む。
+                // 最初期版はGeminiキー単体を暗号化していたため、移行時はGeminiとして読む。
                 credentials = new StoredCredentials { Gemini = decoded };
                 return true;
             }

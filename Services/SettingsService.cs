@@ -150,6 +150,30 @@ internal sealed class SettingsService
         SaveNow(notify: true);
     }
 
+    /// <summary>
+    /// v3 までの単一モデル設定（<see cref="AppSettings.ProofreadingModel"/>）を、
+    /// 自動用・手動用の 2 枠へ移す（要件 3.5.1）。既存ユーザーが移行前と同じ挙動で起動できるよう、
+    /// 旧設定の値を両方へコピーする。移行済みの印として旧プロパティは空にする。
+    /// </summary>
+    private static void MigrateProofreadingModel(AppSettings s)
+    {
+        if (string.IsNullOrWhiteSpace(s.ProofreadingModel)) return;
+
+        if (ProofreadingModelCatalog.IsSupported(s.ProofreadingModel))
+        {
+            s.AutoProofreadingModel = s.ProofreadingModel.Trim();
+            s.ManualProofreadingModel = s.ProofreadingModel.Trim();
+        }
+
+        s.ProofreadingModel = "";
+    }
+
+    private static int ClampTimeoutSeconds(int seconds)
+        => Math.Clamp(
+            seconds,
+            (int)ProofreadingModelCatalog.MinimumRequestTimeout.TotalSeconds,
+            (int)ProofreadingModelCatalog.MaximumRequestTimeout.TotalSeconds);
+
     private static void Normalize(AppSettings s)
     {
         s.WindowWidth = Math.Clamp(s.WindowWidth, 320, 4000);
@@ -164,8 +188,13 @@ internal sealed class SettingsService
             s.ProofreadingMinimumIntervalSeconds,
             1,
             600);
-        if (!ProofreadingModelCatalog.IsSupported(s.ProofreadingModel))
-            s.ProofreadingModel = ProofreadingModelCatalog.GeminiModel;
+        MigrateProofreadingModel(s);
+        if (!ProofreadingModelCatalog.IsSupported(s.AutoProofreadingModel))
+            s.AutoProofreadingModel = ProofreadingModelCatalog.DefaultAutomaticModel;
+        if (!ProofreadingModelCatalog.IsSupported(s.ManualProofreadingModel))
+            s.ManualProofreadingModel = ProofreadingModelCatalog.DefaultManualModel;
+        s.AutoProofreadingTimeoutSeconds = ClampTimeoutSeconds(s.AutoProofreadingTimeoutSeconds);
+        s.ManualProofreadingTimeoutSeconds = ClampTimeoutSeconds(s.ManualProofreadingTimeoutSeconds);
         s.TrashRetentionDays = Math.Clamp(s.TrashRetentionDays, 1, 365);
         s.AutoTitleMaxLength = Math.Clamp(s.AutoTitleMaxLength, 4, 60);
 

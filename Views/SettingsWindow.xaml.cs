@@ -121,7 +121,7 @@ public partial class SettingsWindow : Window
             $"環境変数 {CredentialService.EnvironmentVariableName}",
         };
         CredentialSourceCombo.SelectedIndex =
-            s.GeminiApiKeySource == GeminiApiKeySource.EnvironmentVariable ? 1 : 0;
+            s.GeminiApiKeySource == ApiKeySource.EnvironmentVariable ? 1 : 0;
         _loadingCredentialControls = false;
         RefreshCredentialStatus();
 
@@ -132,7 +132,7 @@ public partial class SettingsWindow : Window
             $"環境変数 {CredentialService.OpenAiEnvironmentVariableName}",
         };
         OpenAiCredentialSourceCombo.SelectedIndex =
-            s.OpenAiApiKeySource == GeminiApiKeySource.EnvironmentVariable ? 1 : 0;
+            s.OpenAiApiKeySource == ApiKeySource.EnvironmentVariable ? 1 : 0;
         _loadingOpenAiCredentialControls = false;
         RefreshOpenAiCredentialStatus();
 
@@ -217,11 +217,11 @@ public partial class SettingsWindow : Window
             StatusBarCurrencyCombo.SelectedIndex, 0, 2);
 
         s.GeminiApiKeySource = CredentialSourceCombo.SelectedIndex == 1
-            ? GeminiApiKeySource.EnvironmentVariable
-            : GeminiApiKeySource.Stored;
+            ? ApiKeySource.EnvironmentVariable
+            : ApiKeySource.Stored;
         s.OpenAiApiKeySource = OpenAiCredentialSourceCombo.SelectedIndex == 1
-            ? GeminiApiKeySource.EnvironmentVariable
-            : GeminiApiKeySource.Stored;
+            ? ApiKeySource.EnvironmentVariable
+            : ApiKeySource.Stored;
 
         s.CustomInstruction = CustomInstructionBox.Text.Trim();
         s.StyleGuideAutoGenerateEnabled = StyleGuideAutoGenerateCheck.IsChecked == true;
@@ -857,7 +857,7 @@ public partial class SettingsWindow : Window
 
     private bool TryApplyCredentialChanges(AppSettings updated)
     {
-        if (updated.GeminiApiKeySource == GeminiApiKeySource.EnvironmentVariable &&
+        if (updated.GeminiApiKeySource == ApiKeySource.EnvironmentVariable &&
             !_credentials.EnvironmentKeyAvailable)
         {
             MessageBox.Show(
@@ -869,7 +869,7 @@ public partial class SettingsWindow : Window
             return false;
         }
 
-        if (updated.OpenAiApiKeySource == GeminiApiKeySource.EnvironmentVariable &&
+        if (updated.OpenAiApiKeySource == ApiKeySource.EnvironmentVariable &&
             !_credentials.OpenAiEnvironmentKeyAvailable)
         {
             MessageBox.Show(

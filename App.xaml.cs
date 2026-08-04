@@ -314,44 +314,48 @@ public partial class App : Application
     private void ConfirmEnvironmentCredentialSource()
     {
         ConfirmCredentialSourceIfNeeded(
-            providerName: "Gemini",
-            environmentVariableName: CredentialService.EnvironmentVariableName,
+            Models.ApiProvider.Google,
             source: _settings.Current.GeminiApiKeySource,
-            environmentAvailable: _credentials.EnvironmentKeyAvailable,
-            storedKeyState: _credentials.StoredKeyState,
             apply: value => _settings.Current.GeminiApiKeySource = value);
 
         ConfirmCredentialSourceIfNeeded(
-            providerName: "OpenAI",
-            environmentVariableName: CredentialService.OpenAiEnvironmentVariableName,
+            Models.ApiProvider.OpenAi,
             source: _settings.Current.OpenAiApiKeySource,
-            environmentAvailable: _credentials.OpenAiEnvironmentKeyAvailable,
-            storedKeyState: _credentials.OpenAiStoredKeyState,
             apply: value => _settings.Current.OpenAiApiKeySource = value);
+
+        ConfirmCredentialSourceIfNeeded(
+            Models.ApiProvider.Anthropic,
+            source: _settings.Current.AnthropicApiKeySource,
+            apply: value => _settings.Current.AnthropicApiKeySource = value);
+
+        ConfirmCredentialSourceIfNeeded(
+            Models.ApiProvider.PreferredNetworks,
+            source: _settings.Current.PlamoApiKeySource,
+            apply: value => _settings.Current.PlamoApiKeySource = value);
     }
 
     private void ConfirmCredentialSourceIfNeeded(
-        string providerName,
-        string environmentVariableName,
-        Models.GeminiApiKeySource source,
-        bool environmentAvailable,
-        StoredCredentialState storedKeyState,
-        Action<Models.GeminiApiKeySource> apply)
+        Models.ApiProvider provider,
+        Models.ApiKeySource source,
+        Action<Models.ApiKeySource> apply)
     {
-        if (source != Models.GeminiApiKeySource.Unspecified || !environmentAvailable)
+        if (source != Models.ApiKeySource.Unspecified ||
+            !_credentials.EnvironmentKeyAvailable(provider))
+        {
             return;
+        }
 
         var dialog = new CredentialSourceDialog(
-            storedKeyState,
-            providerName,
-            environmentVariableName);
+            _credentials.StoredKeyState(provider),
+            Models.ProofreadingModelCatalog.ProviderDisplayName(provider),
+            Models.ProofreadingModelCatalog.EnvironmentVariableName(provider));
         if (dialog.ShowDialog() != true)
         {
             // × や Esc で閉じられた場合も、選択を未指定のままにしない（「初回のみ確認する。
             // 選択は記憶する」の規約）。未指定のままだと毎回の起動で同じダイアログが出る。
             // 既定は「保存済みキーを使う」（ダイアログの既定と同じで、未指定時と同じ動作）
             // として記憶し、設定画面からいつでも変更できる。
-            apply(Models.GeminiApiKeySource.Stored);
+            apply(Models.ApiKeySource.Stored);
             _settings.SaveNow();
             return;
         }

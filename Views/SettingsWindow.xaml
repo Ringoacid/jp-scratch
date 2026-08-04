@@ -323,17 +323,60 @@
                             <Border Style="{StaticResource SettingsCard}">
                                 <StackPanel>
                                     <Border Style="{StaticResource SettingsRow}">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="320" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="使用モデル" Style="{StaticResource FieldLabel}" />
-                                            <ComboBox x:Name="ProofreadingModelCombo"
-                                                      Grid.Column="1"
-                                                      Style="{StaticResource AppComboBox}"
-                                                      HorizontalAlignment="Stretch" />
-                                        </Grid>
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="320" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="自動校正のモデル（入力中・別案生成）" Style="{StaticResource FieldLabel}" />
+                                                <ComboBox x:Name="AutoProofreadingModelCombo"
+                                                          Grid.Column="1"
+                                                          Style="{StaticResource AppComboBox}"
+                                                          HorizontalAlignment="Stretch"
+                                                          SelectionChanged="ProofreadingModelCombo_SelectionChanged" />
+                                            </Grid>
+                                            <Grid Margin="0,10,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="320" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="手動校正のモデル（Ctrl+Enter・スタイルガイド生成）" Style="{StaticResource FieldLabel}" />
+                                                <ComboBox x:Name="ManualProofreadingModelCombo"
+                                                          Grid.Column="1"
+                                                          Style="{StaticResource AppComboBox}"
+                                                          HorizontalAlignment="Stretch"
+                                                          SelectionChanged="ProofreadingModelCombo_SelectionChanged" />
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Style="{StaticResource SettingsRow}">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="130" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="自動校正のタイムアウト（秒）" Style="{StaticResource FieldLabel}" />
+                                                <TextBox x:Name="AutoTimeoutBox"
+                                                         Grid.Column="1"
+                                                         Style="{StaticResource AppTextBox}" />
+                                            </Grid>
+                                            <Grid Margin="0,10,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="130" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="手動校正のタイムアウト（秒）" Style="{StaticResource FieldLabel}" />
+                                                <TextBox x:Name="ManualTimeoutBox"
+                                                         Grid.Column="1"
+                                                         Style="{StaticResource AppTextBox}" />
+                                            </Grid>
+                                            <TextBlock x:Name="TimeoutHintText"
+                                                       Margin="0,8,0,0"
+                                                       TextWrapping="Wrap"
+                                                       Style="{StaticResource SettingsDescription}" />
+                                        </StackPanel>
                                     </Border>
                                     <Border Style="{StaticResource SettingsRow}">
                                         <Grid>

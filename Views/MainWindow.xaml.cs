@@ -1196,7 +1196,7 @@ public partial class MainWindow : Window
             // ここで例外が出ても finally が必ず _alternativeInProgress を戻す。
             SetProposalActionsEnabled(false);
             UpdateTrayIconState();
-            PinModelForRun();
+            PinModelForRun(ProofreadingPurpose.Automatic);   // 別案生成は自動側（要件3.5.1）
             SetProofreadingStatus("別案を生成しています…");
             var stopwatch = Stopwatch.StartNew();
             GeminiAlternativeResult result;
@@ -1613,11 +1613,15 @@ public partial class MainWindow : Window
         => _ = RunProofreadingAsync(manual: true);
 
     /// <summary>
-    /// 1回の実行で使うモデルを固定する。_proofreadingClient は常に <see cref="ProofreadingClientRouter"/> だが
-    /// フィールド型はインターフェースのため、ルーター固有のピン留めを as で取り出して呼ぶ。
+    /// 1回の実行で使う用途とモデルを固定する。_proofreadingClient は常に
+    /// <see cref="ProofreadingClientRouter"/> だがフィールド型はインターフェースのため、
+    /// ルーター固有のピン留めを as で取り出して呼ぶ。
+    ///
+    /// 用途の割り当ては要件 3.5.1 のとおり。校正本体は手動/自動に従い、理由つき別案生成は
+    /// 高速な自動側、スタイルガイド自動生成は品質を優先して手動側を使う。
     /// </summary>
-    private void PinModelForRun()
-        => (_proofreadingClient as ProofreadingClientRouter)?.PinModel(_proofreadingClient.Model);
+    private void PinModelForRun(ProofreadingPurpose purpose)
+        => (_proofreadingClient as ProofreadingClientRouter)?.PinModel(purpose);
 
     private void UnpinModelAfterRun()
         => (_proofreadingClient as ProofreadingClientRouter)?.UnpinModel();
@@ -1768,7 +1772,7 @@ public partial class MainWindow : Window
             // 進行中フラグを立てた行と try の間には何も置かない（CLAUDE.md の不変条件）。
             // ここで例外が出ても finally が必ず _styleGuideGenerationInProgress を戻す。
             UpdateTrayIconState();
-            PinModelForRun();
+            PinModelForRun(ProofreadingPurpose.Manual);      // スタイルガイド生成は手動側（要件3.5.1）
             SetProofreadingStatus("スタイルガイドを生成しています…");
             var stopwatch = Stopwatch.StartNew();
             GeminiStyleGuideResult result;
@@ -2089,7 +2093,7 @@ public partial class MainWindow : Window
             _proofreadingTimer.Stop();
             // 実行中に設定画面でモデルを切り替えても、同一実行の途中でプロバイダ・単価が揺れないように
             // 実行開始時のモデルへ固定する（finally で解除）。
-            PinModelForRun();
+            PinModelForRun(manual ? ProofreadingPurpose.Manual : ProofreadingPurpose.Automatic);
             SetProposalActionsEnabled(false);
             UpdateTrayIconState();
 
@@ -2585,17 +2589,28 @@ public partial class MainWindow : Window
         FxRate? fxRate = _fxRates.GetCachedRate();
         if (fxRate is null)
             _ = RefreshFxRateAsync();
-        return new ApiUsageCost(promptTokens, outputTokens, quote.UsdCost, fxRate, IsUsageKnown: true);
+
+        // 円建て単価のモデル（PLaMo）は、USD へ換算してから記録する（DBの保存通貨はUSDのまま）。
+        // レートが取れない間は換算できないので、推測レートで誤った金額を記録するくらいなら
+        // 「料金未確認」として残す（要件 3.5.2）。
+        decimal? usdCost = quote.ToUsd(fxRate?.UsdJpy);
+        if (usdCost is null)
+            return new ApiUsageCost(promptTokens, outputTokens, 0m, fxRate, IsUsageKnown: false);
+
+        return new ApiUsageCost(promptTokens, outputTokens, usdCost.Value, fxRate, IsUsageKnown: true);
     }
 
     private string BuildPricingSummary()
     {
         ModelPricing pricing =
             _pricing.GetPricing(_proofreadingClient.Model);
+        string unit = string.Equals(pricing.Currency, PricingCurrency.Jpy, StringComparison.Ordinal)
+            ? "¥"
+            : "$";
         return
             $"{ProofreadingModelCatalog.DisplayName(_proofreadingClient.Model)} 単価（{pricing.UpdatedAt}）: " +
-            $"入力 ${pricing.InputUsdPerMillion:0.####}／100万トークン、" +
-            $"出力・推論 ${pricing.OutputUsdPerMillion:0.####}／100万トークン\n" +
+            $"入力 {unit}{pricing.InputUsdPerMillion:0.####}／100万トークン、" +
+            $"出力・推論 {unit}{pricing.OutputUsdPerMillion:0.####}／100万トークン\n" +
             "※ 表示料金は概算です。キャッシュ関連料金などは考慮していないため、" +
             "実際の請求額が表示額を上回る場合があります。";
     }
@@ -3149,14 +3164,24 @@ public partial class MainWindow : Window
     }
 
     private string? GetActiveApiKey()
-        => ProofreadingModelCatalog.IsOpenAi(_proofreadingClient.Model)
-            ? _credentials.GetOpenAiApiKey(_settings.Current.OpenAiApiKeySource)
-            : _credentials.GetApiKey(_settings.Current.GeminiApiKeySource);
+    {
+        ApiProvider provider = ProofreadingModelCatalog.ProviderOf(_proofreadingClient.Model);
+        return _credentials.GetApiKey(provider, ApiKeySourceFor(provider));
+    }
+
+    private ApiKeySource ApiKeySourceFor(ApiProvider provider)
+        => provider switch
+        {
+            ApiProvider.Google => _settings.Current.GeminiApiKeySource,
+            ApiProvider.OpenAi => _settings.Current.OpenAiApiKeySource,
+            ApiProvider.Anthropic => _settings.Current.AnthropicApiKeySource,
+            ApiProvider.PreferredNetworks => _settings.Current.PlamoApiKeySource,
+            _ => ApiKeySource.Unspecified,
+        };
 
     private string ActiveProviderName()
-        => ProofreadingModelCatalog.IsOpenAi(_proofreadingClient.Model)
-            ? "OpenAI"
-            : "Gemini";
+        => ProofreadingModelCatalog.ProviderDisplayName(
+            ProofreadingModelCatalog.ProviderOf(_proofreadingClient.Model));
 
     private void ScheduleStatusUpdate()
     {

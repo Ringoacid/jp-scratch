@@ -9,6 +9,14 @@ namespace JpScratch.Services;
 
 internal sealed class ModelPricing
 {
+    /// <summary>
+    /// 単価の通貨（要件 3.5.2）。省略時は USD として読むので、v3 までの pricing.json は
+    /// そのまま使える。PLaMo だけが JPY。
+    /// キー名の <c>_usd_</c> は既存ファイルとの互換のために残しており、実際の通貨はこの欄が決める。
+    /// </summary>
+    [JsonPropertyName("currency")]
+    public string Currency { get; init; } = PricingCurrency.Usd;
+
     [JsonPropertyName("input_usd_per_1m")]
     public decimal InputUsdPerMillion { get; init; }
 
@@ -19,12 +27,34 @@ internal sealed class ModelPricing
     public string UpdatedAt { get; init; } = "";
 }
 
+internal static class PricingCurrency
+{
+    internal const string Usd = "USD";
+    internal const string Jpy = "JPY";
+
+    internal static bool IsSupported(string? currency)
+        => currency is Usd or Jpy;
+}
+
 internal sealed record PricingQuote(
     string Model,
     int PromptTokens,
     int OutputTokens,
-    decimal UsdCost,
-    ModelPricing Pricing);
+    decimal Cost,
+    string Currency,
+    ModelPricing Pricing)
+{
+    internal bool IsUsd => string.Equals(Currency, PricingCurrency.Usd, StringComparison.Ordinal);
+
+    /// <summary>
+    /// USD 建てへ換算する。円建てモデルはレートが無ければ換算できないため <c>null</c> を返す
+    /// （推測レートで換算して誤った金額を記録しないため。要件 3.5.2）。
+    /// </summary>
+    internal decimal? ToUsd(decimal? usdJpyRate)
+        => IsUsd ? Cost
+            : usdJpyRate is > 0m ? Cost / usdJpyRate.Value
+                : null;
+}
 
 /// <summary>
 /// pricing.json（要件 3.5.2 / 4）を読み、API応答の実トークン数から料金を計算する。
@@ -85,12 +115,15 @@ internal sealed class PricingService
         Dictionary<string, ModelPricing> validated =
             Validate(new Dictionary<string, ModelPricing>(models, StringComparer.Ordinal));
 
-        // 既定モデルが消えると校正そのものが止まるため、他の壊れ方（負値・日付不正・重複）と
-        // 同じ扱いで拒否する。
-        if (!validated.ContainsKey(DefaultModel))
+        // カタログ収録モデルの単価が消えると、そのモデルを選んだ瞬間に校正が止まる。
+        // 他の壊れ方（負値・日付不正・重複）と同じ扱いで拒否する。
+        foreach (string model in ProofreadingModelCatalog.SupportedModels)
         {
-            throw new InvalidDataException(
-                $"既定モデル「{DefaultModel}」の単価は削除できません。");
+            if (!validated.ContainsKey(model))
+            {
+                throw new InvalidDataException(
+                    $"モデル「{model}」の単価は削除できません。");
+            }
         }
 
         AtomicFile.WriteAllText(
@@ -118,6 +151,7 @@ internal sealed class PricingService
             promptTokens,
             outputTokens,
             cost,
+            pricing.Currency,
             pricing);
     }
 
@@ -146,22 +180,24 @@ internal sealed class PricingService
             // サポート対象モデルは常に計算可能にする。既存ユーザーの pricing.json に
             // 新モデルが無くても、起動時に既定単価を追加して選択できるようにする。
             bool addedDefault = false;
-            if (!_models.ContainsKey(DefaultModel))
+            foreach (ModelDescriptor descriptor in ProofreadingModelCatalog.All)
             {
-                _models[DefaultModel] = CreateDefaultPricing();
+                if (_models.ContainsKey(descriptor.Id)) continue;
+                _models[descriptor.Id] = CreateDefaultPricing(descriptor);
                 addedDefault = true;
             }
-            if (!_models.ContainsKey(OpenAiModel))
+
+            // v3 のリリースで登録した OpenAI の旧単価だけを公式価格へ更新する一度きりの移行。
+            // 一般の仕組みではないので、新しいモデルではこの手当てを増やさない
+            // （ユーザーが編集した価格は保持する）。
+            if (_models.TryGetValue(OpenAiModel, out ModelPricing? openAi) &&
+                IsPreviousOpenAiDefaultPricing(openAi))
             {
-                _models[OpenAiModel] = CreateDefaultOpenAiPricing();
+                _models[OpenAiModel] = CreateDefaultPricing(
+                    ProofreadingModelCatalog.Get(OpenAiModel));
                 addedDefault = true;
             }
-            else if (IsPreviousOpenAiDefaultPricing(_models[OpenAiModel]))
-            {
-                // 前回のリリースで登録した値だけを公式価格へ更新し、ユーザーが編集した価格は保持する。
-                _models[OpenAiModel] = CreateDefaultOpenAiPricing();
-                addedDefault = true;
-            }
+
             if (addedDefault) TrySave();
         }
         catch (Exception ex) when (
@@ -185,6 +221,7 @@ internal sealed class PricingService
         foreach ((string model, ModelPricing? pricing) in models)
         {
             if (string.IsNullOrWhiteSpace(model) || pricing is null ||
+                !PricingCurrency.IsSupported(pricing.Currency) ||
                 pricing.InputUsdPerMillion < 0 ||
                 pricing.InputUsdPerMillion > MaxUnitPriceUsdPerMillion ||
                 pricing.OutputUsdPerMillion < 0 ||
@@ -207,27 +244,20 @@ internal sealed class PricingService
         return validated;
     }
 
+    /// <summary>既定単価はモデル記述子の表が正典（要件 3.5.4）。ここに数値を持たない。</summary>
     private static Dictionary<string, ModelPricing> CreateDefaults()
-        => new(StringComparer.Ordinal)
-        {
-            [DefaultModel] = CreateDefaultPricing(),
-            [OpenAiModel] = CreateDefaultOpenAiPricing(),
-        };
+        => ProofreadingModelCatalog.All.ToDictionary(
+            descriptor => descriptor.Id,
+            CreateDefaultPricing,
+            StringComparer.Ordinal);
 
-    private static ModelPricing CreateDefaultPricing()
+    private static ModelPricing CreateDefaultPricing(ModelDescriptor descriptor)
         => new()
         {
-            InputUsdPerMillion = 0.30m,
-            OutputUsdPerMillion = 2.50m,
-            UpdatedAt = "2026-07-29",
-        };
-
-    private static ModelPricing CreateDefaultOpenAiPricing()
-        => new()
-        {
-            InputUsdPerMillion = 0.20m,
-            OutputUsdPerMillion = 1.20m,
-            UpdatedAt = "2026-07-31",
+            Currency = descriptor.Currency,
+            InputUsdPerMillion = descriptor.InputPricePerMillion,
+            OutputUsdPerMillion = descriptor.OutputPricePerMillion,
+            UpdatedAt = descriptor.PricingUpdatedAt,
         };
 
     private static bool IsPreviousOpenAiDefaultPricing(ModelPricing pricing)
