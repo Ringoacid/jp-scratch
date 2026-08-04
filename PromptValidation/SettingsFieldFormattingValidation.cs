@@ -215,9 +215,25 @@ internal static class SettingsFieldFormattingValidation
                 "0.40", "2.60", "2026/08/01", original, out _, out string dateError) &&
             dateError.Length > 0;
 
-        bool passed = editedApplied && invalidInputRejected && invalidOutputRejected && invalidDateRejected;
+        // 通貨は編集欄が無いので、編集後も必ず引き継がれること。落とすと円建てモデル（PLaMo）の
+        // ¥60 が $60 として扱われ、料金表示が桁違いに狂う。
+        var jpyOriginal = new ModelPricing
+        {
+            Currency = PricingCurrency.Jpy,
+            InputUsdPerMillion = 60m,
+            OutputUsdPerMillion = 250m,
+            UpdatedAt = "2026-08-04",
+        };
+        bool currencyPreserved =
+            SettingsFieldFormatting.TryBuildPricing(
+                "70", "260", "2026-08-05", jpyOriginal, out ModelPricing jpyEdited, out _) &&
+            jpyEdited.Currency == PricingCurrency.Jpy &&
+            jpyEdited.InputUsdPerMillion == 70m;
+
+        bool passed = editedApplied && invalidInputRejected && invalidOutputRejected &&
+                      invalidDateRejected && currencyPreserved;
         Console.WriteLine(
-            "  TryBuildPricing 編集反映と不正入力拒否（入力単価・出力単価・更新日）: " +
+            "  TryBuildPricing 編集反映と不正入力拒否（入力単価・出力単価・更新日・通貨の引き継ぎ）: " +
             (passed ? "PASS" : "FAIL"));
         return passed;
     }

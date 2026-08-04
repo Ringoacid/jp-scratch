@@ -23,10 +23,16 @@ public partial class SettingsWindow : Window
     private readonly PricingService _pricing;
     private readonly StyleGuideRepository _styleGuides;
     private readonly ReactionRepository _reactions;
-    private bool _deleteStoredKey;
-    private bool _deleteOpenAiStoredKey;
+    // 資格情報の欄はプロバイダーごとに複製せず、選択中モデルのプロバイダーへ切り替える1枚で扱う。
+    // そのため「入力途中のキー」「削除指示」「取得元の選択」はプロバイダー別に持ち、
+    // パネル切替時に退避・復元する。単一の bool のままだと、Gemini を選んで削除を押し
+    // OpenAI へ切り替えて OK を押すと OpenAI のキーが消える。
+    private readonly Dictionary<ApiProvider, string> _pendingApiKeys = [];
+    private readonly HashSet<ApiProvider> _deleteStoredKeys = [];
+    private readonly Dictionary<ApiProvider, ApiKeySource> _pendingKeySources = [];
+    private ApiProvider? _shownCredentialProvider;
     private bool _loadingCredentialControls;
-    private bool _loadingOpenAiCredentialControls;
+    private bool _loadingProofreadingModelControls;
     private bool _settingsApplied;
 
     // モデル単価編集用。入力途中の値はモデルごとに「生テキスト」で保持し、検証はOK押下時にまとめて
@@ -114,27 +120,9 @@ public partial class SettingsWindow : Window
         StatusBarCurrencyCombo.ItemsSource = new[] { "円表示", "ドル表示", "両方表示" };
         StatusBarCurrencyCombo.SelectedIndex = (int)s.StatusBarCurrency;
 
-        _loadingCredentialControls = true;
-        CredentialSourceCombo.ItemsSource = new[]
-        {
-            "アプリに保存したキー",
-            $"環境変数 {CredentialService.EnvironmentVariableName}",
-        };
-        CredentialSourceCombo.SelectedIndex =
-            s.GeminiApiKeySource == ApiKeySource.EnvironmentVariable ? 1 : 0;
-        _loadingCredentialControls = false;
-        RefreshCredentialStatus();
-
-        _loadingOpenAiCredentialControls = true;
-        OpenAiCredentialSourceCombo.ItemsSource = new[]
-        {
-            "アプリに保存したキー",
-            $"環境変数 {CredentialService.OpenAiEnvironmentVariableName}",
-        };
-        OpenAiCredentialSourceCombo.SelectedIndex =
-            s.OpenAiApiKeySource == ApiKeySource.EnvironmentVariable ? 1 : 0;
-        _loadingOpenAiCredentialControls = false;
-        RefreshOpenAiCredentialStatus();
+        // 取得元の現在値をプロバイダー別に取り込む。以降はこの辞書が編集中の正本になる。
+        foreach (ApiProvider provider in Enum.GetValues<ApiProvider>())
+            _pendingKeySources[provider] = ApiKeySourceOf(s, provider);
 
         CustomInstructionBox.Text = s.CustomInstruction;
         StyleGuideAutoGenerateCheck.IsChecked = s.StyleGuideAutoGenerateEnabled;
@@ -144,11 +132,23 @@ public partial class SettingsWindow : Window
         LoadRejectionTrendControls();
 
         LoadPricingControls();
-        ProofreadingModelCombo.ItemsSource = ProofreadingModelCatalog.SupportedModels
+
+        string[] modelNames = ProofreadingModelCatalog.SupportedModels
             .Select(ProofreadingModelCatalog.DisplayName)
             .ToArray();
-        ProofreadingModelCombo.SelectedItem =
-            ProofreadingModelCatalog.DisplayName(s.ProofreadingModel);
+        _loadingProofreadingModelControls = true;
+        AutoProofreadingModelCombo.ItemsSource = modelNames;
+        AutoProofreadingModelCombo.SelectedItem =
+            ProofreadingModelCatalog.DisplayName(s.AutoProofreadingModel);
+        ManualProofreadingModelCombo.ItemsSource = modelNames;
+        ManualProofreadingModelCombo.SelectedItem =
+            ProofreadingModelCatalog.DisplayName(s.ManualProofreadingModel);
+        AutoTimeoutBox.Text =
+            s.AutoProofreadingTimeoutSeconds.ToString(CultureInfo.InvariantCulture);
+        ManualTimeoutBox.Text =
+            s.ManualProofreadingTimeoutSeconds.ToString(CultureInfo.InvariantCulture);
+        _loadingProofreadingModelControls = false;
+        RefreshTimeoutHint();
 
         AutoSaveBox.Text = s.AutoSaveDebounceMs.ToString(CultureInfo.InvariantCulture);
         TrashDaysBox.Text = s.TrashRetentionDays.ToString(CultureInfo.InvariantCulture);
@@ -184,13 +184,15 @@ public partial class SettingsWindow : Window
         s.ShowEndOfLine = EndOfLineCheck.IsChecked == true;
         s.AutoProofreadingEnabled = AutoProofreadingCheck.IsChecked == true;
         s.ConfirmPaidApiCalls = ConfirmPaidApiCallsCheck.IsChecked == true;
-        string? selectedModelName = ProofreadingModelCombo.SelectedItem as string;
-        if (selectedModelName is not null)
-        {
-            s.ProofreadingModel = ProofreadingModelCatalog.SupportedModels
-                .FirstOrDefault(model => ProofreadingModelCatalog.DisplayName(model) == selectedModelName)
-                ?? s.ProofreadingModel;
-        }
+        s.AutoProofreadingModel =
+            SelectedModelId(AutoProofreadingModelCombo) ?? s.AutoProofreadingModel;
+        s.ManualProofreadingModel =
+            SelectedModelId(ManualProofreadingModelCombo) ?? s.ManualProofreadingModel;
+        // 範囲外は SettingsService.Normalize が 5〜300 秒へ丸める。
+        s.AutoProofreadingTimeoutSeconds =
+            (int)ParseNumber(AutoTimeoutBox.Text, s.AutoProofreadingTimeoutSeconds);
+        s.ManualProofreadingTimeoutSeconds =
+            (int)ParseNumber(ManualTimeoutBox.Text, s.ManualProofreadingTimeoutSeconds);
         s.ProofreadingDebounceMs =
             (int)ParseNumber(
                 ProofreadingDebounceBox.Text,
@@ -216,12 +218,12 @@ public partial class SettingsWindow : Window
         s.StatusBarCurrency = (StatusBarCurrencyFormat)Math.Clamp(
             StatusBarCurrencyCombo.SelectedIndex, 0, 2);
 
-        s.GeminiApiKeySource = CredentialSourceCombo.SelectedIndex == 1
-            ? ApiKeySource.EnvironmentVariable
-            : ApiKeySource.Stored;
-        s.OpenAiApiKeySource = OpenAiCredentialSourceCombo.SelectedIndex == 1
-            ? ApiKeySource.EnvironmentVariable
-            : ApiKeySource.Stored;
+        // 表示中のプロバイダーの選択を辞書へ戻してから、全プロバイダー分を書き出す。
+        StashShownCredentialProvider();
+        s.GeminiApiKeySource = _pendingKeySources[ApiProvider.Google];
+        s.OpenAiApiKeySource = _pendingKeySources[ApiProvider.OpenAi];
+        s.AnthropicApiKeySource = _pendingKeySources[ApiProvider.Anthropic];
+        s.PlamoApiKeySource = _pendingKeySources[ApiProvider.PreferredNetworks];
 
         s.CustomInstruction = CustomInstructionBox.Text.Trim();
         s.StyleGuideAutoGenerateEnabled = StyleGuideAutoGenerateCheck.IsChecked == true;
@@ -375,86 +377,134 @@ public partial class SettingsWindow : Window
 
     private void CredentialSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_loadingCredentialControls) RefreshCredentialStatus();
+        if (_loadingCredentialControls) return;
+        if (_shownCredentialProvider is { } provider)
+        {
+            _pendingKeySources[provider] = CredentialSourceCombo.SelectedIndex == 1
+                ? ApiKeySource.EnvironmentVariable
+                : ApiKeySource.Stored;
+        }
+
+        RefreshCredentialStatus();
     }
 
     private void ApiKeyBox_PasswordChanged(object sender, RoutedEventArgs e)
     {
-        if (ApiKeyBox.Password.Length > 0) _deleteStoredKey = false;
+        if (_loadingCredentialControls) return;
+        if (_shownCredentialProvider is { } provider && ApiKeyBox.Password.Length > 0)
+            _deleteStoredKeys.Remove(provider);
         RefreshCredentialStatus();
-    }
-
-    private void OpenAiCredentialSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!_loadingOpenAiCredentialControls) RefreshOpenAiCredentialStatus();
-    }
-
-    private void OpenAiApiKeyBox_PasswordChanged(object sender, RoutedEventArgs e)
-    {
-        if (OpenAiApiKeyBox.Password.Length > 0) _deleteOpenAiStoredKey = false;
-        RefreshOpenAiCredentialStatus();
-    }
-
-    private void DeleteOpenAiStoredKeyButton_Click(object sender, RoutedEventArgs e)
-    {
-        _deleteOpenAiStoredKey = true;
-        OpenAiApiKeyBox.Clear();
-        RefreshOpenAiCredentialStatus();
     }
 
     private void DeleteStoredKeyButton_Click(object sender, RoutedEventArgs e)
     {
-        _deleteStoredKey = true;
+        if (_shownCredentialProvider is { } provider) _deleteStoredKeys.Add(provider);
         ApiKeyBox.Clear();
         RefreshCredentialStatus();
     }
 
+    private void ProofreadingModelCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingProofreadingModelControls) return;
+        RefreshTimeoutHint();
+        RefreshCredentialStatus();
+    }
+
+    /// <summary>
+    /// 用途ごとの推奨タイムアウトを表示する。**設定値は上書きしない**（モデルを切り替えるたびに
+    /// ユーザーが入れた値が黙って消えるのを避けるため。要件 3.5.1）。
+    /// </summary>
+    private void RefreshTimeoutHint()
+    {
+        if (TimeoutHintText is null) return;
+
+        ModelDescriptor auto = ProofreadingModelCatalog.Get(
+            SelectedModelId(AutoProofreadingModelCombo));
+        ModelDescriptor manual = ProofreadingModelCatalog.Get(
+            SelectedModelId(ManualProofreadingModelCombo));
+
+        TimeoutHintText.Text =
+            $"推奨: 自動 {auto.RecommendedTimeout.TotalSeconds:0} 秒 / " +
+            $"手動 {manual.RecommendedTimeout.TotalSeconds:0} 秒（5〜300 秒）。\n" +
+            "1 回の自動校正は段落ごとに分割して送るため、実行時間の上限は「タイムアウト × 分割数」" +
+            "になります。入力中の自動校正には応答の速いモデルをおすすめします。";
+    }
+
+    private static string? SelectedModelId(System.Windows.Controls.ComboBox combo)
+        => combo.SelectedItem is not string displayName
+            ? null
+            : ProofreadingModelCatalog.SupportedModels
+                .FirstOrDefault(model =>
+                    ProofreadingModelCatalog.DisplayName(model) == displayName);
+
+    private static ApiKeySource ApiKeySourceOf(AppSettings s, ApiProvider provider)
+        => provider switch
+        {
+            ApiProvider.Google => s.GeminiApiKeySource,
+            ApiProvider.OpenAi => s.OpenAiApiKeySource,
+            ApiProvider.Anthropic => s.AnthropicApiKeySource,
+            ApiProvider.PreferredNetworks => s.PlamoApiKeySource,
+            _ => ApiKeySource.Unspecified,
+        };
+
+    /// <summary>表示中のプロバイダーの入力内容を辞書へ退避する。パネルを切り替える**前**に呼ぶ。</summary>
+    private void StashShownCredentialProvider()
+    {
+        if (_shownCredentialProvider is not { } provider) return;
+
+        _pendingApiKeys[provider] = ApiKeyBox.Password;
+        _pendingKeySources[provider] = CredentialSourceCombo.SelectedIndex == 1
+            ? ApiKeySource.EnvironmentVariable
+            : ApiKeySource.Stored;
+    }
+
     private void RefreshCredentialStatus()
     {
-        if (CredentialStatusText is null) return;
+        if (CredentialStatusText is null || _shownCredentialProvider is not { } provider) return;
 
-        string stored = _deleteStoredKey
+        string stored = _deleteStoredKeys.Contains(provider)
             ? "保存済みキー: OKを押すと削除"
-            : _credentials.StoredKeyState switch
+            : _credentials.StoredKeyState(provider) switch
             {
                 StoredCredentialState.Available => "保存済みキー: あり（値は表示しません）",
                 StoredCredentialState.Unreadable => "保存済みキー: 読み取れません（削除または置き換えが必要です）",
                 _ => "保存済みキー: なし",
             };
 
-        string environment = _credentials.EnvironmentKeyAvailable
-            ? $"環境変数 {CredentialService.EnvironmentVariableName}: 検出済み"
-            : $"環境変数 {CredentialService.EnvironmentVariableName}: 見つかりません";
+        string variable = ProofreadingModelCatalog.EnvironmentVariableName(provider);
+        string environment = _credentials.EnvironmentKeyAvailable(provider)
+            ? $"環境変数 {variable}: 検出済み"
+            : $"環境変数 {variable}: 見つかりません";
 
         string pending = ApiKeyBox?.Password.Length > 0
             ? "\n新しいキー: OKを押すと暗号化して保存"
             : "";
 
         CredentialStatusText.Text = $"{stored}\n{environment}{pending}";
+        RefreshCredentialUsage(provider);
     }
 
-    private void RefreshOpenAiCredentialStatus()
+    /// <summary>
+    /// このプロバイダーのキーがどちらの校正で必要になるかを示す（要件 3.5.5）。
+    /// 「キーが未設定です」だけでは、どちらの校正が止まるのか判断できないため。
+    /// </summary>
+    private void RefreshCredentialUsage(ApiProvider provider)
     {
-        if (OpenAiCredentialStatusText is null) return;
+        if (CredentialUsageText is null) return;
 
-        string stored = _deleteOpenAiStoredKey
-            ? "保存済みキー: OKを押すと削除"
-            : _credentials.OpenAiStoredKeyState switch
-            {
-                StoredCredentialState.Available => "保存済みキー: あり（値は表示しません）",
-                StoredCredentialState.Unreadable => "保存済みキー: 読み取れません（削除または置き換えが必要です）",
-                _ => "保存済みキー: なし",
-            };
+        bool usedByAuto = ProofreadingModelCatalog.ProviderOf(
+            SelectedModelId(AutoProofreadingModelCombo)) == provider;
+        bool usedByManual = ProofreadingModelCatalog.ProviderOf(
+            SelectedModelId(ManualProofreadingModelCombo)) == provider;
 
-        string environment = _credentials.OpenAiEnvironmentKeyAvailable
-            ? $"環境変数 {CredentialService.OpenAiEnvironmentVariableName}: 検出済み"
-            : $"環境変数 {CredentialService.OpenAiEnvironmentVariableName}: 見つかりません";
-
-        string pending = OpenAiApiKeyBox?.Password.Length > 0
-            ? "\n新しいキー: OKを押すと暗号化して保存"
-            : "";
-
-        OpenAiCredentialStatusText.Text = $"{stored}\n{environment}{pending}";
+        string name = ProofreadingModelCatalog.ProviderDisplayName(provider);
+        CredentialUsageText.Text = (usedByAuto, usedByManual) switch
+        {
+            (true, true) => $"{name} のキーは自動校正・手動校正の両方で使います。",
+            (true, false) => $"{name} のキーは自動校正（入力中・別案生成）で使います。",
+            (false, true) => $"{name} のキーは手動校正（Ctrl+Enter・スタイルガイド生成）で使います。",
+            _ => $"{name} のキーは現在どちらの校正でも使っていません。",
+        };
     }
 
     /// <summary>
@@ -726,7 +776,9 @@ public partial class SettingsWindow : Window
     {
         if (_loadingPricingControls) return;
 
+        // 資格情報パネルの入力内容は、選択が切り替わる前に必ず退避する。
         StashCurrentPricingModel();
+        StashShownCredentialProvider();
         _selectedPricingModel = PricingModelCombo.SelectedItem as string;
         ShowSelectedPricingModel();
     }
@@ -755,16 +807,43 @@ public partial class SettingsWindow : Window
         PricingUpdatedAtBox.Text = text.UpdatedAt;
     }
 
+    /// <summary>
+    /// 選択中モデルのプロバイダーへ資格情報パネルを切り替える。
+    /// **退避（<see cref="StashShownCredentialProvider"/>）は切り替えの前に済ませておくこと**。
+    /// 順序を誤ると、入力途中のキーが別プロバイダーのスロットへ入る。
+    /// </summary>
     private void UpdateCredentialPanelVisibility()
     {
-        bool isGemini = string.Equals(
-            _selectedPricingModel,
-            ProofreadingModelCatalog.GeminiModel,
-            StringComparison.Ordinal);
-        bool isOpenAi = ProofreadingModelCatalog.IsOpenAi(_selectedPricingModel);
+        if (_selectedPricingModel is null)
+        {
+            CredentialPanel.Visibility = Visibility.Collapsed;
+            _shownCredentialProvider = null;
+            return;
+        }
 
-        GeminiCredentialPanel.Visibility = isGemini ? Visibility.Visible : Visibility.Collapsed;
-        OpenAiCredentialPanel.Visibility = isOpenAi ? Visibility.Visible : Visibility.Collapsed;
+        ApiProvider provider = ProofreadingModelCatalog.ProviderOf(_selectedPricingModel);
+        CredentialPanel.Visibility = Visibility.Visible;
+        _shownCredentialProvider = provider;
+
+        _loadingCredentialControls = true;
+        CredentialSourceLabel.Text =
+            $"{ProofreadingModelCatalog.ProviderDisplayName(provider)} APIキーの取得元";
+        CredentialSourceCombo.ItemsSource = new[]
+        {
+            "アプリに保存したキー",
+            $"環境変数 {ProofreadingModelCatalog.EnvironmentVariableName(provider)}",
+        };
+        CredentialSourceCombo.SelectedIndex =
+            _pendingKeySources.TryGetValue(provider, out ApiKeySource source) &&
+            source == ApiKeySource.EnvironmentVariable
+                ? 1
+                : 0;
+        ApiKeyBox.Password = _pendingApiKeys.TryGetValue(provider, out string? pending)
+            ? pending
+            : "";
+        _loadingCredentialControls = false;
+
+        RefreshCredentialStatus();
     }
 
     /// <summary>
@@ -857,24 +936,29 @@ public partial class SettingsWindow : Window
 
     private bool TryApplyCredentialChanges(AppSettings updated)
     {
-        if (updated.GeminiApiKeySource == ApiKeySource.EnvironmentVariable &&
-            !_credentials.EnvironmentKeyAvailable)
-        {
-            MessageBox.Show(
-                this,
-                $"環境変数 {CredentialService.EnvironmentVariableName} が見つかりません。",
-                "JP Scratch",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            return false;
-        }
+        // 表示中の入力を辞書へ戻してから、全プロバイダー分をまとめて適用する。
+        StashShownCredentialProvider();
 
-        if (updated.OpenAiApiKeySource == ApiKeySource.EnvironmentVariable &&
-            !_credentials.OpenAiEnvironmentKeyAvailable)
+        // 環境変数を選んだのに実在しないプロバイダーがあれば、そこで止める。ただし、そのキーを
+        // 実際に使うプロバイダー（自動用・手動用のモデル）だけを対象にする。使っていない
+        // プロバイダーの設定で OK が押せなくなるのは筋が悪い。
+        ApiProvider[] inUse =
+        [
+            ProofreadingModelCatalog.ProviderOf(updated.AutoProofreadingModel),
+            ProofreadingModelCatalog.ProviderOf(updated.ManualProofreadingModel),
+        ];
+
+        foreach (ApiProvider provider in inUse.Distinct())
         {
+            if (ApiKeySourceOf(updated, provider) != ApiKeySource.EnvironmentVariable ||
+                _credentials.EnvironmentKeyAvailable(provider))
+            {
+                continue;
+            }
+
             MessageBox.Show(
                 this,
-                $"環境変数 {CredentialService.OpenAiEnvironmentVariableName} が見つかりません。",
+                $"環境変数 {ProofreadingModelCatalog.EnvironmentVariableName(provider)} が見つかりません。",
                 "JP Scratch",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -883,22 +967,16 @@ public partial class SettingsWindow : Window
 
         try
         {
-            if (ApiKeyBox.Password.Length > 0)
+            foreach (ApiProvider provider in Enum.GetValues<ApiProvider>())
             {
-                _credentials.SaveStoredApiKey(ApiKeyBox.Password);
-            }
-            else if (_deleteStoredKey)
-            {
-                _credentials.DeleteStoredApiKey();
-            }
-
-            if (OpenAiApiKeyBox.Password.Length > 0)
-            {
-                _credentials.SaveStoredOpenAiApiKey(OpenAiApiKeyBox.Password);
-            }
-            else if (_deleteOpenAiStoredKey)
-            {
-                _credentials.DeleteStoredOpenAiApiKey();
+                if (_pendingApiKeys.TryGetValue(provider, out string? key) && key.Length > 0)
+                {
+                    _credentials.SaveStoredApiKey(provider, key);
+                }
+                else if (_deleteStoredKeys.Contains(provider))
+                {
+                    _credentials.DeleteStoredApiKey(provider);
+                }
             }
 
             return true;

@@ -22,14 +22,22 @@
              Link="Infrastructure\AtomicFile.cs" />
     <Compile Include="..\Infrastructure\SingleInstance.cs"
              Link="Infrastructure\SingleInstance.cs" />
-    <Compile Include="..\Models\GeminiApiKeySource.cs"
-             Link="Models\GeminiApiKeySource.cs" />
+    <Compile Include="..\Models\ApiKeySource.cs"
+             Link="Models\ApiKeySource.cs" />
     <Compile Include="..\Models\ProofreadingModelCatalog.cs"
              Link="Models\ProofreadingModelCatalog.cs" />
     <Compile Include="..\Models\StatusBarCurrencyFormat.cs"
              Link="Models\StatusBarCurrencyFormat.cs" />
     <Compile Include="..\Proofreading\DocumentDiff.cs" Link="Proofreading\DocumentDiff.cs" />
     <Compile Include="..\Proofreading\FewShotSelector.cs" Link="Proofreading\FewShotSelector.cs" />
+    <Compile Include="..\Proofreading\ProofreadingClientContracts.cs"
+             Link="Proofreading\ProofreadingClientContracts.cs" />
+    <Compile Include="..\Proofreading\ProofreadingClientBase.cs"
+             Link="Proofreading\ProofreadingClientBase.cs" />
+    <Compile Include="..\Proofreading\AnthropicProofreadingClient.cs"
+             Link="Proofreading\AnthropicProofreadingClient.cs" />
+    <Compile Include="..\Proofreading\PlamoProofreadingClient.cs"
+             Link="Proofreading\PlamoProofreadingClient.cs" />
     <Compile Include="..\Proofreading\GeminiProofreadingClient.cs"
              Link="Proofreading\GeminiProofreadingClient.cs" />
     <Compile Include="..\Proofreading\OpenAiProofreadingClient.cs"

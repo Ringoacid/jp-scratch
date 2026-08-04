@@ -19,12 +19,12 @@ internal static class PricingServiceValidation
                 created.Calculate(PricingService.DefaultModel, 1_000_000, 1_000_000);
             bool defaultPass =
                 File.Exists(pricingFile) &&
-                defaultQuote.UsdCost == 2.80m &&
+                defaultQuote.Cost == 2.80m &&
                 defaultQuote.Pricing.UpdatedAt == "2026-07-29";
             PricingQuote openAiQuote =
                 created.Calculate(PricingService.OpenAiModel, 1_000_000, 1_000_000);
             bool openAiDefaultPass =
-                openAiQuote.UsdCost == 1.40m &&
+                openAiQuote.Cost == 1.40m &&
                 openAiQuote.Pricing.InputUsdPerMillion == 0.20m &&
                 openAiQuote.Pricing.OutputUsdPerMillion == 1.20m &&
                 openAiQuote.Pricing.UpdatedAt == "2026-07-31";
@@ -44,7 +44,7 @@ internal static class PricingServiceValidation
             PricingQuote customQuote =
                 customized.Calculate("custom-model", 2_000, 3_000);
             bool customPass =
-                customQuote.UsdCost == 0.01600m &&
+                customQuote.Cost == 0.01600m &&
                 customized.GetPricing(PricingService.DefaultModel)
                     .InputUsdPerMillion == 0.30m;
 

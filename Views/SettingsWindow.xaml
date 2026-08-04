@@ -728,15 +728,24 @@
 
                                     <Border Style="{StaticResource SettingsCard}">
                                     <StackPanel>
-                                    <StackPanel x:Name="GeminiCredentialPanel">
+                                    <!-- プロバイダーごとにパネルを複製せず、選択中モデルのプロバイダーへ
+                                         切り替える1枚のパネルで扱う。入力途中のキーと削除指示は
+                                         プロバイダー別に保持する（SettingsWindow.xaml.cs 参照）。 -->
+                                    <StackPanel x:Name="CredentialPanel">
                                     <Border Style="{StaticResource SettingsRow}">
                                         <StackPanel>
+                                        <TextBlock x:Name="CredentialUsageText"
+                                                   Margin="0,0,0,8"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource SettingsDescription}" />
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="420" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="Gemini APIキーの取得元" Style="{StaticResource FieldLabel}" />
+                                            <TextBlock x:Name="CredentialSourceLabel"
+                                                       Text="APIキーの取得元"
+                                                       Style="{StaticResource FieldLabel}" />
                                             <ComboBox x:Name="CredentialSourceCombo"
                                                       Grid.Column="1"
                                                       Style="{StaticResource AppComboBox}"
@@ -767,52 +776,6 @@
                                             </Grid>
                                         </Grid>
                                         <TextBlock x:Name="CredentialStatusText"
-                                                   Margin="0,8,0,0"
-                                                   TextWrapping="Wrap"
-                                                   Style="{StaticResource SettingsDescription}" />
-                                        </StackPanel>
-                                    </Border>
-                                    </StackPanel>
-
-                                    <StackPanel x:Name="OpenAiCredentialPanel">
-                                    <Border Style="{StaticResource SettingsRow}">
-                                        <StackPanel>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="420" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="OpenAI APIキーの取得元" Style="{StaticResource FieldLabel}" />
-                                            <ComboBox x:Name="OpenAiCredentialSourceCombo"
-                                                      Grid.Column="1"
-                                                      Style="{StaticResource AppComboBox}"
-                                                      SelectionChanged="OpenAiCredentialSourceCombo_SelectionChanged" />
-                                        </Grid>
-                                        <Grid Margin="0,10,0,0">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="420" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="新しいOpenAIキー" Style="{StaticResource FieldLabel}" />
-                                            <Grid Grid.Column="1">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <PasswordBox x:Name="OpenAiApiKeyBox"
-                                                             Style="{StaticResource AppPasswordBox}"
-                                                             PasswordChar="●"
-                                                             PasswordChanged="OpenAiApiKeyBox_PasswordChanged"
-                                                             ToolTip="既存のキーは表示しません。未入力のままなら変更しません。" />
-                                                <Button x:Name="DeleteOpenAiStoredKeyButton"
-                                                        Grid.Column="1"
-                                                        Margin="8,0,0,0"
-                                                        Style="{StaticResource AppButton}"
-                                                        Content="保存済みキーを削除"
-                                                        Click="DeleteOpenAiStoredKeyButton_Click" />
-                                            </Grid>
-                                        </Grid>
-                                        <TextBlock x:Name="OpenAiCredentialStatusText"
                                                    Margin="0,8,0,0"
                                                    TextWrapping="Wrap"
                                                    Style="{StaticResource SettingsDescription}" />

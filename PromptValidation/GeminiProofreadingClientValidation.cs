@@ -30,7 +30,7 @@ internal static class GeminiProofreadingClientValidation
         Console.WriteLine($"Geminiクライアント（無効別案の使用量）: {(invalidAlternativeUsagePass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（1回リトライ）: {(retryPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（恒久エラー）: {(permanentFailurePass ? "PASS" : "FAIL")}");
-        Console.WriteLine($"Geminiクライアント（タイムアウト）: {(timeoutPass ? "PASS" : "FAIL")}");
+        Console.WriteLine($"Geminiクライアント（タイムアウトで再試行しない）: {(timeoutPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（キー未設定）: {(missingKeyPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（打ち切り応答の拒否・maxOutputTokens）: {(truncatedPass ? "PASS" : "FAIL")}");
 
@@ -270,6 +270,11 @@ internal static class GeminiProofreadingClientValidation
         }
     }
 
+    /// <summary>
+    /// タイムアウトは**再試行しない**（要件 3.5.1）。1 回目がサーバー側で完走していれば
+    /// 再送は二重課金になり、タイムアウトを長く設定しているほど待ち時間も倍になる。
+    /// 送信回数が 1 回であることまで確かめる。
+    /// </summary>
     private static async Task<bool> TestTimeoutAsync()
     {
         var handler = new StubHandler((_, _, cancellationToken) =>
@@ -285,7 +290,7 @@ internal static class GeminiProofreadingClientValidation
         }
         catch (GeminiClientException ex)
         {
-            return handler.Count == 2 && ex.Error == GeminiClientError.Timeout;
+            return handler.Count == 1 && ex.Error == GeminiClientError.Timeout;
         }
     }
 

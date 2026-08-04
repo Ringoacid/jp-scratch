@@ -313,25 +313,46 @@ public partial class App : Application
     /// </summary>
     private void ConfirmEnvironmentCredentialSource()
     {
-        ConfirmCredentialSourceIfNeeded(
-            Models.ApiProvider.Google,
-            source: _settings.Current.GeminiApiKeySource,
-            apply: value => _settings.Current.GeminiApiKeySource = value);
+        // 実際に使うプロバイダーだけを尋ねる。4プロバイダーを無条件に回すと、環境変数を複数
+        // 設定しているユーザーが起動のたびに（選んでもいないモデルの分まで）モーダルを次々
+        // 見ることになる。自動用と手動用が同じプロバイダーなら 1 回だけになる。
+        foreach (Models.ApiProvider provider in InUseProviders())
+        {
+            ConfirmCredentialSourceIfNeeded(
+                provider,
+                source: ApiKeySourceOf(provider),
+                apply: value => ApplyApiKeySource(provider, value));
+        }
+    }
 
-        ConfirmCredentialSourceIfNeeded(
-            Models.ApiProvider.OpenAi,
-            source: _settings.Current.OpenAiApiKeySource,
-            apply: value => _settings.Current.OpenAiApiKeySource = value);
+    /// <summary>自動用・手動用として現在選ばれているモデルのプロバイダー（重複は除く）。</summary>
+    private IEnumerable<Models.ApiProvider> InUseProviders()
+        => new[]
+            {
+                Models.ProofreadingModelCatalog.ProviderOf(_settings.Current.AutoProofreadingModel),
+                Models.ProofreadingModelCatalog.ProviderOf(_settings.Current.ManualProofreadingModel),
+            }
+            .Distinct();
 
-        ConfirmCredentialSourceIfNeeded(
-            Models.ApiProvider.Anthropic,
-            source: _settings.Current.AnthropicApiKeySource,
-            apply: value => _settings.Current.AnthropicApiKeySource = value);
+    private Models.ApiKeySource ApiKeySourceOf(Models.ApiProvider provider)
+        => provider switch
+        {
+            Models.ApiProvider.Google => _settings.Current.GeminiApiKeySource,
+            Models.ApiProvider.OpenAi => _settings.Current.OpenAiApiKeySource,
+            Models.ApiProvider.Anthropic => _settings.Current.AnthropicApiKeySource,
+            Models.ApiProvider.PreferredNetworks => _settings.Current.PlamoApiKeySource,
+            _ => Models.ApiKeySource.Unspecified,
+        };
 
-        ConfirmCredentialSourceIfNeeded(
-            Models.ApiProvider.PreferredNetworks,
-            source: _settings.Current.PlamoApiKeySource,
-            apply: value => _settings.Current.PlamoApiKeySource = value);
+    private void ApplyApiKeySource(Models.ApiProvider provider, Models.ApiKeySource value)
+    {
+        switch (provider)
+        {
+            case Models.ApiProvider.Google: _settings.Current.GeminiApiKeySource = value; break;
+            case Models.ApiProvider.OpenAi: _settings.Current.OpenAiApiKeySource = value; break;
+            case Models.ApiProvider.Anthropic: _settings.Current.AnthropicApiKeySource = value; break;
+            case Models.ApiProvider.PreferredNetworks: _settings.Current.PlamoApiKeySource = value; break;
+        }
     }
 
     private void ConfirmCredentialSourceIfNeeded(

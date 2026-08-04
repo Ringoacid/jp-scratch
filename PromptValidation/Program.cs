@@ -1,4 +1,4 @@
-using System.Text.Encodings.Web;
+﻿using System.Text.Encodings.Web;
 using System.Text.Json;
 
 namespace JpScratch.PromptValidation;
@@ -250,6 +250,7 @@ internal static class Program
         bool schedulePass = ProofreadingScheduleValidation.RunSelfTests();
         bool geminiClientPass = await GeminiProofreadingClientValidation.RunSelfTestsAsync();
         bool openAiClientPass = await OpenAiProofreadingClientValidation.RunSelfTestsAsync();
+        bool completionGuardPass = await ProviderCompletionGuardValidation.RunSelfTestsAsync();
         bool appPathsPass = AppPathsValidation.RunSelfTests();
         bool singleInstancePass = SingleInstanceValidation.RunSelfTests();
         bool billingSeedPass = BillingSeedCommandValidation.RunSelfTests();
@@ -270,7 +271,8 @@ internal static class Program
                apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
                billingHistoryEmptyStatePass && usagePeriodPass && usageLimitPass &&
                migrationPass && fxRatePass && reactionPass && schedulePass &&
-               geminiClientPass && openAiClientPass && appPathsPass && singleInstancePass &&
+               geminiClientPass && openAiClientPass && completionGuardPass &&
+               appPathsPass && singleInstancePass &&
                billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&
                apiLogCompactionPass && trayIconStatePass &&
                fewShotPass && styleGuidePass && promptV3Pass && inlineDiffPass &&

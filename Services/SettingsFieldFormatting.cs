@@ -124,6 +124,9 @@ internal static class SettingsFieldFormatting
 
         result = new ModelPricing
         {
+            // 通貨は編集対象ではないので必ず引き継ぐ。既定値へ落とすと、円建てモデル（PLaMo）を
+            // 設定画面で編集した瞬間に ¥60 が $60 として扱われ、料金表示が桁違いに狂う。
+            Currency = original.Currency,
             InputUsdPerMillion = input,
             OutputUsdPerMillion = output,
             UpdatedAt = normalizedUpdatedAt,
