@@ -6,13 +6,13 @@
 
 - Windows 11 向け常駐型日本語スクラッチパッド「JP Scratch」。ホットキー（既定 `Alt+Space`）でどこからでも呼び出せるタスクトレイ常駐メモ帳。
 - 本文は `%APPDATA%\JpScratch\tabs\{id}.txt` に UTF-8 BOM なしのプレーンテキストで自動保存（メモ帳でサルベージ可能であることが要件）。
-- v1（常駐エディタ）・v2（校正＋課金管理）・v3（文体の学習＝few-shot・スタイルガイド自動生成・カスタム指示）はすべて実装済み。残るコンテキストキャッシュ適用は Gemini の単価が未確認のため意図的に見送り中。
+- v1（常駐エディタ）・v2（校正＋課金管理）・v3（文体の学習＝few-shot・スタイルガイド自動生成・カスタム指示）・v4（プロバイダー拡張）はすべて実装済み。残るコンテキストキャッシュ適用は Gemini の単価が未確認のため意図的に見送り中。
 
 ## 技術スタック
 
 - C# / .NET 10 (LTS)、WPF、AvalonEdit 6.x、SQLite (Microsoft.Data.Sqlite)。
 - WinForms はトレイアイコンのためだけに参照（暗黙 using は外してあり `TrayIconService` のみが明示的に using）。
-- 校正モデル: `gemini-3.5-flash-lite` / `gpt-5.6-luna`。API キーは DPAPI 暗号化で `credentials.dat` に保存。
+- 校正モデルは 4 プロバイダー 11 モデル（Google / OpenAI / Anthropic / Preferred Networks）。**自動用と手動用の 2 枠**を持ち、既定は自動 `gpt-5.6-luna` / 手動 `claude-sonnet-5`。API キーはプロバイダーごとに DPAPI 暗号化で `credentials.dat` に保存。
 
 ## ビルド・テスト
 
@@ -44,6 +44,10 @@ dotnet run --project PromptValidation -- --self-test   # オフライン回帰�
 - **二重起動の呼び戻しは名前付きイベント**（`Infrastructure/SingleInstance.cs`）。`PostMessage(HWND_BROADCAST)` は不可。
 - **`Assets/app.ico` は手作りの正典**。小サイズは DIB、256px のみ PNG 圧縮（`NotifyIcon` が PNG を展開できないため）。
 - **PowerShell スクリプトは UTF-8 BOM 付きで保存**（BOM なしだと CP932 として読まれコメントが壊れる）。
+- **打ち切り・拒否の検出は `ProofreadingClientBase.EnsureCompleted` が正典**。本文抽出より前に必ず走る。切れた応答を採用すると「本文末尾を削除する提案」に化け、安全検査を通過して一括許可で本文が消える。プロバイダーを足したら `ProviderCompletionGuardValidation` の表にも行を足す。
+- **タイムアウトでは再試行しない**（二重課金と待ち時間の倍化を避ける）。再試行は 429 / 5xx のみ。
+- **モデルごとの差異は `ProofreadingModelCatalog` の表に持たせる**（単価・推奨タイムアウト・用途別の思考量・プロバイダー）。if 分岐を増やさない。
+- **`pricing.json` の `currency` は編集で落とさない**（省略時 USD。円建ての PLaMo が $ 扱いになると桁が狂う）。
 - 書き込みは一時ファイル→`File.Replace`（`Infrastructure/AtomicFile.cs`）。SQLitePCLRaw は脆弱性対応で 2.1.12 に固定。
 
 ## コーディング規約
