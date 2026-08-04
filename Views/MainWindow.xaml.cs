@@ -1148,11 +1148,12 @@ public partial class MainWindow : Window
 
             if (TryGetReason(generatesAlternative: true, out reason))
             {
-                if (string.IsNullOrWhiteSpace(GetActiveApiKey()))
+                // 別案生成は自動側のモデルを使う（要件3.5.1）。ピン留めより前に呼ぶので用途を明示する。
+                if (string.IsNullOrWhiteSpace(GetActiveApiKey(ProofreadingPurpose.Automatic)))
                 {
                     MessageBox.Show(
                         this,
-                        $"{ActiveProviderName()} APIキーが設定されていません。設定画面で登録してください。",
+                        $"{ActiveProviderName(ProofreadingPurpose.Automatic)} APIキーが設定されていません。設定画面で登録してください。",
                         "JP Scratch",
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
@@ -1165,8 +1166,8 @@ public partial class MainWindow : Window
                 {
                     MessageBoxResult confirmation = MessageBox.Show(
                         this,
-                        $"別案生成のため{ActiveProviderName()} APIを1回呼び出します。料金が発生します。\n\n" +
-                        BuildPricingSummary() + "\n" +
+                        $"別案生成のため{ActiveProviderName(ProofreadingPurpose.Automatic)} APIを1回呼び出します。料金が発生します。\n\n" +
+                        BuildPricingSummary(ProofreadingPurpose.Automatic) + "\n" +
                         "実行後に使用トークン数と料金を表示します。\n\n実行しますか？",
                         "API料金の確認",
                         MessageBoxButton.YesNo,
@@ -1709,8 +1710,8 @@ public partial class MainWindow : Window
             MessageBoxResult confirmation = MessageBox.Show(
                 this,
                 $"リアクションが{_settings.Current.StyleGuideGenerationThreshold}件以上たまりました。" +
-                $"{ActiveProviderName()} APIを1回呼び出して、あなたの文体ルール（スタイルガイド）を生成しますか？\n\n" +
-                BuildPricingSummary() + "\n" +
+                $"{ActiveProviderName(ProofreadingPurpose.Manual)} APIを1回呼び出して、あなたの文体ルール（スタイルガイド）を生成しますか？\n\n" +
+                BuildPricingSummary(ProofreadingPurpose.Manual) + "\n" +
                 "実行後に使用トークン数と料金を表示します。生成後は設定画面でいつでも閲覧・編集・削除できます。",
                 "スタイルガイドの自動生成",
                 MessageBoxButton.YesNo,
@@ -1735,7 +1736,7 @@ public partial class MainWindow : Window
         {
             MessageBox.Show(
                 this,
-                $"{ActiveProviderName()} APIキーが設定されていません。設定画面で登録してください。",
+                $"{ActiveProviderName(ProofreadingPurpose.Manual)} APIキーが設定されていません。設定画面で登録してください。",
                 "JP Scratch",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -1998,13 +1999,16 @@ public partial class MainWindow : Window
             return;
         }
 
-        string? apiKey = GetActiveApiKey();
+        // 実行開始（ピン留め）より前なので、用途を明示してモデルを解決する。
+        ProofreadingPurpose runPurpose =
+            manual ? ProofreadingPurpose.Manual : ProofreadingPurpose.Automatic;
+        string? apiKey = GetActiveApiKey(runPurpose);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             if (!manual)
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
             SetProofreadingStatus(
-                $"{ActiveProviderName()} APIキーを設定してください",
+                $"{ActiveProviderName(runPurpose)} APIキーを設定してください",
                 force: true);
             return;
         }
@@ -2418,6 +2422,9 @@ public partial class MainWindow : Window
         try
         {
             string trigger = manual ? "手動校正" : "自動校正";
+            // 用途で使うモデルが変わるため、確認ダイアログの単価も用途で解決する。
+            ProofreadingPurpose purpose =
+                manual ? ProofreadingPurpose.Manual : ProofreadingPurpose.Automatic;
             decimal limit = _settings.Current.MonthlyLimitUsd;
             // 自動実行はScheduleAutomaticProofreading/RunProofreadingAsyncの発火条件5で
             // 到達時点で既に止めてあるため、ここまで到達するのは基本的に手動実行のときだけ。
@@ -2428,9 +2435,9 @@ public partial class MainWindow : Window
                 : "";
             MessageBoxResult result = MessageBox.Show(
                 this,
-                $"{trigger}で{ActiveProviderName()} APIを{requestCount}回呼び出します。料金が発生します。\n\n" +
+                $"{trigger}で{ActiveProviderName(purpose)} APIを{requestCount}回呼び出します。料金が発生します。\n\n" +
                 limitWarning +
-                BuildPricingSummary() + "\n" +
+                BuildPricingSummary(purpose) + "\n" +
                 "複数回の場合は各送信の間隔を空け、実行後に合計料金を表示します。\n\n" +
                 "実行しますか？",
                 "API料金の確認",
@@ -2600,15 +2607,15 @@ public partial class MainWindow : Window
         return new ApiUsageCost(promptTokens, outputTokens, usdCost.Value, fxRate, IsUsageKnown: true);
     }
 
-    private string BuildPricingSummary()
+    private string BuildPricingSummary(ProofreadingPurpose? purpose = null)
     {
-        ModelPricing pricing =
-            _pricing.GetPricing(_proofreadingClient.Model);
+        string model = ModelForPurpose(purpose);
+        ModelPricing pricing = _pricing.GetPricing(model);
         string unit = string.Equals(pricing.Currency, PricingCurrency.Jpy, StringComparison.Ordinal)
             ? "¥"
             : "$";
         return
-            $"{ProofreadingModelCatalog.DisplayName(_proofreadingClient.Model)} 単価（{pricing.UpdatedAt}）: " +
+            $"{ProofreadingModelCatalog.DisplayName(model)} 単価（{pricing.UpdatedAt}）: " +
             $"入力 {unit}{pricing.InputUsdPerMillion:0.####}／100万トークン、" +
             $"出力・推論 {unit}{pricing.OutputUsdPerMillion:0.####}／100万トークン\n" +
             "※ 表示料金は概算です。キャッシュ関連料金などは考慮していないため、" +
@@ -3163,9 +3170,22 @@ public partial class MainWindow : Window
         _statusMessageUntil = DateTime.UtcNow.AddSeconds(force ? 30 : 4);
     }
 
-    private string? GetActiveApiKey()
+    /// <summary>
+    /// 用途に対応するモデルID。<paramref name="purpose"/> を渡さない場合は、実行中にピン留めされた
+    /// モデル（ピン留め前なら自動用）を返す。
+    ///
+    /// **課金確認ダイアログのように実行開始（ピン留め）より前に呼ぶ箇所では、必ず用途を渡すこと。**
+    /// 渡さないと手動校正でも自動用モデルの名前と単価を表示してしまう。
+    /// </summary>
+    private string ModelForPurpose(ProofreadingPurpose? purpose)
+        => purpose is { } value && _proofreadingClient is ProofreadingClientRouter router
+            ? router.ModelFor(value)
+            : _proofreadingClient.Model;
+
+    private string? GetActiveApiKey(ProofreadingPurpose? purpose = null)
     {
-        ApiProvider provider = ProofreadingModelCatalog.ProviderOf(_proofreadingClient.Model);
+        ApiProvider provider =
+            ProofreadingModelCatalog.ProviderOf(ModelForPurpose(purpose));
         return _credentials.GetApiKey(provider, ApiKeySourceFor(provider));
     }
 
@@ -3179,9 +3199,9 @@ public partial class MainWindow : Window
             _ => ApiKeySource.Unspecified,
         };
 
-    private string ActiveProviderName()
+    private string ActiveProviderName(ProofreadingPurpose? purpose = null)
         => ProofreadingModelCatalog.ProviderDisplayName(
-            ProofreadingModelCatalog.ProviderOf(_proofreadingClient.Model));
+            ProofreadingModelCatalog.ProviderOf(ModelForPurpose(purpose)));
 
     private void ScheduleStatusUpdate()
     {

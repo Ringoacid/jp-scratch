@@ -131,8 +131,6 @@ public partial class SettingsWindow : Window
         LoadStyleGuideControls();
         LoadRejectionTrendControls();
 
-        LoadPricingControls();
-
         string[] modelNames = ProofreadingModelCatalog.SupportedModels
             .Select(ProofreadingModelCatalog.DisplayName)
             .ToArray();
@@ -149,6 +147,11 @@ public partial class SettingsWindow : Window
             s.ManualProofreadingTimeoutSeconds.ToString(CultureInfo.InvariantCulture);
         _loadingProofreadingModelControls = false;
         RefreshTimeoutHint();
+
+        // 単価・資格情報パネルは「自動用／手動用のどちらで使うか」をモデルのコンボから読むため、
+        // 上のコンボを埋めた後に読み込む。先に呼ぶと SelectedItem が未設定で、使用中バッジが
+        // 既定モデル基準の誤った表示になる。
+        LoadPricingControls();
 
         AutoSaveBox.Text = s.AutoSaveDebounceMs.ToString(CultureInfo.InvariantCulture);
         TrashDaysBox.Text = s.TrashRetentionDays.ToString(CultureInfo.InvariantCulture);
@@ -920,6 +923,10 @@ public partial class SettingsWindow : Window
         {
             _loadingPricingControls = true;
             PricingModelCombo.SelectedItem = model;
+            // 資格情報パネルも一緒に切り替わるので、退避は選択が変わる前に必ず済ませる
+            // （PricingModelCombo_SelectionChanged と同じ規約。順序を誤ると入力途中のキーが
+            // 別プロバイダーのスロットへ入る）。
+            StashShownCredentialProvider();
             _selectedPricingModel = model;
             ShowSelectedPricingModel();
             _loadingPricingControls = false;

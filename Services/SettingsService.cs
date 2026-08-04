@@ -159,12 +159,13 @@ internal sealed class SettingsService
     {
         if (string.IsNullOrWhiteSpace(s.ProofreadingModel)) return;
 
-        if (ProofreadingModelCatalog.IsSupported(s.ProofreadingModel))
-        {
-            s.AutoProofreadingModel = s.ProofreadingModel.Trim();
-            s.ManualProofreadingModel = s.ProofreadingModel.Trim();
-        }
+        (s.AutoProofreadingModel, s.ManualProofreadingModel) =
+            ProofreadingModelCatalog.MigrateLegacyModel(
+                s.ProofreadingModel,
+                s.AutoProofreadingModel,
+                s.ManualProofreadingModel);
 
+        // 移行済みの印。以降は旧プロパティを参照しない。
         s.ProofreadingModel = "";
     }
 

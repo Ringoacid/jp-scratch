@@ -170,6 +170,24 @@ public static class ProofreadingModelCatalog
     public static bool SupportsAdaptiveThinking(string? model)
         => Get(model).Id is "claude-fable-5" or "claude-opus-5" or DefaultManualModel;
 
+    /// <summary>
+    /// v3 までの単一モデル設定を、自動用・手動用の 2 枠へ移す（要件 3.5.1）。
+    /// 既存ユーザーが移行前と同じ挙動で起動できるよう、旧設定の値を両方へコピーする。
+    /// <see cref="AppSettings"/> へ依存しない純粋な関数にしてあるので、そのまま検証できる。
+    /// </summary>
+    /// <returns>移行後の（自動用モデル, 手動用モデル）。旧設定が空、または未知のモデルIDなら引数のまま。</returns>
+    public static (string Automatic, string Manual) MigrateLegacyModel(
+        string? legacyModel,
+        string automatic,
+        string manual)
+    {
+        if (string.IsNullOrWhiteSpace(legacyModel)) return (automatic, manual);
+        if (!IsSupported(legacyModel)) return (automatic, manual);
+
+        string migrated = legacyModel.Trim();
+        return (migrated, migrated);
+    }
+
     public static TimeSpan ClampTimeout(TimeSpan value)
         => value < MinimumRequestTimeout ? MinimumRequestTimeout
             : value > MaximumRequestTimeout ? MaximumRequestTimeout
