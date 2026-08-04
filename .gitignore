@@ -17,3 +17,6 @@ obj/
 
 # Python バイトコードキャッシュ
 __pycache__/
+
+# Claude Code のローカル専用設定（共有しない）
+.claude/settings.local.json

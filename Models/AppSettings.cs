@@ -124,7 +124,13 @@ public sealed class AppSettings
     /// <c>0以下は無制限</c>として扱う（自動チェックのガード・進捗バーとも無効になる）。
     /// 負値は不正な入力として <see cref="SettingsService"/> の正規化で 0（無制限）へ倒す。
     /// </summary>
-    public decimal MonthlyLimitUsd { get; set; } = 2.00m;
+    public decimal MonthlyLimitUsd { get; set; } = DefaultMonthlyLimitUsd;
+
+    /// <summary>
+    /// 月間上限額の既定値。settings.json を読めなかった起動ではこの値で動くため、
+    /// 起動時の警告文言（<c>App.OnStartup</c>）からも参照する。
+    /// </summary>
+    internal const decimal DefaultMonthlyLimitUsd = 2.00m;
 
     /// <summary>
     /// 上限接近の警告閾値。0〜1の割合で、既定 0.80（＝80%）。

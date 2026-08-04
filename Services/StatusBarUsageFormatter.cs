@@ -86,9 +86,13 @@ internal static class StatusBarUsageFormatter
                     : $"{usdText} (¥—)";
             case StatusBarCurrencyFormat.Jpy:
             default:
+                // 円が欠損している期間は「¥—」だけにせず、ドル額も併記する。
+                // 要件 3.5.3:「キャッシュがまったくない状態で失敗した場合は ¥— と表示し、$ のみ表示する」。
+                // ¥— 単独だと、為替を取得できていない間は自分がいくら使ったのかを確認する手段が
+                // 画面から消えてしまう（課金履歴を開かないと分からない）。
                 return jpy is decimal j2
                     ? UsageFormatting.FormatJpy(j2)
-                    : "¥—";
+                    : $"{usdText} (¥—)";
         }
     }
 

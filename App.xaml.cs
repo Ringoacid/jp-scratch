@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using JpScratch.Infrastructure;
+using JpScratch.Models;
 using JpScratch.Services;
 using JpScratch.Views;
 using Application = System.Windows.Application;
@@ -102,13 +103,41 @@ public partial class App : Application
         {
             // 本文ファイルがあるのに読めなかったタブは開かずに残してある。ファイルは無傷なので
             // メモ帳等で直接開けるが、黙って消えると気づけないため起動時に必ず伝える。
-            var names = string.Join(Environment.NewLine, _tabs.LoadFailures.Take(10));
-            var overflow = _tabs.LoadFailures.Count > 10
-                ? $"{Environment.NewLine}ほか {_tabs.LoadFailures.Count - 10} 件"
-                : "";
             MessageBox.Show(
                 $"{_tabs.LoadFailures.Count} 個のタブの本文を読み込めませんでした（ファイルは残っています）。\n\n" +
-                names + overflow,
+                TabManager.FormatTitles(_tabs.LoadFailures),
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+
+        if (_settings.IsReadFailed)
+        {
+            // settings.json は無傷のまま残っており、この起動は既定値で動く。黙っていると
+            // 「設定が初期化された」と誤解したうえで、次の保存で本当に初期化されたと思われる。
+            //
+            // 直し方は失敗の理由でまるで違う。共有違反なら待つ／再起動するだけで直るが、
+            // 文字コードが不正なら再起動しても永久に直らない。同じ文面で済ませると、
+            // 後者のユーザーは再起動を繰り返すだけで、掃除・圧縮が止まったまま気づけない。
+            bool isEncoding = _settings.ReadFailure == FileReadFailure.InvalidEncoding;
+
+            MessageBox.Show(
+                (isEncoding
+                    ? "設定ファイル（settings.json）が UTF-8 として読めませんでした。ファイルは" +
+                      "無傷のまま残してあるため、既定の設定で動作し、設定の自動保存は行いません。\n\n"
+                    : "設定ファイル（settings.json）を読み込めませんでした。ファイルは無傷のまま" +
+                      "残してあるため、今回の起動だけ既定の設定で動作し、設定の自動保存は行いません。\n\n") +
+                "設定値に依存する破壊的な処理（ゴミ箱の期限削除・課金明細の圧縮・" +
+                "スタートアップ登録の同期）はこの起動では行いません。\n" +
+                $"一方、校正の月間上限額は既定値（${AppSettings.DefaultMonthlyLimitUsd:0.00}）で" +
+                "動作します。これより低い上限を設定していた場合は、下記の方法で直してください。\n\n" +
+                (isEncoding
+                    ? "外部のエディタで Shift_JIS（ANSI）等として保存された可能性があります。" +
+                      "この状態は再起動しても直りません。settings.json を UTF-8 で保存し直すか、" +
+                      "設定画面を開いて OK を押してください（OK を押すと、今表示されている" +
+                      "既定の設定でファイルを上書きします）。"
+                    : "他のアプリ（同期ソフト・ウイルス対策など）がファイルを掴んでいる可能性が" +
+                      "あります。アプリを再起動すると元の設定に戻ります。"),
                 "JP Scratch",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -150,11 +179,21 @@ public partial class App : Application
         // tray が使えるようになった直後にもう一度だけ評価し直し、取りこぼしを防ぐ。
         _window.RecheckUsageLimitNotificationAfterTrayReady();
 
-        // 後から起動された自分自身に呼び戻してもらうための受け口
-        _singleInstance.ListenForActivation(
-            () => Dispatcher.Invoke(() => _window?.ShowAndFocus()));
+        // 後から起動された自分自身に呼び戻してもらうための受け口。
+        // Invoke（同期）は UI スレッド側の例外を ThreadPool のコールバックへ再スローするため、
+        // BeginInvoke（非同期）にして呼び戻し元スレッドを巻き込まない。終了処理が始まっていると
+        // Dispatcher へのキューイング自体が失敗するので、その場合は何もしない。
+        _singleInstance.ListenForActivation(() =>
+        {
+            if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+            Dispatcher.BeginInvoke(() => _window?.ShowAndFocus());
+        });
 
-        StartupRegistration.Sync(_settings.Current.StartWithWindows);
+        // 設定を読めなかった起動では、既定値（StartWithWindows=true）でレジストリを書き換えない。
+        // テーマやホットキーが既定へ倒れるのはこの起動限りだが、スタートアップ登録は残ってしまう
+        // ＝一時的な読み取り失敗が恒久的な設定変更になる（settings.json を上書きしないのと同じ理由）。
+        if (!_settings.IsReadFailed)
+            StartupRegistration.Sync(_settings.Current.StartWithWindows);
 
         var startedByWindows = e.Args.Any(a => a.Equals("--startup", StringComparison.OrdinalIgnoreCase));
         if (startedByWindows)
@@ -187,19 +226,85 @@ public partial class App : Application
 
     private void ExitApplication()
     {
-        // 保存失敗で Shutdown() に到達できず「終了できない」状態を避ける。保存そのものは
-        // OnExit 側でも再試行される（例外を握って終了処理へ進む）。原因はログへ残す。
+        // 終了確認ダイアログの間はタイマー発火による保存を止める。WPF のモーダルは入れ子の
+        // メッセージループを回すため、止めないとダイアログ表示中に自動保存・再試行タイマーが
+        // 発火して SaveDirty へ再入する（CLAUDE.md の不変条件）。
+        bool exiting = false;
+        _tabs?.SuspendAutoSave();
         try
         {
-            _tabs?.SaveDirty();
+            exiting = TrySaveBeforeExit();
         }
-        catch (Exception ex)
+        finally
         {
-            WriteCrashLog(ex, "トレイ終了時の保存");
+            // アプリへ戻す場合は再試行を必ず戻す。止めたままだと、終了を取りやめた後に
+            // 未保存タブが誰にも保存されなくなる。
+            if (!exiting) _tabs?.ResumeAutoSave();
+        }
+
+        if (!exiting)
+        {
+            // 終了はトレイから呼ばれる＝ウィンドウは隠れていることが多い。取りやめても
+            // 画面が出てこなければ、ユーザーは原因を直しようがない。
+            _window?.ShowAndFocus();
+            return;
         }
 
         Shutdown();
     }
+
+    /// <summary>
+    /// 終了前の保存。失敗したら「再試行 / このまま終了 / 終了を取りやめる」を選ばせる。
+    /// 戻り値は終了してよいか。
+    ///
+    /// 警告するだけで必ず終了していた頃は、ユーザーが原因（同期ソフトの一時ロック等）を
+    /// 取り除いて保存し直す手段が無かった。「保存」を見せない設計では、ここが編集を守る
+    /// 最後の分岐点になる。
+    /// </summary>
+    private bool TrySaveBeforeExit()
+    {
+        while (true)
+        {
+            // 保存失敗で Shutdown() に到達できず「終了できない」状態を避ける。保存そのものは
+            // OnExit 側でも再試行される（例外を握って終了処理へ進む）。原因はログへ残す。
+            IReadOnlyList<string> failures;
+            try
+            {
+                failures = _tabs?.SaveDirty() ?? [];
+            }
+            catch (Exception ex)
+            {
+                WriteCrashLog(ex, "トレイ終了時の保存");
+                failures = DirtyTabTitles();
+            }
+
+            if (failures.Count == 0) return true;
+
+            // 「保存」を見せない設計なので、ここで黙ると編集が静かに消える。本文ファイルには
+            // 前回保存できた内容が残っている＝今回の編集ぶんだけが失われることを正直に伝える。
+            // 「保存せず終了」とは書かない。OnExit がもう一度保存を試みるため、そこで成功すれば
+            // 失われない（起きるかもしれないことを断定しない）。
+            MessageBoxResult choice = MessageBox.Show(
+                $"{failures.Count} 個のタブを保存できませんでした。" +
+                "本文ファイルには前回保存できた内容が残っています。\n\n" +
+                TabManager.FormatTitles(failures) + "\n\n" +
+                "同期ソフトやウイルス対策がファイルを掴んでいる可能性があります。\n\n" +
+                "［はい］　　　　　もう一度保存する\n" +
+                "［いいえ］　　　　このまま終了する（保存できなかった編集は失われます）\n" +
+                "［キャンセル］　　終了を取りやめてアプリへ戻る",
+                "JP Scratch",
+                MessageBoxButton.YesNoCancel,
+                MessageBoxImage.Warning,
+                MessageBoxResult.Cancel);
+
+            if (choice == MessageBoxResult.Yes) continue;
+            return choice == MessageBoxResult.No;
+        }
+    }
+
+    /// <summary>未保存のまま残っているタブのタイトル（＝保存できなかったタブ）。</summary>
+    private IReadOnlyList<string> DirtyTabTitles()
+        => _tabs?.Tabs.Where(tab => tab.IsDirty).Select(tab => tab.Title).ToArray() ?? [];
 
     /// <summary>
     /// 環境変数によるAPIキー（GEMINI_API_KEY / OPENAI_API_KEY）が見つかったとき、使うかどうかを
@@ -286,22 +391,44 @@ public partial class App : Application
         WriteCrashLog(e.Exception, "UI スレッド");
 
         // 本文を道連れにしない。保存してから、続行できるなら続行する。
+        IReadOnlyList<string> failures;
         try
         {
-            _tabs?.SaveDirty();
+            failures = _tabs?.SaveDirty() ?? [];
         }
         catch (Exception ex)
         {
             WriteCrashLog(ex, "クラッシュ時の保存");
+            failures = DirtyTabTitles();
         }
 
-        MessageBox.Show(
-            $"予期しないエラーが発生しました。編集中の内容は保存されています。{Environment.NewLine}{Environment.NewLine}" +
-            $"{e.Exception.Message}{Environment.NewLine}{Environment.NewLine}" +
-            $"詳細: {AppPaths.CrashLogFile}",
-            "JP Scratch",
-            MessageBoxButton.OK,
-            MessageBoxImage.Warning);
+        // 保存できたかどうかを実際の結果から書く。ここを固定文言（「保存されています」）に
+        // していると、保存失敗が原因でこのハンドラへ来た場合に事実と逆の案内になる。
+        string saveState = failures.Count == 0
+            ? "編集中の内容は保存されています。"
+            : $"次の {failures.Count} 個のタブは保存できませんでした" +
+              $"（本文ファイルには前回保存できた内容が残っています）。{Environment.NewLine}" +
+              TabManager.FormatTitles(failures);
+
+        // ダイアログの間はタイマー発火による保存を止める。WPF のモーダルは入れ子のメッセージ
+        // ループを回すため、止めないと保存失敗後のバックオフ再試行がこのダイアログを読んでいる
+        // 最中に消化され、ユーザーが操作できるようになった頃には再試行の上限に達している。
+        // e.Handled = true でアプリは続くので、必ず再開する（止めたままだと自動保存が死ぬ）。
+        _tabs?.SuspendAutoSave();
+        try
+        {
+            MessageBox.Show(
+                $"予期しないエラーが発生しました。{saveState}{Environment.NewLine}{Environment.NewLine}" +
+                $"{e.Exception.Message}{Environment.NewLine}{Environment.NewLine}" +
+                $"詳細: {AppPaths.CrashLogFile}",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _tabs?.ResumeAutoSave();
+        }
 
         e.Handled = true;
     }

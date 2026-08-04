@@ -17,6 +17,7 @@ internal sealed class ProofreadingSession : IDisposable
     {
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _document.Changing += OnDocumentChanging;
+        _document.Changed += OnDocumentChanged;
     }
 
     internal IReadOnlyList<ProofreadingProposal> Proposals => _proposals;
@@ -132,8 +133,11 @@ internal sealed class ProofreadingSession : IDisposable
 
     /// <summary>
     /// 理由つき別案生成が成功したとき、本文を変えずに同じ範囲の提案だけを差し替える。
+    /// 差し替えた新しい提案を返す（失敗時は null）。呼び出し側は返ってきた提案を選択し直すこと。
+    /// 元の提案インスタンスは失効するため、そのままだと選択が先頭の提案へ飛び、
+    /// 課金して得た別案が未選択のまま Ctrl+. で別物が適用されてしまう。
     /// </summary>
-    internal bool TryReplaceSuggestion(
+    internal ProofreadingProposal? TryReplaceSuggestion(
         ProofreadingProposal proposal,
         string alternative)
     {
@@ -144,7 +148,7 @@ internal sealed class ProofreadingSession : IDisposable
             string.Equals(alternative, proposal.Original, StringComparison.Ordinal) ||
             string.Equals(alternative, proposal.Suggestion, StringComparison.Ordinal))
         {
-            return false;
+            return null;
         }
 
         int start = proposal.Start;
@@ -154,7 +158,7 @@ internal sealed class ProofreadingSession : IDisposable
                 StringComparison.Ordinal))
         {
             RemoveAsInvalid(proposal);
-            return false;
+            return null;
         }
 
         var replacement = new ProofreadingProposal(
@@ -171,7 +175,7 @@ internal sealed class ProofreadingSession : IDisposable
         int index = _proposals.IndexOf(proposal);
         _proposals[index] = replacement;
         Changed?.Invoke();
-        return true;
+        return replacement;
     }
 
     internal void Clear()
@@ -192,10 +196,33 @@ internal sealed class ProofreadingSession : IDisposable
             return;
 
         _document.Changing -= OnDocumentChanging;
+        _document.Changed -= OnDocumentChanged;
         foreach (ProofreadingProposal proposal in _proposals)
             proposal.Invalidate();
         _proposals.Clear();
         _disposed = true;
+    }
+
+    /// <summary>
+    /// 本文の変更が確定したあとに、生き残った提案の再通知だけを行う。
+    ///
+    /// 失効判定は Changing 側でなければならない（変更前の座標で「この編集が提案範囲に
+    /// 交差するか」を判断するため）。一方、購読側が作る描画スナップショットは
+    /// <see cref="ProofreadingProposal.Start"/>（TextAnchor 由来）を読むので、Changing の時点では
+    /// まだアンカーが動いておらず**編集前の座標**で固まってしまう。さらに提案と交差しない編集では
+    /// Changing 側が一度も Changed を発火しないため、スナップショットが更新されないまま
+    /// 位置だけがずれ、インライン差分のハイライトが消える・ずれる（本文の誤置換は
+    /// ConstructElement の原文照合ガードが防いでいるので起きない）。
+    ///
+    /// そこで「失効判定は Changing、スナップショット再構築は Changed」と役割を分ける。
+    /// </summary>
+    private void OnDocumentChanged(object? sender, DocumentChangeEventArgs change)
+    {
+        // 提案の適用（TryApply）は自分で Changed?.Invoke() まで済ませるので二重に通知しない。
+        if (_isApplyingProposal || _disposed || _proposals.Count == 0)
+            return;
+
+        Changed?.Invoke();
     }
 
     private void OnDocumentChanging(object? sender, DocumentChangeEventArgs change)

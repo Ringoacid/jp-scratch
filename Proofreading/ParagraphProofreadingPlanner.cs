@@ -37,25 +37,51 @@ internal sealed record ProofreadingPlan(
 /// <summary>
 /// 文書を段落へ分け、前回送信済みのスナップショットとの差から校正対象を決める。
 /// API が成功したときだけ <see cref="MarkSent"/> を呼ぶことで、失敗した対象を再試行できる。
+///
+/// 送信済みの記録は**段落ではなくパート（＝1 リクエスト）単位**で持つ。段落単位だと、
+/// 2,000 文字を超えて複数リクエストへ分割された長い段落で「前半は成功・後半で API エラー」に
+/// なったとき、段落まるごとが未送信へ戻り、次回の校正で課金済みの前半も再送される。
+/// 2,000 文字以下の段落はパートが 1 つだけでその本文が段落本文と一致するため、
+/// パートのハッシュは段落のハッシュと同じ値になる（短い文書での挙動は変わらない）。
 /// </summary>
 internal sealed class ParagraphProofreadingPlanner
 {
     internal const int MaxTargetLength = 2000;
 
-    private IReadOnlyList<string> _lastSentHashes = [];
+    /// <summary>
+    /// 文脈（前後 1 段落、要件 3.3.2）として添付する長さの上限。校正対象の分割単位と同じ 2,000 文字。
+    ///
+    /// 要件は文脈の長さを規定していないが、無制限のままだと「5 万文字のログを貼った下に短い段落を
+    /// 書く」という普通の使い方で、数十文字の校正のたびにその全文を毎回送ることになる
+    /// （1 リクエストあたり約 3 万トークンが青天井で課金される）。文脈は判断材料でしかなく、
+    /// 対象から遠い部分ほど価値が下がるため、対象に隣接する側から切り詰める。
+    /// </summary>
+    internal const int MaxContextLength = 2000;
+
+    /// <summary>送信済みパートの本文ハッシュ（段落→パートの順に並べた平坦な一覧）。</summary>
+    private IReadOnlyList<string> _lastSentPartHashes = [];
 
     internal ProofreadingPlan CreateAutomaticPlan(string documentText)
     {
         ArgumentNullException.ThrowIfNull(documentText);
 
         IReadOnlyList<ProofreadingParagraph> paragraphs = SplitParagraphs(documentText);
+        IReadOnlyList<IReadOnlyList<TextPart>> parts = SplitAllParagraphs(paragraphs);
         HashSet<int> unchanged = FindUnchangedCurrentIndexes(
-            _lastSentHashes,
-            paragraphs.Select(paragraph => paragraph.ContentHash).ToArray());
-        IReadOnlyList<ProofreadingRequest> requests = paragraphs
-            .Where(paragraph => !unchanged.Contains(paragraph.Index))
-            .SelectMany(paragraph => CreateParagraphRequests(paragraphs, paragraph))
-            .ToArray();
+            _lastSentPartHashes,
+            FlattenPartHashes(parts));
+
+        List<ProofreadingRequest> requests = [];
+        int flatIndex = 0;
+        for (int paragraphIndex = 0; paragraphIndex < paragraphs.Count; paragraphIndex++)
+        {
+            for (int partIndex = 0; partIndex < parts[paragraphIndex].Count; partIndex++, flatIndex++)
+            {
+                if (unchanged.Contains(flatIndex))
+                    continue;
+                requests.Add(CreateRequest(paragraphs, parts, paragraphIndex, partIndex));
+            }
+        }
 
         return new ProofreadingPlan(documentText, paragraphs, requests);
     }
@@ -117,9 +143,7 @@ internal sealed class ParagraphProofreadingPlanner
     internal void MarkSent(ProofreadingPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
-        _lastSentHashes = plan.Paragraphs
-            .Select(paragraph => paragraph.ContentHash)
-            .ToArray();
+        _lastSentPartHashes = FlattenPartHashes(SplitAllParagraphs(plan.Paragraphs));
     }
 
     /// <summary>
@@ -128,47 +152,62 @@ internal sealed class ParagraphProofreadingPlanner
     /// 本文変更・タブ切替で中断しても、完了済みで内容が変わっていない段落の再送（二重課金）を防ぎ、
     /// 未送信の段落は次回の自動プランで再試行できる。
     /// <paramref name="completedRequestCount"/> は完了済みリクエスト数（＝ループの現在 index）。
-    /// <see cref="ProofreadingRequest"/> は段落→パートの順で並ぶため、最後のパートが完了していれば
-    /// その段落の全パートが送信済みである。
-    /// 注意: <see cref="_lastSentHashes"/> は過去の実行ぶんも含む累積状態なので、丸ごと置き換えては
-    /// いけない。「今回完了した段落だけを入れる」方式だと、前回送信済みで今回のプランに現れない
-    /// （＝変更なしと判定された）段落が未送信に戻り、次回再送＝二重課金になる。
+    /// 未送信として残すのは、その位置以降のリクエストが指す**パート**だけ。同じ段落でも
+    /// 完了済みのパートは送信済みのまま残す（長い段落の前半だけ成功した場合の再送＝二重課金を防ぐ）。
+    /// 注意: <see cref="_lastSentPartHashes"/> は過去の実行ぶんも含む累積状態なので、丸ごと
+    /// 置き換えてはいけない。「今回完了したぶんだけを入れる」方式だと、前回送信済みで今回の
+    /// プランに現れない（＝変更なしと判定された）パートが未送信に戻り、次回再送＝二重課金になる。
     /// </summary>
     internal void MarkSent(ProofreadingPlan plan, int completedRequestCount)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
-        HashSet<int> incomplete = plan.Requests
-            .Skip(completedRequestCount)
-            .Select(request => request.ParagraphIndex)
-            .ToHashSet();
-
-        _lastSentHashes = plan.Paragraphs
-            .Where(paragraph => !incomplete.Contains(paragraph.Index))
-            .Select(paragraph => paragraph.ContentHash)
-            .ToArray();
+        MarkSentExcept(
+            plan,
+            plan.Requests
+                .Skip(completedRequestCount)
+                .Select(request => (request.ParagraphIndex, request.PartIndex))
+                .ToHashSet());
     }
 
     /// <summary>
     /// 校正ループが途中で中断された（本文編集で未送信リクエストを中止した）ときの送信済み記録。
-    /// <paramref name="unsentParagraphIndexes"/> に含まれる段落だけを未送信として残し、
-    /// それ以外（送信完了・変更なしと判定された段落）は送信済みのまま記録する。
+    /// <paramref name="unsentParts"/> に含まれる (段落 index, パート index) だけを未送信として残し、
+    /// それ以外（送信完了・変更なしと判定されたパート）は送信済みのまま記録する。
     /// <see cref="MarkSent(ProofreadingPlan, int)"/> が「未送信＝完了位置以降のサフィックス」と
-    /// 決め打ちなのに対し、こちらは任意の段落集合を未送信にできる。部分結果保持
-    /// （proofreading-ux-fixes-plan.md §7.2）では、本文編集で個別に破棄された段落だけを
+    /// 決め打ちなのに対し、こちらは任意のパート集合を未送信にできる。部分結果保持
+    /// （proofreading-ux-fixes-plan.md §7.2）では、本文編集で個別に破棄されたパートだけを
     /// 未送信にしたいため、サフィックス表現では済まない。
-    /// 注意: <see cref="_lastSentHashes"/> は過去の実行ぶんも含む累積状態なので、丸ごと置き換えては
-    /// いけない。「今回完了した段落だけを入れる」方式だと、前回送信済みで今回のプランに現れない
-    /// （＝変更なしと判定された）段落が未送信に戻り、次回再送＝二重課金になる。
+    /// 注意: <see cref="_lastSentPartHashes"/> は過去の実行ぶんも含む累積状態なので、丸ごと
+    /// 置き換えてはいけない。「今回完了したぶんだけを入れる」方式だと、前回送信済みで今回の
+    /// プランに現れない（＝変更なしと判定された）パートが未送信に戻り、次回再送＝二重課金になる。
     /// </summary>
-    internal void MarkSent(ProofreadingPlan plan, IReadOnlySet<int> unsentParagraphIndexes)
+    internal void MarkSent(
+        ProofreadingPlan plan,
+        IReadOnlySet<(int ParagraphIndex, int PartIndex)> unsentParts)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        MarkSentExcept(plan, unsentParts);
+    }
 
-        _lastSentHashes = plan.Paragraphs
-            .Where(paragraph => !unsentParagraphIndexes.Contains(paragraph.Index))
-            .Select(paragraph => paragraph.ContentHash)
-            .ToArray();
+    private void MarkSentExcept(
+        ProofreadingPlan plan,
+        IReadOnlySet<(int ParagraphIndex, int PartIndex)> unsentParts)
+    {
+        IReadOnlyList<IReadOnlyList<TextPart>> parts = SplitAllParagraphs(plan.Paragraphs);
+
+        List<string> sent = [];
+        for (int paragraphIndex = 0; paragraphIndex < parts.Count; paragraphIndex++)
+        {
+            for (int partIndex = 0; partIndex < parts[paragraphIndex].Count; partIndex++)
+            {
+                if (unsentParts.Contains((paragraphIndex, partIndex)))
+                    continue;
+                sent.Add(Hash(parts[paragraphIndex][partIndex].Text));
+            }
+        }
+
+        _lastSentPartHashes = sent;
     }
 
     /// <summary>
@@ -225,24 +264,51 @@ internal sealed class ParagraphProofreadingPlanner
             }
         }
 
-        // 「適用前の時点で送信済みだった段落」の index 集合を得る。
+        // 送信済みの記録はパート単位なので、ここでも同じ粒度で突き合わせる。
+        IReadOnlyList<IReadOnlyList<TextPart>> beforeParts = SplitAllParagraphs(before);
+        IReadOnlyList<IReadOnlyList<TextPart>> afterParts = SplitAllParagraphs(after);
+
+        // どこかの段落でパート数が変われば、平坦な index の対応が付かない（適用によって
+        // 2,000 文字の分割境界を跨いだ等）。判定に迷う場合は何もしない＝再校正される側へ倒す。
+        for (int index = 0; index < before.Count; index++)
+        {
+            if (beforeParts[index].Count != afterParts[index].Count)
+                return;
+        }
+
+        // 「適用前の時点で送信済みだったパート」の平坦 index 集合を得る。
         HashSet<int> sentBefore = FindUnchangedCurrentIndexes(
-            _lastSentHashes,
-            before.Select(paragraph => paragraph.ContentHash).ToArray());
+            _lastSentPartHashes,
+            FlattenPartHashes(beforeParts));
 
-        // 適用段落が未送信だったなら送信済みに化けさせない（手動の選択範囲校正は MarkSent を
-        // 呼ばないため、その提案由来の段落は未送信でありうる）。no-op して再校正される側へ倒す。
-        if (!sentBefore.Contains(appliedIndex))
-            return;
+        // 適用段落のパートが 1 つでも未送信なら送信済みに化けさせない（手動の選択範囲校正は
+        // MarkSent を呼ばないため、その提案由来の段落は未送信でありうる）。
+        // no-op して再校正される側へ倒す。
+        int appliedFlatStart = 0;
+        for (int index = 0; index < appliedIndex; index++)
+            appliedFlatStart += beforeParts[index].Count;
+        for (int offset = 0; offset < beforeParts[appliedIndex].Count; offset++)
+        {
+            if (!sentBefore.Contains(appliedFlatStart + offset))
+                return;
+        }
 
-        // 段落数が等しく適用段落以外のハッシュも一致しているので、index の対応はそのまま使える。
-        // 送信済み集合に入らない段落（未送信）と文書から消えた段落のハッシュは落ちるが、
-        // いずれも「余分に1回校正する」方向のずれで安全。
-        _lastSentHashes = after
-            .Where((paragraph, index) => sentBefore.Contains(index))
-            .Select(paragraph => paragraph.ContentHash)
+        // 段落数もパート数も等しく、適用段落以外のハッシュも一致しているので、平坦 index の
+        // 対応はそのまま使える。送信済み集合に入らないパート（未送信）と文書から消えたパートの
+        // ハッシュは落ちるが、いずれも「余分に1回校正する」方向のずれで安全。
+        _lastSentPartHashes = FlattenPartHashes(afterParts)
+            .Where((hash, index) => sentBefore.Contains(index))
             .ToArray();
     }
+
+    /// <summary>各段落を送信単位（パート）へ分割する。段落 index → パート一覧。</summary>
+    private static IReadOnlyList<IReadOnlyList<TextPart>> SplitAllParagraphs(
+        IReadOnlyList<ProofreadingParagraph> paragraphs)
+        => paragraphs.Select(paragraph => SplitTarget(paragraph.Text)).ToArray();
+
+    /// <summary>段落→パートの順に並べた平坦なハッシュ一覧。</summary>
+    private static string[] FlattenPartHashes(IReadOnlyList<IReadOnlyList<TextPart>> parts)
+        => parts.SelectMany(list => list.Select(part => Hash(part.Text))).ToArray();
 
     internal static IReadOnlyList<ProofreadingParagraph> SplitParagraphs(string text)
     {
@@ -274,36 +340,44 @@ internal sealed class ParagraphProofreadingPlanner
         return paragraphs;
     }
 
-    private static IEnumerable<ProofreadingRequest> CreateParagraphRequests(
+    /// <summary>
+    /// 1 パートぶんのリクエストを作る。<c>PartIndex</c> / <c>PartCount</c> は**分割後の全パート**に
+    /// 対する位置であり、送信対象として選ばれたリクエストの並びではない。ここがずれると
+    /// (段落 index, パート index) を鍵にした送信済み判定が壊れる。
+    /// </summary>
+    private static ProofreadingRequest CreateRequest(
         IReadOnlyList<ProofreadingParagraph> paragraphs,
-        ProofreadingParagraph paragraph)
+        IReadOnlyList<IReadOnlyList<TextPart>> parts,
+        int paragraphIndex,
+        int partIndex)
     {
-        IReadOnlyList<TextPart> parts = SplitTarget(paragraph.Text);
-        for (int index = 0; index < parts.Count; index++)
-        {
-            TextPart part = parts[index];
-            string? before = index > 0
-                ? parts[index - 1].Text
-                : paragraph.Index > 0
-                    ? paragraphs[paragraph.Index - 1].Text
-                    : null;
-            string? after = index + 1 < parts.Count
-                ? parts[index + 1].Text
-                : paragraph.Index + 1 < paragraphs.Count
-                    ? paragraphs[paragraph.Index + 1].Text
-                    : null;
+        ProofreadingParagraph paragraph = paragraphs[paragraphIndex];
+        IReadOnlyList<TextPart> paragraphParts = parts[paragraphIndex];
+        TextPart part = paragraphParts[partIndex];
 
-            yield return new ProofreadingRequest(
-                paragraph.Start + part.Start,
-                part.Length,
-                part.Text,
-                before,
-                after,
-                paragraph.ContentHash,
-                paragraph.Index,
-                index,
-                parts.Count);
-        }
+        string? before = partIndex > 0
+            ? paragraphParts[partIndex - 1].Text
+            : paragraphIndex > 0
+                ? paragraphs[paragraphIndex - 1].Text
+                : null;
+        string? after = partIndex + 1 < paragraphParts.Count
+            ? paragraphParts[partIndex + 1].Text
+            : paragraphIndex + 1 < paragraphs.Count
+                ? paragraphs[paragraphIndex + 1].Text
+                : null;
+
+        return new ProofreadingRequest(
+            paragraph.Start + part.Start,
+            part.Length,
+            part.Text,
+            TrimContext(before, keepTail: true),
+            TrimContext(after, keepTail: false),
+            // 送信済み判定の粒度に合わせ、段落ではなくパート本文のハッシュを持たせる
+            // （CreateSelectionPlan も同じ）。
+            Hash(part.Text),
+            paragraphIndex,
+            partIndex,
+            paragraphParts.Count);
     }
 
     private static IReadOnlyList<TextPart> SplitTarget(string text)
@@ -475,8 +549,10 @@ internal sealed class ParagraphProofreadingPlanner
         }
 
         return contextStart < selectionStart
-            ? document.Substring(contextStart, selectionStart - contextStart)
-                .TrimEnd('\r', '\n')
+            ? TrimContext(
+                document.Substring(contextStart, selectionStart - contextStart)
+                    .TrimEnd('\r', '\n'),
+                keepTail: true)
             : null;
     }
 
@@ -501,9 +577,42 @@ internal sealed class ParagraphProofreadingPlanner
         }
 
         return contextEnd > selectionEnd
-            ? document.Substring(selectionEnd, contextEnd - selectionEnd)
-                .TrimStart('\r', '\n')
+            ? TrimContext(
+                document.Substring(selectionEnd, contextEnd - selectionEnd)
+                    .TrimStart('\r', '\n'),
+                keepTail: false)
             : null;
+    }
+
+    /// <summary>
+    /// 文脈を <see cref="MaxContextLength"/> まで切り詰める。<paramref name="keepTail"/> が true なら
+    /// 末尾側（＝校正対象の直前）を、false なら先頭側（＝校正対象の直後）を残す。
+    /// 切る位置は書記素クラスタの境界に合わせる（サロゲートペア・結合文字を割らない）。
+    /// </summary>
+    private static string? TrimContext(string? context, bool keepTail)
+    {
+        if (context is null || context.Length <= MaxContextLength)
+            return context;
+
+        List<int> elementStarts = [];
+        for (int index = 0; index < context.Length;)
+        {
+            elementStarts.Add(index);
+            index += StringInfo.GetNextTextElement(context, index).Length;
+        }
+
+        if (keepTail)
+        {
+            // 上限に収まる最長の末尾 = 「残り長さが上限以下」になる最初の書記素境界。
+            int cut = elementStarts.FirstOrDefault(
+                start => context.Length - start <= MaxContextLength,
+                context.Length);
+            return context[cut..];
+        }
+
+        // 上限に収まる最長の先頭 = 上限以下で最後の書記素境界。
+        int end = elementStarts.LastOrDefault(start => start <= MaxContextLength, 0);
+        return context[..end];
     }
 
     private static string Hash(string text)

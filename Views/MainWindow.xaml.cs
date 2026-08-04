@@ -107,6 +107,21 @@ public partial class MainWindow : Window
     private bool _proofreadingRunInProgress;
 
     /// <summary>
+    /// 課金APIの実行確認モーダルを表示中か。
+    ///
+    /// WPF のモーダルは入れ子のメッセージループを回すので、ダイアログを読んでいる間も
+    /// DispatcherTimer は発火し、ユーザー操作も届く。進行中フラグ（_proofreadingRunInProgress 等）を
+    /// 立てるのは確認を通ったあとなので、その間は入口ガードが素通りし、同じ段落が二重に送信されて
+    /// 二重課金になる（さらに並走した2実行が MarkSent と LoadCorrectedDocument を後勝ちで
+    /// 上書きし合い、先行実行の課金済み提案が黙って消える）。
+    ///
+    /// そこで「フラグを立てる → try/finally」の不変条件をモーダルにも適用し、
+    /// ダイアログを出す前にこのフラグを立てる。CLAUDE.md の「進行中フラグを true にする行と
+    /// try/finally の間には何も置かない」は、**モーダル表示も『何か』に含む**と読むこと。
+    /// </summary>
+    private bool _paidApiDialogOpen;
+
+    /// <summary>
     /// 「許可」による本文置換の最中だけ true。この間の TabTextChanged では自動校正の
     /// デバウンスを再始動しない（モデル自身の出力であり、ユーザーの新しい入力ではない）。
     /// </summary>
@@ -162,6 +177,7 @@ public partial class MainWindow : Window
         _tabs.ActiveChanged += OnActiveTabChanged;
         _tabs.TabTextChanged += OnTabTextChanged;
         _tabs.TabRemoved += OnTabRemoved;
+        _tabs.SaveFailed += OnTabSaveFailed;
 
         Editor.TextArea.TextView.LineTransformers.Add(_ideographicSpace);
         Editor.TextArea.TextView.ElementGenerators.Add(_proofreadingInline);
@@ -347,8 +363,28 @@ public partial class MainWindow : Window
             if (!alreadyCopied && _settings.Current.CopyToClipboardOnHide) CopyCurrentText();
         }
 
-        // ウィンドウ非表示は保存タイミングのひとつ（要件 3.2.4）
-        _tabs.SaveDirty();
+        // ウィンドウ非表示は保存タイミングのひとつ（要件 3.2.4）。
+        // ここで例外を漏らすと Hide() へ到達せず「ウィンドウが隠れないまま予期しないエラー
+        // ダイアログが出る」ことになるため、保存の失敗で非表示そのものを止めない。
+        // タブ単位の I/O 失敗は SaveDirty 内で隔離され、通知も SaveDirty が発火させる。
+        // 隠れた後ではステータスバーを読めないため、この間の失敗通知はトレイへ回す
+        // （印を立てる行と try の間には何も置かない — CLAUDE.md の不変条件）。
+        _savingForHide = true;
+        try
+        {
+            _tabs.SaveDirty();
+        }
+        catch (Exception)
+        {
+            OnTabSaveFailed(new TabSaveFailure(
+                _tabs.Tabs.Where(tab => tab.IsDirty).Select(tab => tab.Title).ToArray(),
+                WillRetry: false,
+                IsFirstFailure: true));
+        }
+        finally
+        {
+            _savingForHide = false;
+        }
 
         WindowPlacer.Capture(this, _settings.Current);
         _settings.SaveDebounced();
@@ -512,6 +548,48 @@ public partial class MainWindow : Window
         if (ReferenceEquals(tab, _tabs.Active))
             ScheduleAutomaticProofreading();
     }
+
+    /// <summary>
+    /// 自動保存が 1 枚でも落としたときの通知（要件 3.2.4 は「保存」をユーザーに見せない設計なので、
+    /// 失敗を黙ると編集が静かに消える）。自動保存は数百ミリ秒ごとに走るためモーダルは出さず、
+    /// ステータスバーへ強制表示する。
+    ///
+    /// ウィンドウが隠れている（またはこれから隠れる）ときはステータスバーを読めないため、
+    /// トレイのバルーンへ回す。非表示時の保存はまさにその経路で失敗しうるので、ここを
+    /// ステータスバーだけにすると、編集が失われうる通知を誰も見ないまま常駐へ戻る。
+    /// </summary>
+    private void OnTabSaveFailed(TabSaveFailure failure)
+    {
+        if (failure.Titles.Count == 0) return;
+
+        string what = failure.Titles.Count == 1
+            ? $"「{failure.Titles[0]}」を保存できませんでした"
+            : $"{failure.Titles.Count} 個のタブを保存できませんでした";
+
+        SetProofreadingStatus(
+            what + (failure.WillRetry
+                ? "（自動で再試行します）"
+                : "（自動再試行は打ち切りました。編集・タブ切替・終了時に再試行します）"),
+            force: true);
+
+        // 非表示処理の一部としての失敗は毎回知らせる（ユーザー操作 1 回につき最大 1 通）。
+        // 隠れたままの自動再試行はバックオフのたびに失敗しうるので、連続失敗の 1 回目だけに絞る。
+        bool notifyViaTray = _savingForHide || (!IsVisible && failure.IsFirstFailure);
+        if (!notifyViaTray) return;
+
+        _tray.ShowMessage(
+            "保存できませんでした",
+            TabManager.FormatTitles(failure.Titles) + Environment.NewLine +
+            "本文ファイルには前回保存できた内容が残っています。" +
+            "同期ソフトやウイルス対策がファイルを掴んでいないか確認してください。",
+            isWarning: true);
+    }
+
+    /// <summary>
+    /// 非表示処理の一部として保存しているか。<see cref="Hide"/> の直前は <c>IsVisible</c> がまだ
+    /// true なので、この印が無いと「隠れる直前の保存失敗」をステータスバーへ出して見逃させる。
+    /// </summary>
+    private bool _savingForHide;
 
     private void OnTabRemoved(ScratchTab tab)
     {
@@ -1046,42 +1124,68 @@ public partial class MainWindow : Window
         if (_alternativeInProgress ||
             _proofreadingRunInProgress ||
             _styleGuideGenerationInProgress ||
-            _selectedProposal is not { IsActive: true } proposal ||
-            !TryGetReason(generatesAlternative: true, out string reason))
+            _paidApiDialogOpen ||
+            _selectedProposal is not { IsActive: true } proposal)
         {
             return;
         }
 
         SuppressAutoHide();
-        string? apiKey = GetActiveApiKey();
-        if (string.IsNullOrWhiteSpace(apiKey))
+
+        // 理由入力・APIキー未設定の案内・課金確認は、いずれもモーダル＝入れ子のメッセージループを
+        // 回す。**最初のモーダルより前に**再入ガードを立てるのが要点で、理由を書いている数十秒の
+        // 間に自動校正が走り出すと、その LoadCorrectedDocument が提案一覧を作り直してしまう。
+        // すると課金して得た別案の差し替え先（元の提案）が既に失効しており、成果物だけが失われる。
+        // 早期 return を try の中に置かないのは、finally でフラグを戻したあとに
+        // ReleaseAutoHide と再スケジュールをまとめて行うため。
+        string reason = "";
+        bool confirmed = false;
+        _paidApiDialogOpen = true;
+        try
         {
-            MessageBox.Show(
-                this,
-                $"{ActiveProviderName()} APIキーが設定されていません。設定画面で登録してください。",
-                "JP Scratch",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-            ReleaseAutoHide();
-            return;
+            // フラグを立てた行と try の間には何も置かない（CLAUDE.md の不変条件）。
+            _proofreadingTimer.Stop();
+
+            if (TryGetReason(generatesAlternative: true, out reason))
+            {
+                if (string.IsNullOrWhiteSpace(GetActiveApiKey()))
+                {
+                    MessageBox.Show(
+                        this,
+                        $"{ActiveProviderName()} APIキーが設定されていません。設定画面で登録してください。",
+                        "JP Scratch",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+                else if (!_settings.Current.ConfirmPaidApiCalls)
+                {
+                    confirmed = true;
+                }
+                else
+                {
+                    MessageBoxResult confirmation = MessageBox.Show(
+                        this,
+                        $"別案生成のため{ActiveProviderName()} APIを1回呼び出します。料金が発生します。\n\n" +
+                        BuildPricingSummary() + "\n" +
+                        "実行後に使用トークン数と料金を表示します。\n\n実行しますか？",
+                        "API料金の確認",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning,
+                        MessageBoxResult.No);
+                    confirmed = confirmation == MessageBoxResult.Yes;
+                }
+            }
+        }
+        finally
+        {
+            _paidApiDialogOpen = false;
         }
 
-        if (_settings.Current.ConfirmPaidApiCalls)
+        if (!confirmed)
         {
-            MessageBoxResult confirmation = MessageBox.Show(
-                this,
-                $"別案生成のため{ActiveProviderName()} APIを1回呼び出します。料金が発生します。\n\n" +
-                BuildPricingSummary() + "\n" +
-                "実行後に使用トークン数と料金を表示します。\n\n実行しますか？",
-                "API料金の確認",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning,
-                MessageBoxResult.No);
-            if (confirmation != MessageBoxResult.Yes)
-            {
-                ReleaseAutoHide();
-                return;
-            }
+            ReleaseAutoHide();
+            ScheduleAutomaticProofreading();
+            return;
         }
 
         _alternativeInProgress = true;
@@ -1125,9 +1229,18 @@ public partial class MainWindow : Window
             // 補助情報なので、記録に失敗しても適用を妨げない。従来は _reactions.Add を先に呼んで
             // いたため、ここで例外（DB失敗・単価未登録など）が飛ぶと、課金だけ発生して別案が
             // 失われていた。順序を「適用 → 補助記録」へ入れ替え、各記録をガードする。
-            bool applied = _activeProofreading?.TryReplaceSuggestion(
+            ProofreadingProposal? replacement = _activeProofreading?.TryReplaceSuggestion(
                 proposal,
-                result.Alternative) == true;
+                result.Alternative);
+            bool applied = replacement is not null;
+            if (replacement is not null)
+            {
+                // 差し替えで元の提案は失効するため、選択し直さないと
+                // RefreshProofreadingPresentation が選択を先頭の提案へ飛ばす。
+                // 課金して得た別案が未選択のままだと、続けて Ctrl+. を押したときに
+                // 別の提案が適用されてしまう。スクロールは既に見えている位置なので不要。
+                SelectProposal(replacement, scrollIntoView: false);
+            }
             // 理由つき拒否はユーザーの判断＝v3の学習データなので、差し替えの成否とは独立に
             // 記録する。差し替えに失敗しても「この提案をこの理由で拒否した」事実は有効な
             // 学習素材であり、無条件に記録していた従来の挙動へ戻す。
@@ -1177,6 +1290,9 @@ public partial class MainWindow : Window
             UnpinModelAfterRun();
             SetProposalActionsEnabled(true);
             UpdateTrayIconState();
+            // 別案生成の間は ScheduleAutomaticProofreading が抑止されている（ビジーループ回避）。
+            // 抑止を解いた今、止めたままのタイマーを必ず張り直す。
+            ScheduleAutomaticProofreading();
             ReleaseAutoHide();
             Activate();
             Editor.TextArea.Focus();
@@ -1188,7 +1304,12 @@ public partial class MainWindow : Window
 
     private void AcceptSelectedProposal()
     {
-        if (_selectedProposal is not { IsActive: true } proposal ||
+        // 校正実行中（_proofreadingRunInProgress）はキーバインド（Ctrl+.）がボタンの無効化を
+        // 素通りするため、一括許可（AcceptAllProposals）と同じガードを入口に置く。
+        // 実行中に本文を変えると MarkSent が送信済みハッシュをスナップショット時点のもので
+        // 置き換え、引き継ぎが消えてその段落が次回再送・再課金される。
+        if (_proofreadingRunInProgress ||
+            _selectedProposal is not { IsActive: true } proposal ||
             !CanReactTo(proposal))
         {
             return;
@@ -1451,8 +1572,15 @@ public partial class MainWindow : Window
     private void ScheduleAutomaticProofreading()
     {
         _proofreadingTimer.Stop();
+        // 他の課金処理・確認ダイアログの最中はタイマーを止めたままにする。ここで再開すると、
+        // 「発火 → RunProofreadingAsync の入口ガードで却下 → 再スケジュール」を100ms間隔で
+        // 繰り返すビジーループになる（月間上限のガードと同じ理由）。
+        // 止めたぶんは、各処理の finally が完了時にこのメソッドを呼び直して必ず戻す。
         if (!_settings.Current.AutoProofreadingEnabled ||
             _proofreadingRunInProgress ||
+            _alternativeInProgress ||
+            _styleGuideGenerationInProgress ||
+            _paidApiDialogOpen ||
             _tabs.Active is not { } tab)
         {
             return;
@@ -1505,6 +1633,9 @@ public partial class MainWindow : Window
         if (_proofreadingRunInProgress ||
             _alternativeInProgress ||
             _styleGuideGenerationInProgress ||
+            // 課金確認モーダルの表示中は判定自体を先送りする（モーダルはメッセージループを
+            // 回すので、ここへ再入すると2つ目の課金ダイアログが重なって出る）。
+            _paidApiDialogOpen ||
             !_settings.Current.StyleGuideAutoGenerateEnabled)
         {
             return;
@@ -1526,7 +1657,28 @@ public partial class MainWindow : Window
         if (total - cursor < _settings.Current.StyleGuideGenerationThreshold)
             return;
 
-        _ = RunStyleGuideGenerationAsync(total);
+        _ = RunStyleGuideGenerationThenRescheduleAsync(total);
+    }
+
+    /// <summary>
+    /// スタイルガイド生成のあと、自動校正タイマーを必ず張り直す。
+    ///
+    /// 生成の経路には「確認を辞退」「APIキー未設定」「素材の読み取り失敗」「使える例が無い」と
+    /// 早期 return が多く、そのすべてが確認モーダルの前で止めたタイマーを止めたままにする。
+    /// <see cref="RunStyleGuideGenerationAsync"/> の中の finally は
+    /// _styleGuideGenerationInProgress を戻す役目に専念させ、再スケジュールはここで一箇所に集める
+    /// （抑止フラグが下りきったあとに呼ぶ必要があるため、外側でなければならない）。
+    /// </summary>
+    private async Task RunStyleGuideGenerationThenRescheduleAsync(long totalReactionsAtCheck)
+    {
+        try
+        {
+            await RunStyleGuideGenerationAsync(totalReactionsAtCheck);
+        }
+        finally
+        {
+            ScheduleAutomaticProofreading();
+        }
     }
 
     /// <summary>
@@ -1543,9 +1695,13 @@ public partial class MainWindow : Window
         }
 
         SuppressAutoHide();
+        // 確認モーダルの前にタイマーを止め、再入ガードのフラグを立てる（RunProofreadingAsync と同じ理由）。
         bool confirmed;
+        _paidApiDialogOpen = true;
         try
         {
+            // フラグを立てた行と try の間には何も置かない（CLAUDE.md の不変条件）。
+            _proofreadingTimer.Stop();
             MessageBoxResult confirmation = MessageBox.Show(
                 this,
                 $"リアクションが{_settings.Current.StyleGuideGenerationThreshold}件以上たまりました。" +
@@ -1560,6 +1716,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            _paidApiDialogOpen = false;
             ReleaseAutoHide();
         }
 
@@ -1753,13 +1910,39 @@ public partial class MainWindow : Window
             apiError: _apiErrorSticky,
             limitReached: IsMonthlyLimitReached()));
 
+    /// <summary>
+    /// 他の課金処理と競合して自動校正が弾かれたとき、短い間隔で再挑戦させる。
+    ///
+    /// ここで <see cref="ScheduleAutomaticProofreading"/> を呼ぶことはできない（同じ進行中フラグで
+    /// 抑止され、タイマーを止めたまま戻ってくる＝次の打鍵まで自動校正が止まる）。pending は
+    /// 消費していないので、IME 変換中と同じく短い間隔でタイマーを張り直して待つ。
+    /// 競合が解けたあとの発火では通常の判定へ進み、送るものが無ければ自然に止まる。
+    /// </summary>
+    private void RetryAutomaticProofreadingLater()
+    {
+        // 確認モーダルの表示中はタイマーを動かさない（モーダルはメッセージループを回すので
+        // 発火してしまう）。ダイアログを出した側が閉じたあとに必ず張り直す。
+        if (!_settings.Current.AutoProofreadingEnabled || _paidApiDialogOpen)
+            return;
+
+        _proofreadingTimer.Interval = TimeSpan.FromSeconds(1);
+        _proofreadingTimer.Start();
+    }
+
     private async Task RunProofreadingAsync(bool manual)
     {
         if (_proofreadingRunInProgress ||
             _alternativeInProgress ||
             _styleGuideGenerationInProgress ||
+            _paidApiDialogOpen ||
             _tabs.Active is not { } tab)
         {
+            // ここで弾かれた場合、pending（未校正の変更）はまだ消費していない。以前はこの経路だけが
+            // 再スケジュールしておらず（直下の発火条件ガードは呼んでいる）、別案生成や
+            // スタイルガイド生成と競合すると次の打鍵まで自動校正が止まっていた。
+            // _proofreadingRunInProgress の場合は自分の finally が確実に呼び直すので何もしない。
+            if (!manual && !_proofreadingRunInProgress)
+                RetryAutomaticProofreadingLater();
             return;
         }
 
@@ -1822,11 +2005,30 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!ConfirmProofreadingApiUse(plan.Requests.Count, manual))
+        // 確認モーダルの前にタイマーを止め、再入ガードのフラグを立てる。モーダル表示中も
+        // メッセージループは回るため、これが無いとダイアログを読んでいる数秒の間に
+        // タイマーが発火して2つ目の実行が始まり、同じ段落を二重に送信・二重課金する。
+        bool confirmed;
+        _paidApiDialogOpen = true;
+        try
+        {
+            // フラグを立てた行と try の間には何も置かない（CLAUDE.md の不変条件）。
+            _proofreadingTimer.Stop();
+            confirmed = ConfirmProofreadingApiUse(plan.Requests.Count, manual);
+        }
+        finally
+        {
+            _paidApiDialogOpen = false;
+        }
+
+        if (!confirmed)
         {
             if (!manual)
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
             SetProofreadingStatus("校正をキャンセルしました");
+            // 止めたタイマーを戻す（キャンセルで pending は消費済みなので、送るものが無ければ
+            // ここでは何も起きない。手動キャンセル時に未送信が残っていれば再スケジュールされる）。
+            ScheduleAutomaticProofreading();
             return;
         }
 
@@ -1871,8 +2073,10 @@ public partial class MainWindow : Window
         // その結果を破棄する（段落全体のハッシュ照合だと、2,000文字超で複数リクエストに分割された
         // 段落の後半を編集しただけで、無関係な前半の課金済み結果まで破棄されてしまう）。
         TextAnchor?[]? requestAnchors = null;
-        // 未送信（＝再校正対象）に残す段落 index の集合。本文編集で破棄・中止した段落だけを入れる。
-        HashSet<int> unsentParagraphIndexes = [];
+        // 未送信（＝再校正対象）に残すパートの集合。本文編集で破棄・中止したパートだけを入れる。
+        // 段落 index だけで持つと、2,000 文字超で複数リクエストへ分割された段落の後半が失敗した
+        // だけで、課金済みの前半まで未送信へ戻り、次回の校正で再送＝二重課金になる。
+        HashSet<(int ParagraphIndex, int PartIndex)> unsentParts = [];
         // 「編集された部分は、入力が止まってから再校正します」を一度だけ出すためのフラグ。
         bool editDiscardHappened = false;
         // 校正中に別タブへ切り替わったか（結果は元タブのセッションへ安全に保持できる）。
@@ -1991,75 +2195,12 @@ public partial class MainWindow : Window
                 completed.Add((request, result, recordedApiCall.Id ?? -1, validatedAnchor));
             }
 
-            // 中止された（送信しなかった）リクエストの段落は未送信として残し、次回の自動プランで
-            // 再試行させる。本文編集で中断した場合、その編集は OnTabTextChanged がデバウンスを
-            // 再始動済みなので、finally の ScheduleAutomaticProofreading が入力停止後に再送する。
-            for (int index = completed.Count; index < plan.Requests.Count; index++)
-                unsentParagraphIndexes.Add(plan.Requests[index].ParagraphIndex);
-
-            // 完了済みリクエストを現在の本文と照合し、編集されていない範囲の結果だけを現在位置へ
-            // 対応付けて保持する。編集された範囲の結果は破棄し、既に課金された呼び出しは
-            // discarded_cnt へ正確に記録する（料金の詳細は課金履歴で確認できる）。
-            List<(int CurrentPartStart, GeminiProofreadingResult Result)> validResults = [];
-            List<long> discardedCallIds = [];
-            foreach ((ProofreadingRequest request, GeminiProofreadingResult result, long apiCallId, TextAnchor? anchor) in completed)
+            if (!TryApplyCompletedResults(out int proposalCount))
             {
-                if (selectionRun)
-                {
-                    if (editDiscardHappened)
-                    {
-                        if (apiCallId >= 0) discardedCallIds.Add(apiCallId);
-                        continue;
-                    }
-                    validResults.Add((request.SourceStart, result));
-                    continue;
-                }
-
-                if (anchor is not { } intactAnchor || !IsPartIntact(intactAnchor, request))
-                {
-                    // 対象範囲（パート）が編集された＝結果を破棄。同じ段落の別パート（無変更）の
-                    // 結果は保持する。編集された場合は未送信として次回再校正する。
-                    if (apiCallId >= 0) discardedCallIds.Add(apiCallId);
-                    unsentParagraphIndexes.Add(request.ParagraphIndex);
-                    editDiscardHappened = true;
-                    continue;
-                }
-
-                validResults.Add((intactAnchor.Offset, result));
-            }
-
-            if (discardedCallIds.Count > 0)
-                MarkApiCallsDiscarded(discardedCallIds);
-
-            if (!selectionRun)
-            {
-                // 送信成功した段落（破棄・中止されていない段落）だけを送信済みとして記録する。
-                // 破棄・中止された段落は未送信のまま残り、次回の自動プラン（または入力停止後の
-                // 再スケジュール）で再送される。二重課金を防ぐため、無変更段落の再送はしない。
-                tab.ProofreadingPlanner.MarkSent(plan, unsentParagraphIndexes);
-            }
-
-            // 編集・中止が無く全リクエストが完了した場合は pending を消費する。編集があった場合は
-            // 消費しない（入力停止後の再校正を finally の ScheduleAutomaticProofreading が担う）。
-            if (!editDiscardHappened && !tabSwitchedDuringRun)
-                _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
-
-            string corrected = selectionRun && editDiscardHappened
-                ? tab.Document.Text
-                : ProofreadingResultMerger.MergePartial(tab.Document.Text, validResults);
-            DocumentDiffResult loaded =
-                tab.Proofreading.LoadCorrectedDocument(corrected);
-            if (!loaded.Accepted)
-            {
-                // 安全検査に失敗した場合、この実行の結果は適用されない。課金済みの呼び出しは
-                // 破棄として記録する（破棄件数と金額は課金履歴で確認できる）。
-                MarkApiCallsDiscarded(successfulApiCallIds);
                 SetProofreadingStatus("安全検査に失敗したため校正結果を破棄しました", force: true);
                 return;
             }
 
-            // ここ以降の例外は、提案（0件を含む）が既にUIへ反映された後のもの。
-            resultsApplied = true;
             if (editDiscardHappened)
             {
                 // 破棄通知は一回の処理につき一度だけ表示する。料金・破棄件数の詳細は課金履歴で
@@ -2068,12 +2209,31 @@ public partial class MainWindow : Window
             }
             else
             {
-                int proposals = loaded.Accepted ? loaded.Changes.Count : 0;
-                ShowProofreadingUsage(proposals, responseCosts);
+                ShowProofreadingUsage(proposalCount, responseCosts);
             }
         }
         catch (GeminiClientException ex)
         {
+            // 途中で API が失敗しても、**それより前に成功した応答は既に課金されている**。
+            // ここで丸ごと破棄すると、その段落は未送信のまま残り、次の自動校正でもう一度
+            // 送られて二度目の課金になる（10段落中9件成功・1件タイムアウトで9件ぶんが再課金）。
+            // 部分結果保持（proofreading-ux-fixes-plan.md §7.2）は本文編集による中断だけを
+            // 想定していたが、API 失敗も「途中まで成功した」という同じ状態なので同じ扱いにする。
+            // 失敗したリクエスト以降は未送信として残るため、次回そこだけが再送される。
+            bool salvaged = false;
+            if (!resultsApplied && completed.Count > 0)
+            {
+                try
+                {
+                    salvaged = TryApplyCompletedResults(out _);
+                }
+                catch (Exception)
+                {
+                    // 救済そのものが失敗しても、API エラーの通知（下）は必ず出す。
+                    salvaged = false;
+                }
+            }
+
             if (!resultsApplied)
                 MarkApiCallsDiscarded(successfulApiCallIds);
             if (!selectionRun)
@@ -2081,9 +2241,15 @@ public partial class MainWindow : Window
             string knownUsage = responseCosts.Count == 0
                 ? "使用量・料金は確認できませんでした。"
                 : BuildUsageText(responseCosts);
+            // 件数は書かない。アンカー照合で一部が破棄されることがあり、completed.Count は
+            // 「反映できた件数」より多くなりうる（金額に関わる話で盛って伝えない）。
+            string salvageNote = salvaged
+                ? "\n\n途中まで完了していた応答は破棄していません。有効なぶんは反映済みで、" +
+                  "送信できなかった箇所だけを次回あらためて校正します。"
+                : "";
             MessageBox.Show(
                 this,
-                ex.Message + "\n\n" + knownUsage,
+                ex.Message + "\n\n" + knownUsage + salvageNote,
                 "校正できませんでした",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -2115,6 +2281,89 @@ public partial class MainWindow : Window
             SetProposalActionsEnabled(true);
             UpdateTrayIconState();
             ScheduleAutomaticProofreading();
+        }
+
+        // 課金済みの応答（completed）を現在の本文へ反映する。正常終了時と、途中で API が失敗して
+        // 残りを送れなかった場合の両方から呼ぶ（後者では既に課金された成功ぶんを救済する）。
+        // 戻り値は「結果を適用できたか」＝安全検査を通ったか。
+        bool TryApplyCompletedResults(out int proposalCount)
+        {
+            proposalCount = 0;
+
+            // 中止された（送信しなかった）リクエストのパートは未送信として残し、次回の自動プランで
+            // 再試行させる。本文編集で中断した場合、その編集は OnTabTextChanged がデバウンスを
+            // 再始動済みなので、finally の ScheduleAutomaticProofreading が入力停止後に再送する。
+            // API 失敗の場合も同じで、失敗したリクエスト以降だけが次回の対象になる。
+            for (int index = completed.Count; index < plan.Requests.Count; index++)
+            {
+                unsentParts.Add(
+                    (plan.Requests[index].ParagraphIndex, plan.Requests[index].PartIndex));
+            }
+
+            // 完了済みリクエストを現在の本文と照合し、編集されていない範囲の結果だけを現在位置へ
+            // 対応付けて保持する。編集された範囲の結果は破棄し、既に課金された呼び出しは
+            // discarded_cnt へ正確に記録する（料金の詳細は課金履歴で確認できる）。
+            List<(int CurrentPartStart, GeminiProofreadingResult Result)> validResults = [];
+            List<long> discardedCallIds = [];
+            foreach ((ProofreadingRequest request, GeminiProofreadingResult result, long apiCallId, TextAnchor? anchor) in completed)
+            {
+                if (selectionRun)
+                {
+                    if (editDiscardHappened)
+                    {
+                        if (apiCallId >= 0) discardedCallIds.Add(apiCallId);
+                        continue;
+                    }
+                    validResults.Add((request.SourceStart, result));
+                    continue;
+                }
+
+                if (anchor is not { } intactAnchor || !IsPartIntact(intactAnchor, request))
+                {
+                    // 対象範囲（パート）が編集された＝結果を破棄。同じ段落の別パート（無変更）の
+                    // 結果は保持する。編集された場合は未送信として次回再校正する。
+                    if (apiCallId >= 0) discardedCallIds.Add(apiCallId);
+                    unsentParts.Add((request.ParagraphIndex, request.PartIndex));
+                    editDiscardHappened = true;
+                    continue;
+                }
+
+                validResults.Add((intactAnchor.Offset, result));
+            }
+
+            if (discardedCallIds.Count > 0)
+                MarkApiCallsDiscarded(discardedCallIds);
+
+            if (!selectionRun)
+            {
+                // 送信成功したパート（破棄・中止されていないパート）だけを送信済みとして記録する。
+                // 破棄・中止されたパートは未送信のまま残り、次回の自動プラン（または入力停止後の
+                // 再スケジュール）で再送される。二重課金を防ぐため、無変更パートの再送はしない。
+                tab.ProofreadingPlanner.MarkSent(plan, unsentParts);
+            }
+
+            // 編集・中止が無く全リクエストが完了した場合は pending を消費する。編集があった場合は
+            // 消費しない（入力停止後の再校正を finally の ScheduleAutomaticProofreading が担う）。
+            if (!editDiscardHappened && !tabSwitchedDuringRun)
+                _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
+
+            string corrected = selectionRun && editDiscardHappened
+                ? tab.Document.Text
+                : ProofreadingResultMerger.MergePartial(tab.Document.Text, validResults);
+            DocumentDiffResult loaded =
+                tab.Proofreading.LoadCorrectedDocument(corrected);
+            if (!loaded.Accepted)
+            {
+                // 安全検査に失敗した場合、この実行の結果は適用されない。課金済みの呼び出しは
+                // 破棄として記録する（破棄件数と金額は課金履歴で確認できる）。
+                MarkApiCallsDiscarded(successfulApiCallIds);
+                return false;
+            }
+
+            // ここ以降の例外は、提案（0件を含む）が既にUIへ反映された後のもの。
+            resultsApplied = true;
+            proposalCount = loaded.Changes.Count;
+            return true;
         }
     }
 
@@ -2607,9 +2856,22 @@ public partial class MainWindow : Window
     /// </summary>
     internal void CompactApiLogsInBackground()
     {
+        // 設定を読めなかった起動では、設定値に依存する破壊的処理を走らせない。
+        // ApiLogRetentionMonths の既定は 12 か月だが、実際の設定が 0（＝無期限保持）でも、
+        // 一時的な settings.json の読み取り失敗だけで 12 か月より前の明細が日次サマリへ
+        // 不可逆に圧縮されてしまう（個々の呼び出しの内訳は復元できない）。呼び出し元 3 経路の
+        // うち設定変更経路は Replace() が IsReadFailed を解除するため、ここで止めても支障はない。
+        if (_settings.IsReadFailed) return;
+
         DateTimeOffset? cutoff = ApiLogRetention.ComputeCutoff(
             DateTimeOffset.Now, _settings.Current.ApiLogRetentionMonths);
         if (cutoff is null) return;
+
+        // 3経路がそれぞれ Task.Run で走るため、同時に 2 本以上動きうる。Compact 側は抽出から
+        // 削除までを 1 トランザクションに収めてあるので合計は狂わないが、無駄に長い書き込み
+        // トランザクションを重ねる意味はない。先行が走っている間は黙って見送る
+        // （見送っても次の機会＝設定変更・日付ロールオーバー・次回起動で必ず再試行される）。
+        if (Interlocked.CompareExchange(ref _compactInProgress, 1, 0) != 0) return;
 
         _ = Task.Run(() =>
         {
@@ -2621,8 +2883,15 @@ public partial class MainWindow : Window
                 ex is Microsoft.Data.Sqlite.SqliteException or IOException or InvalidOperationException)
             {
             }
+            finally
+            {
+                Volatile.Write(ref _compactInProgress, 0);
+            }
         });
     }
+
+    /// <summary>課金明細の圧縮が走っているか（0 = 走っていない）。<see cref="Interlocked"/> で操作する。</summary>
+    private int _compactInProgress;
 
     private static DateOnly LocalDate(DateTimeOffset value)
     {
@@ -2680,8 +2949,12 @@ public partial class MainWindow : Window
         {
             if (_tabs.RestoreLastClosed() is null) SetTransientStatus("復元できるタブがありません");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (
+            ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
+            // InvalidDataException は「タブIDの形式が不正」。RestoreLastClosed 側で飛ばしている
+            // ので通常ここへは来ないが、拾い漏らすと共通の「予期しないエラー」ダイアログになり、
+            // Ctrl+Shift+T が壊れた行を踏むたびにクラッシュ扱いで報告される。
             SetTransientStatus("タブを復元できませんでした（本文ファイルを移動できません）");
         }
     }

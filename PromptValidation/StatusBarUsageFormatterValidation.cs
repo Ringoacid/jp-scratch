@@ -162,10 +162,12 @@ internal static class StatusBarUsageFormatterValidation
 
     private static bool TestJpyMissing()
     {
+        // 要件3.5.3:「キャッシュがまったくない状態で失敗した場合は ¥— と表示し、$ のみ表示する」。
+        // 円表示でも、円が欠損している期間はドル額を併記する（¥— 単独だと利用額を確認できない）。
         string text = Format(
             Options(month: true, fx: false, currency: StatusBarCurrencyFormat.Jpy),
             IncompleteJpySummary, TodaySummary, SessionSummary, null, CachedRate);
-        if (text != "今月 ¥—")
+        if (text != "今月 $0.002 (¥—)")
             return false;
 
         string both = Format(

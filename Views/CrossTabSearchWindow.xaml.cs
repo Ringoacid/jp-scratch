@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
@@ -82,8 +83,21 @@ public partial class CrossTabSearchWindow : Window
         {
             foreach (var tab in _repository.LoadTrash())
             {
-                var text = AtomicFile.ReadAllTextOrEmpty(AppPaths.TrashFile(tab.Id));
-                CollectHits(hits, regex, tab.Id, tab.Title, isTrash: true, text);
+                string path;
+                try
+                {
+                    path = AppPaths.TrashFile(tab.Id);
+                }
+                catch (InvalidDataException)
+                {
+                    // 「タブIDの形式が不正」。本文ファイルの位置が決まらないので、この行だけ飛ばす。
+                    // 拾わないと壊れた 1 行で検索そのものが「予期しないエラー」になり、
+                    // 正常なタブまで検索できなくなる（CLAUDE.md「壊れた1行で全体を落とさない」）。
+                    continue;
+                }
+
+                CollectHits(hits, regex, tab.Id, tab.Title, isTrash: true,
+                            AtomicFile.ReadAllTextOrEmpty(path));
             }
         }
 
@@ -101,53 +115,35 @@ public partial class CrossTabSearchWindow : Window
     {
         if (text.Length == 0) return;
 
-        MatchCollection matches;
+        // MatchCollection は遅延評価なので、RegexMatchTimeoutException は Matches() ではなく
+        // 実際に列挙する foreach から飛ぶ。try は必ず列挙まで含めること（FindReplacePanel と同じ形）。
+        // ここを外すと重い正規表現を打つだけで「予期しないエラー」ダイアログ＋全タブ強制保存が走る。
+        // 行番号は 1 ヒットごとに先頭から数え直すと O(n²) になり UI スレッドが固まるため、
+        // 改行位置の索引を 1 回だけ作って二分探索する。
+        int[] lineStarts = CrossTabSearchPreview.BuildLineStarts(text);
         try
         {
-            matches = regex.Matches(text);
+            foreach (Match match in regex.Matches(text))
+            {
+                if (match.Length == 0) continue;
+
+                var (lineNumber, lineStart, lineEnd) =
+                    CrossTabSearchPreview.LocateLine(text, lineStarts, match.Index);
+
+                hits.Add(new CrossTabHit(
+                    tabId,
+                    isTrash ? $"[ゴミ箱] {tabTitle}" : tabTitle,
+                    isTrash,
+                    lineNumber,
+                    match.Index,
+                    match.Length,
+                    CrossTabSearchPreview.Build(text, lineStart, lineEnd)));
+            }
         }
         catch (RegexMatchTimeoutException)
         {
-            return;
+            // このタブぶんの結果は打ち切る。既に集めたヒットは有効なので捨てない。
         }
-
-        foreach (Match match in matches)
-        {
-            if (match.Length == 0) continue;
-
-            var (lineNumber, lineStart, lineEnd) = LocateLine(text, match.Index);
-            var preview = text[lineStart..lineEnd].Trim();
-            if (preview.Length > 120) preview = preview[..120] + "…";
-
-            hits.Add(new CrossTabHit(
-                tabId,
-                isTrash ? $"[ゴミ箱] {tabTitle}" : tabTitle,
-                isTrash,
-                lineNumber,
-                match.Index,
-                match.Length,
-                preview));
-        }
-    }
-
-    /// <summary>ヒット位置が何行目か、その行の範囲はどこかを求める。</summary>
-    private static (int LineNumber, int Start, int End) LocateLine(string text, int offset)
-    {
-        var lineNumber = 1;
-        var start = 0;
-
-        for (var i = 0; i < offset; i++)
-        {
-            if (text[i] != '\n') continue;
-            lineNumber++;
-            start = i + 1;
-        }
-
-        var end = text.IndexOf('\n', offset);
-        if (end < 0) end = text.Length;
-        if (end > start && text[end - 1] == '\r') end--;
-
-        return (lineNumber, start, end);
     }
 
     private void Jump()

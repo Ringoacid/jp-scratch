@@ -14,12 +14,55 @@ internal static class ProofreadingPromptV3Validation
         bool orderPass = RunSectionOrderTest();
         bool neutralizePass = RunTagNeutralizationTest();
         bool styleGuideMessagePass = RunStyleGuideMessageTest();
+        bool boundaryPass = RunDocumentBoundaryEscapeTest();
 
-        bool passed = noneAddedPass && orderPass && neutralizePass && styleGuideMessagePass;
+        bool passed = noneAddedPass && orderPass && neutralizePass && styleGuideMessagePass &&
+                      boundaryPass;
         Console.WriteLine(
-            $"v3プロンプト合成（未指定時は不変・送信順・タグ偽装の無害化・スタイルガイド入力）: " +
+            $"v3プロンプト合成（未指定時は不変・送信順・タグ偽装の無害化・スタイルガイド入力・境界エスケープ）: " +
             $"{(passed ? "PASS" : "FAIL")}");
         return passed;
+    }
+
+    /// <summary>
+    /// 本文中の閉じタグがプロンプト境界を壊さないようにする逃がし処理が、
+    /// **厳密に可逆**であることを確かめる。ここが非可逆だと、モデルが返した修正版全文と
+    /// 原文の差分に「エスケープを剥がす提案」が混ざり、本文が壊れる。
+    /// </summary>
+    private static bool RunDocumentBoundaryEscapeTest()
+    {
+        string[] samples =
+        [
+            "ふつうの文章です。",
+            "境界の話: </document> を含む本文。",
+            "既に逃がした形 <\\/document> を含む本文。",
+            "二重に逃がした形 <\\\\/document> も混ざる。",
+            "文脈側 </context-before> と </context-after> も対象。",
+            "山括弧 <b>強調</b> や比較演算 a < b > c は触らない。",
+            "</document></document>",
+        ];
+
+        foreach (string sample in samples)
+        {
+            string escaped = ProofreadingPrompt.EscapeDocumentBoundary(sample);
+            if (ProofreadingPrompt.UnescapeDocumentBoundary(escaped) != sample)
+                return false;
+        }
+
+        // 逃がした結果に生の閉じ境界が残っていないこと（＝境界として誤読されないこと）。
+        string dangerous = ProofreadingPrompt.EscapeDocumentBoundary("a</document>b");
+        if (dangerous.Contains("<\\/document>", StringComparison.Ordinal) is false ||
+            dangerous.Replace("<\\/document>", "", StringComparison.Ordinal)
+                .Contains("</document>", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        // モデルが気を利かせて元の形へ戻して返した場合も、原文と一致すること
+        // （戻すものが無いので Unescape は何もしない）。
+        return ProofreadingPrompt.UnescapeDocumentBoundary("a</document>b") == "a</document>b" &&
+               // 逃がしていない普通の本文は 1 バイトも変わらないこと。
+               ProofreadingPrompt.EscapeDocumentBoundary("変更なし") == "変更なし";
     }
 
     private static bool RunNoOptionalSectionsTest()

@@ -30,6 +30,22 @@ internal sealed class SettingsService
     public bool IsFirstRun { get; private set; }
 
     /// <summary>
+    /// 読み込みが失敗した理由。<see cref="FileReadFailure.Unreadable"/> は一時的な I/O 失敗
+    /// （共有違反・権限エラー等）、<see cref="FileReadFailure.InvalidEncoding"/> は UTF-8 として
+    /// 解釈できないバイト列。後者は再起動しても直らないため、起動時の案内文を書き分ける。
+    /// </summary>
+    public FileReadFailure ReadFailure { get; private set; }
+
+    /// <summary>
+    /// 読み込みに失敗したか。ファイル自体は無傷なので、既定値で上書きしてはいけない。
+    /// <see cref="AtomicFile.TryReadAllText(string, out string)"/> や
+    /// <see cref="TabRepository.LoadBody"/> と同じ「読めなかったものは上書きしない」規約。
+    /// この間は <see cref="SaveNow"/> / <see cref="SaveDebounced"/> が書き込みを見送る。
+    /// 設定画面から明示的に保存（<see cref="Replace"/>）した時点で解除される。
+    /// </summary>
+    public bool IsReadFailed => ReadFailure != FileReadFailure.None;
+
+    /// <summary>
     /// 設定が「意図的に」変更されたときだけ発火する（＝設定画面の OK）。
     /// ウィンドウ位置やフォントサイズの記録では発火させない。
     /// あれで通知すると、ウィンドウを動かすたびにホットキーの再登録が走ってしまう。
@@ -57,11 +73,27 @@ internal sealed class SettingsService
                 return;
             }
 
-            var json = File.ReadAllText(AppPaths.SettingsFile);
+            // 読み取りは strict UTF-8（AtomicFile と同じ）。File.ReadAllText の既定デコーダは
+            // 不正バイトを U+FFFD へ黙って置換するため、外部エディタで CP932 保存された
+            // settings.json でも JSON の構造部分は ASCII で通ってしまい、「正常に読めた」ことに
+            // なる。その状態で保存すると、カスタム指示などに入っていた日本語が置換文字入りの
+            // UTF-8 で上書きされ、復元できなくなる（本文ファイルと同じ規約で失敗させる）。
+            if (!AtomicFile.TryReadAllText(AppPaths.SettingsFile, out var json, out var failure))
+            {
+                // ファイルは無傷なので .bad へ退避してはいけない。退避したうえで既定値化すると、
+                // 直後の SaveNow / SaveDebounced が既定値を書き戻し、ホットキー・テーマ・上限額・
+                // APIキー取得元がまとめて失われる。この起動の間は「書かない」ことで元の設定を守る。
+                ReadFailure = failure;
+                Current = new AppSettings();
+                Normalize(Current);
+                return;
+            }
+
             Current = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        catch (JsonException)
         {
+            // 中身が壊れている（＝直す手段が無い）ときだけ退避して既定値へ倒す。
             QuarantineBrokenFile();
             Current = new AppSettings();
         }
@@ -72,6 +104,9 @@ internal sealed class SettingsService
     /// <summary>頻繁に変わる値（ウィンドウ位置・フォントサイズ）はまとめてから書く。</summary>
     public void SaveDebounced()
     {
+        // 読み取りに失敗した起動では、無傷のファイルを既定値で潰さないため何も書かない。
+        if (IsReadFailed) return;
+
         _saveTimer.Stop();
         _saveTimer.Start();
     }
@@ -83,6 +118,14 @@ internal sealed class SettingsService
     {
         _saveTimer.Stop();
         Normalize(Current);
+
+        if (IsReadFailed)
+        {
+            // 元の settings.json は無傷のまま残っている。既定値で上書きしない
+            // （通知だけは行う。設定画面を開いた場合の反映経路を止めないため）。
+            if (notify) Changed?.Invoke(Current);
+            return;
+        }
 
         try
         {
@@ -100,6 +143,10 @@ internal sealed class SettingsService
     public void Replace(AppSettings settings)
     {
         Current = settings;
+        // 設定画面の OK は「この内容で上書きする」というユーザーの明示的な意思表示なので、
+        // 読み取り失敗による書き込み抑止をここで解除する（起動時に読めなかった内容より、
+        // 画面で確認したうえで押された OK のほうが新しい）。
+        ReadFailure = FileReadFailure.None;
         SaveNow(notify: true);
     }
 

@@ -263,6 +263,8 @@ internal static class Program
         bool inlineDiffPass = ProofreadingInlineDiffLayoutValidation.RunSelfTests();
         bool statusBarFormatterPass = StatusBarUsageFormatterValidation.RunSelfTests();
         bool missedCorrectionPass = MissedCorrectionActionValidation.RunSelfTests();
+        bool crossTabPreviewPass = CrossTabSearchPreviewValidation.RunSelfTests();
+        bool atomicFilePass = AtomicFileValidation.RunSelfTests();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
                credentialPass && pricingPass && apiCallPass && apiCallHistoryPass &&
                apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
@@ -272,7 +274,8 @@ internal static class Program
                billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&
                apiLogCompactionPass && trayIconStatePass &&
                fewShotPass && styleGuidePass && promptV3Pass && inlineDiffPass &&
-               statusBarFormatterPass && missedCorrectionPass ? 0 : 1;
+               statusBarFormatterPass && missedCorrectionPass &&
+               crossTabPreviewPass && atomicFilePass ? 0 : 1;
     }
 
     private static void PrintHelp()

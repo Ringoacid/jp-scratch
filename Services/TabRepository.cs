@@ -121,12 +121,18 @@ internal sealed class TabRepository(Database db)
         => db.Read("SELECT id FROM tabs WHERE is_active = 1 AND deleted_at IS NULL LIMIT 1;",
             reader => reader.Read() ? reader.GetString(0) : null);
 
-    /// <summary>一時ファイル経由で本文を書き出し、既存の本文を壊さない（要件 3.2.4 / R-8）。</summary>
+    /// <summary>
+    /// 一時ファイル経由で本文を書き出し、既存の本文を壊さない（要件 3.2.4 / R-8）。
+    ///
+    /// <c>IsDirty</c> はここでは落とさない。本文の保存は「保存」の半分でしかなく、続く
+    /// <see cref="Upsert"/>（タイトル・更新時刻・キャレット位置）が失敗しても保存済み扱いに
+    /// なってしまうと、そのタブは通知にも再試行にも乗らなくなる。どこまで書けたら保存済みかは
+    /// 呼び出し元（<see cref="TabManager.SaveDirty"/>）が決める。
+    /// </summary>
     public void SaveBody(ScratchTab tab)
     {
         var path = tab.DeletedAt is null ? AppPaths.TabFile(tab.Id) : AppPaths.TrashFile(tab.Id);
         AtomicFile.WriteAllText(path, tab.Document.Text);
-        tab.IsDirty = false;
     }
 
     /// <summary>
@@ -212,6 +218,13 @@ internal sealed class TabRepository(Database db)
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
+            catch (InvalidDataException)
+            {
+                // AppPaths.TrashFile が投げる「タブIDの形式が不正」。IOException 非派生なので
+                // 明示的に拾わないと、壊れた 1 行だけで起動時の掃除ごと落ちて MainWindow の
+                // 生成前に脱出する（CLAUDE.md「壊れた1行で全体を落とさない」）。
+                // 本文ファイルの位置が決まらない＝消せないので、DB 行も残して次へ進む。
+            }
         }
 
         return purgedCount;

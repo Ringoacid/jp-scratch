@@ -17,11 +17,13 @@ internal static class ParagraphProofreadingPlannerValidation
             ("先頭の空行は無視", TestLeadingBlankLines),
             ("2,000文字境界の分割", TestBoundarySplit),
             ("変更段落と前後文脈", TestChangedParagraphContext),
+            ("文脈の長さ上限（対象に隣接する側を残す）", TestContextLengthCap),
             ("段落挿入時の重複抑止", TestInsertedParagraph),
             ("2,000文字分割", TestLongParagraph),
             ("選択範囲", TestSelection),
             ("複数応答の全文統合", TestResultMerge),
             ("中断時の部分送信済み記録", TestPartialMarkSent),
+            ("同一段落の一部だけ未送信（パート単位）", TestPartialPartMarkSent),
             ("許可の引き継ぎ", TestCarryForwardAppliedEdit),
             ("引き継ぎ後の別段落編集", TestCarryForwardThenEditAnother),
             ("段落数が変わる場合は引き継がない", TestCarryForwardRejectedOnCountChange),
@@ -174,6 +176,41 @@ internal static class ParagraphProofreadingPlannerValidation
                changed.Requests[0].AfterContext == "後段落";
     }
 
+    /// <summary>
+    /// 巨大な段落を文脈として添付するとき、上限まで切り詰めたうえで
+    /// **校正対象に隣接する側**を残すことを確かめる。
+    /// 上限が無いと「5万文字のログを貼った下に短い段落を書く」だけで、数十文字の校正のたびに
+    /// その全文が毎回入力トークンとして課金される。
+    /// </summary>
+    private static bool TestContextLengthCap()
+    {
+        const int Cap = ParagraphProofreadingPlanner.MaxContextLength;
+
+        // 前段落は末尾が、後段落は先頭が対象に隣接する。切り詰めても隣接部分が残ること。
+        string before = new string('あ', 5000) + "前段落の末尾";
+        string after = "後段落の先頭" + new string('い', 5000);
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan plan = planner.CreateAutomaticPlan(
+            $"{before}\n\n対象です\n\n{after}");
+
+        ProofreadingRequest? target = plan.Requests
+            .FirstOrDefault(request => request.SourceText == "対象です");
+        if (target?.BeforeContext is not { } beforeContext ||
+            target.AfterContext is not { } afterContext)
+        {
+            return false;
+        }
+
+        return beforeContext.Length <= Cap &&
+               afterContext.Length <= Cap &&
+               beforeContext.EndsWith("前段落の末尾", StringComparison.Ordinal) &&
+               afterContext.StartsWith("後段落の先頭", StringComparison.Ordinal) &&
+               // 上限以下の文脈は 1 文字も変えない。
+               plan.Requests.Any(request =>
+                   request.SourceText == "対象です" &&
+                   request.BeforeContext!.Length > Cap - 10);
+    }
+
     private static bool TestInsertedParagraph()
     {
         var planner = new ParagraphProofreadingPlanner();
@@ -299,6 +336,57 @@ internal static class ParagraphProofreadingPlannerValidation
         bool noneWorks = replanNone.Requests.Count == 2;
 
         return partialWorks && noneWorks;
+    }
+
+    /// <summary>
+    /// 2,000文字を超えて複数リクエストへ分割された「同一段落」で、一部のパートだけが
+    /// 未送信になるケース（review-result-2026-08-04 P2-2）。
+    ///
+    /// 送信済みを段落単位で持つと、前半パートが成功して後半パートが API エラーになったとき、
+    /// 段落まるごとが未送信へ戻る。次回の校正で課金済みの前半も再送され、二重課金になる。
+    /// 集合オーバーロード（本文編集・API 失敗による部分保持）と件数オーバーロード
+    /// （ループ中断）の両方で、後半パートだけが再送対象に残ることを確認する。
+    /// </summary>
+    private static bool TestPartialPartMarkSent()
+    {
+        // 3,000文字の 1 段落 → 2,000 + 1,000 の 2 パートへ分割される。
+        string firstPart = new('あ', ParagraphProofreadingPlanner.MaxTargetLength);
+        string secondPart = new('い', 1000);
+        string text = firstPart + secondPart;
+
+        var planner = new ParagraphProofreadingPlanner();
+        ProofreadingPlan plan = planner.CreateAutomaticPlan(text);
+        if (plan.Requests.Count != 2 ||
+            plan.Requests[0].ParagraphIndex != plan.Requests[1].ParagraphIndex ||
+            plan.Requests[0].PartIndex != 0 ||
+            plan.Requests[1].PartIndex != 1)
+        {
+            return false;
+        }
+
+        // 前半（パート0）は成功、後半（パート1）だけが未送信。
+        planner.MarkSent(plan, new HashSet<(int, int)> { (0, 1) });
+
+        ProofreadingPlan replan = planner.CreateAutomaticPlan(text);
+        bool bySetWorks = replan.Requests.Count == 1 &&
+                          replan.Requests[0].PartIndex == 1 &&
+                          replan.Requests[0].SourceText == secondPart;
+
+        // 件数オーバーロード（1件目まで完了して中断）でも同じでなければならない。
+        var byCount = new ParagraphProofreadingPlanner();
+        ProofreadingPlan countPlan = byCount.CreateAutomaticPlan(text);
+        byCount.MarkSent(countPlan, completedRequestCount: 1);
+        ProofreadingPlan countReplan = byCount.CreateAutomaticPlan(text);
+        bool byCountWorks = countReplan.Requests.Count == 1 &&
+                            countReplan.Requests[0].PartIndex == 1 &&
+                            countReplan.Requests[0].SourceText == secondPart;
+
+        // 全パート送信済みなら再送は 0 件（パート単位化で取りこぼしが出ていないことの確認）。
+        var allSent = new ParagraphProofreadingPlanner();
+        allSent.MarkSent(allSent.CreateAutomaticPlan(text));
+        bool allSentWorks = allSent.CreateAutomaticPlan(text).Requests.Count == 0;
+
+        return bySetWorks && byCountWorks && allSentWorks;
     }
 
     /// <summary>

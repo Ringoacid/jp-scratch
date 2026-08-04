@@ -119,14 +119,18 @@ public partial class FindReplacePanel : UserControl
             _renderer.Clear();
             _currentIndex = -1;
             MatchCountText.Text = SearchBox.Text.Length == 0 ? "" : "不正な式";
-            SearchBox.Foreground = SearchBox.Text.Length == 0 || RegexToggle.IsChecked != true
-                ? (Brush)FindResource("TextBrush")
-                : (Brush)FindResource("DangerBrush");
+            // FindResource は「今の辞書から一度だけ取り出す」ため、テーマ切替に追随しない
+            // （ThemeService が辞書を差し替えても色が古いまま残る）。他の色と同じく
+            // SetResourceReference で参照として張る。
+            SetSearchBoxForeground(
+                SearchBox.Text.Length == 0 || RegexToggle.IsChecked != true
+                    ? "TextBrush"
+                    : "DangerBrush");
             Redraw();
             return;
         }
 
-        SearchBox.Foreground = (Brush)FindResource("TextBrush");
+        SetSearchBoxForeground("TextBrush");
 
         var text = _editor.Document.Text;
         var matches = new List<(int Offset, int Length)>();
@@ -155,6 +159,10 @@ public partial class FindReplacePanel : UserControl
         UpdateCountLabel();
         Redraw();
     }
+
+    /// <summary>検索ボックスの文字色をリソース参照として張り替える（テーマ切替に追随させる）。</summary>
+    private void SetSearchBoxForeground(string resourceKey)
+        => SearchBox.SetResourceReference(ForegroundProperty, resourceKey);
 
     private int IndexNearCaret(List<(int Offset, int Length)> matches)
     {
@@ -251,7 +259,6 @@ public partial class FindReplacePanel : UserControl
         }
 
         var (offset, length) = _renderer.Matches[_currentIndex];
-        var original = _editor.Document.GetText(offset, length);
 
         // 後方参照（$1 など）の解決は、実際にマッチした文字列に対して行う。
         // 存在しないグループ参照・末尾の $・{$ は実行時に ArgumentException にならない
@@ -261,9 +268,11 @@ public partial class FindReplacePanel : UserControl
         string replacement;
         try
         {
-            replacement = RegexToggle.IsChecked == true
-                ? regex.Match(original).Result(ReplaceBox.Text)   // $1 などの後方参照を効かせる
-                : ReplaceBox.Text;
+            if (!TryResolveReplacement(regex, _editor.Document.Text, offset, length, out replacement))
+            {
+                MatchCountText.Text = "置換対象を取り直せませんでした";
+                return;
+            }
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or RegexMatchTimeoutException)
         {
@@ -316,6 +325,40 @@ public partial class FindReplacePanel : UserControl
         Redraw();
     }
 
+    /// <summary>
+    /// 1 件ぶんの置換文字列を決める。正規表現モードでは <c>$1</c> などの後方参照を効かせるため
+    /// <see cref="Match"/> が要るが、**マッチした部分文字列だけを取り出して再マッチしてはいけない**。
+    /// <c>(?&lt;=¥)(\d+)</c> のような先読み・後読みを含むパターンは、部分文字列単体では
+    /// Success=false になり、Result() が NotSupportedException を投げて「置換文字列が不正です」に
+    /// なってしまう（実際にはパターンも置換文字列も正しい）。
+    ///
+    /// 文書全文を入力のまま <c>Match(input, startat)</c> で取り直すのが正しい。この形なら
+    /// 先読み・後読みは startat より前後の文字を通常どおり参照できる。
+    /// </summary>
+    private bool TryResolveReplacement(
+        Regex regex,
+        string documentText,
+        int offset,
+        int length,
+        out string replacement)
+    {
+        if (RegexToggle.IsChecked != true)
+        {
+            replacement = ReplaceBox.Text;
+            return true;
+        }
+
+        Match match = regex.Match(documentText, offset);
+        if (!match.Success || match.Index != offset || match.Length != length)
+        {
+            replacement = "";
+            return false;
+        }
+
+        replacement = match.Result(ReplaceBox.Text);
+        return true;
+    }
+
     private void ReplaceAll()
     {
         if (_editor?.Document is null) return;
@@ -351,15 +394,19 @@ public partial class FindReplacePanel : UserControl
 
         // 置換文字列はすべて、文書を変更する前に解決しておく。後方参照の解決で例外が出ても
         // 1件も置換していないため部分適用にならない（例外時は「置換文字列が不正です」で中断）。
+        // 文書はまだ無変更なので、全文を一度だけ取ってすべての解決に使い回せる。
+        var documentText = _editor.Document.Text;
         var replacements = new List<string>(targets.Count);
         try
         {
             foreach (var (offset, length) in targets)
             {
-                var original = _editor.Document.GetText(offset, length);
-                replacements.Add(RegexToggle.IsChecked == true
-                    ? regex.Match(original).Result(ReplaceBox.Text)
-                    : ReplaceBox.Text);
+                if (!TryResolveReplacement(regex, documentText, offset, length, out var resolved))
+                {
+                    MatchCountText.Text = "置換対象を取り直せませんでした";
+                    return;
+                }
+                replacements.Add(resolved);
             }
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or RegexMatchTimeoutException)
@@ -368,24 +415,34 @@ public partial class FindReplacePanel : UserControl
             return;
         }
 
-        _suppressRecalculation = true;
         var lengthDelta = 0;
-        // まとめて 1 回の Undo で戻せるようにする
-        _editor.Document.BeginUpdate();
+        _suppressRecalculation = true;
         try
         {
-            // 後ろから置換すれば、前方のオフセットがずれない
-            for (var i = 0; i < targets.Count; i++)
+            // 進行中フラグを立てた行と try の間には何も置かない（CLAUDE.md の不変条件）。
+            // BeginUpdate も「何か」に含む: ここで例外が出ると _suppressRecalculation が
+            // true のまま固着し、以後の本文変更でヒット位置が再計算されず、古いオフセットで
+            // 置換して本文を壊しうる。
+            // まとめて 1 回の Undo で戻せるようにする。
+            _editor.Document.BeginUpdate();
+            try
             {
-                var (offset, length) = targets[i];
-                var replacement = replacements[i];
-                _editor.Document.Replace(offset, length, replacement);
-                lengthDelta += replacement.Length - length;
+                // 後ろから置換すれば、前方のオフセットがずれない
+                for (var i = 0; i < targets.Count; i++)
+                {
+                    var (offset, length) = targets[i];
+                    var replacement = replacements[i];
+                    _editor.Document.Replace(offset, length, replacement);
+                    lengthDelta += replacement.Length - length;
+                }
+            }
+            finally
+            {
+                _editor.Document.EndUpdate();
             }
         }
         finally
         {
-            _editor.Document.EndUpdate();
             _suppressRecalculation = false;
         }
 

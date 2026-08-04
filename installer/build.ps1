@@ -16,7 +16,7 @@
 [CmdletBinding()]
 param(
     [switch]$SelfContained,
-    [string]$Version = '0.1.0',
+    [string]$Version,
     [string]$Configuration = 'Release'
 )
 
@@ -24,6 +24,20 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root 'jp-scratch.csproj'
+
+# バージョンは jp-scratch.csproj の <Version> を正とする。
+# ここに既定値を直書きすると、csproj を上げても MSI は古いバージョンのまま出荷され、
+# WiX の MajorUpgrade が「同じバージョン」と判断して上書きインストールできなくなる。
+# -Version で明示的に上書きしたときだけ csproj より優先する。
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $csprojXml = [xml](Get-Content $project -Raw)
+    $Version = ($csprojXml.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1)
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        throw "jp-scratch.csproj から <Version> を読み取れませんでした。-Version で明示してください。"
+    }
+    $Version = $Version.Trim()
+    Write-Host "==> version $Version (jp-scratch.csproj の <Version> から)" -ForegroundColor Cyan
+}
 $iconFile = Join-Path $root 'Assets\app.ico'
 $outputDir = Join-Path $root 'publish\msi'
 

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace JpScratch.Proofreading;
 
@@ -96,7 +97,7 @@ internal static class ProofreadingPrompt
         => text.Replace('<', '＜').Replace('>', '＞');
 
     internal static string BuildUserMessage(string document)
-        => $"<document>\n{document}\n</document>";
+        => $"<document>\n{EscapeDocumentBoundary(document)}\n</document>";
 
     internal static string BuildUserMessage(
         string document,
@@ -105,12 +106,46 @@ internal static class ProofreadingPrompt
     {
         string before = string.IsNullOrEmpty(beforeContext)
             ? string.Empty
-            : $"<context-before correction-allowed=\"false\">\n{beforeContext}\n</context-before>\n";
+            : "<context-before correction-allowed=\"false\">\n" +
+              $"{EscapeDocumentBoundary(beforeContext)}\n</context-before>\n";
         string after = string.IsNullOrEmpty(afterContext)
             ? string.Empty
-            : $"\n<context-after correction-allowed=\"false\">\n{afterContext}\n</context-after>";
+            : "\n<context-after correction-allowed=\"false\">\n" +
+              $"{EscapeDocumentBoundary(afterContext)}\n</context-after>";
         return $"{before}{BuildUserMessage(document)}{after}";
     }
+
+    /// <summary>プロンプトの境界に使っている閉じタグ（バックスラッシュで逃がした形も含めて拾う）。</summary>
+    private static readonly Regex BoundaryTag =
+        new(@"<(\\*)/(document|context-before|context-after)>", RegexOptions.Compiled);
+
+    /// <summary>逃がされた閉じタグ（バックスラッシュが 1 本以上）。</summary>
+    private static readonly Regex EscapedBoundaryTag =
+        new(@"<(\\+)/(document|context-before|context-after)>", RegexOptions.Compiled);
+
+    /// <summary>
+    /// 本文中に現れた閉じタグがプロンプトの境界を壊さないよう、バックスラッシュ 1 本ぶん深く逃がす。
+    ///
+    /// 校正対象の本文は「修正版全文」としてそのまま返ってくるため、この変換は可逆でなければ
+    /// ならない（不可逆な全角化＝システム指示側の <c>Neutralize</c> をここへ使うと、
+    /// 全ての山括弧を全角へ置き換える提案が出て本文が壊れる）。既にバックスラッシュが並んで
+    /// いる場合はその本数を 1 増やすだけなので単射で、<see cref="UnescapeDocumentBoundary"/> が
+    /// 厳密な逆写像になる。
+    /// </summary>
+    internal static string EscapeDocumentBoundary(string text)
+        => BoundaryTag.Replace(
+            text,
+            match => $"<{match.Groups[1].Value}\\/{match.Groups[2].Value}>");
+
+    /// <summary>
+    /// <see cref="EscapeDocumentBoundary"/> の逆写像。モデルが逃がした形をそのまま書き写した場合も、
+    /// 気を利かせて元の <c>&lt;/document&gt;</c> へ戻した場合も、同じ原文へ落ちる
+    /// （後者では戻すものが無いので何もしない）。
+    /// </summary>
+    internal static string UnescapeDocumentBoundary(string text)
+        => EscapedBoundaryTag.Replace(
+            text,
+            match => $"<{match.Groups[1].Value[1..]}/{match.Groups[2].Value}>");
 
     internal static string BuildAlternativeUserMessage(
         string original,

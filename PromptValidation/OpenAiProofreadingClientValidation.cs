@@ -16,11 +16,65 @@ internal static class OpenAiProofreadingClientValidation
         bool successPass = await TestSuccessAsync();
         bool missingKeyPass = await TestMissingKeyAsync();
         bool errorMessagePass = await TestErrorDoesNotLeakBodyAsync();
+        bool truncatedPass = await TestIncompleteResponseAsync();
 
         Console.WriteLine($"OpenAIクライアント（Responses API成功・使用量）: {(successPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"OpenAIクライアント（キー未設定）: {(missingKeyPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"OpenAIクライアント（エラー本文非表示）: {(errorMessagePass ? "PASS" : "FAIL")}");
-        return successPass && missingKeyPass && errorMessagePass;
+        Console.WriteLine($"OpenAIクライアント（打ち切り応答の拒否・max_output_tokens）: {(truncatedPass ? "PASS" : "FAIL")}");
+        return successPass && missingKeyPass && errorMessagePass && truncatedPass;
+    }
+
+    /// <summary>
+    /// 途中までしか生成されなかった応答（status ≠ completed）を採用しないこと。
+    /// 採用すると、切れた本文がそのまま差分に掛かって「本文末尾を削除する提案」になる。
+    /// あわせて出力上限をリクエストで明示していることも確かめる。
+    /// </summary>
+    private static async Task<bool> TestIncompleteResponseAsync()
+    {
+        var handler = new StubHandler((_, _) =>
+        {
+            JsonObject body = new()
+            {
+                ["status"] = "incomplete",
+                ["incomplete_details"] = new JsonObject { ["reason"] = "max_output_tokens" },
+                ["output_text"] = "この文",
+                ["usage"] = new JsonObject
+                {
+                    ["input_tokens"] = 12,
+                    ["output_tokens"] = 7,
+                    ["total_tokens"] = 19,
+                },
+            };
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json")
+            });
+        });
+        using HttpClient http = new(handler) { BaseAddress = new Uri("https://example.invalid/") };
+        using var client = new OpenAiProofreadingClient(
+            () => TestApiKey,
+            http,
+            delay: (_, _) => Task.CompletedTask);
+
+        try
+        {
+            await client.ProofreadAsync(
+                new ProofreadingRequest(0, 0, "この文s尿です。", "", "", "hash", 1, 0, 1));
+            return false;   // 例外にならず採用されてしまった
+        }
+        catch (GeminiClientException ex) when (ex.Error == GeminiClientError.InvalidResponse)
+        {
+            // 期待どおり。
+        }
+
+        if (handler.Body is null)
+            return false;
+
+        using JsonDocument request = JsonDocument.Parse(handler.Body);
+        return request.RootElement
+            .TryGetProperty("max_output_tokens", out JsonElement maxOutputTokens) &&
+            maxOutputTokens.GetInt32() > 0;
     }
 
     private static async Task<bool> TestSuccessAsync()

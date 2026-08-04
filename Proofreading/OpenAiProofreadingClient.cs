@@ -19,6 +19,9 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
     internal const string DefaultModel = ProofreadingModelCatalog.OpenAiModel;
     internal static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
 
+    /// <summary>1 リクエストの出力トークン上限（推論トークンを含む）。<see cref="BuildRequestJson"/> 参照。</summary>
+    private const int MaxOutputTokens = 16384;
+
     private static readonly Uri DefaultBaseAddress =
         new("https://api.openai.com/");
 
@@ -301,7 +304,9 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
         TimeSpan elapsed,
         int attempts)
     {
-        (string correctedText, GeminiUsage usage) = ParseRaw(body);
+        (string rawText, GeminiUsage usage) = ParseRaw(body);
+        // 送信時に逃がした閉じタグを元へ戻してから差分を取る（Gemini 側と同じ）。
+        string correctedText = ProofreadingPrompt.UnescapeDocumentBoundary(rawText);
         DocumentDiffResult diff = DocumentDiff.Create(sourceText, correctedText);
         return new GeminiProofreadingResult(correctedText, diff, usage, elapsed, attempts);
     }
@@ -340,6 +345,25 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
 
     private static string ExtractOutputText(JsonElement root)
     {
+        // 打ち切り（max_output_tokens 到達）や中断で途中までしか生成されていない応答を、
+        // 正常な「修正版全文」として扱ってはいけない。切れた本文をそのまま差分に掛けると
+        // 「本文末尾を削除する提案」になり、削除量が 200 書記素以下かつ変更比率 20% 以下なら
+        // 安全検査を通過して、誤字修正と同じ見た目で提示されてしまう（一括許可で本文が失われる）。
+        // Responses API の status は完了時だけ "completed"（未指定は旧仕様互換として許容）。
+        if (root.TryGetProperty("status", out JsonElement status) &&
+            status.ValueKind == JsonValueKind.String &&
+            !string.Equals(status.GetString(), "completed", StringComparison.Ordinal))
+        {
+            string detail = root.TryGetProperty("incomplete_details", out JsonElement incomplete) &&
+                            incomplete.TryGetProperty("reason", out JsonElement reason) &&
+                            reason.ValueKind == JsonValueKind.String
+                ? $"{status.GetString()}: {reason.GetString()}"
+                : status.GetString() ?? "";
+            throw new GeminiClientException(
+                GeminiClientError.InvalidResponse,
+                $"OpenAI APIの生成が最後まで完了しませんでした（{detail}）。");
+        }
+
         if (root.TryGetProperty("output_text", out JsonElement outputText) &&
             outputText.ValueKind == JsonValueKind.String &&
             !string.IsNullOrWhiteSpace(outputText.GetString()))
@@ -412,6 +436,12 @@ internal sealed class OpenAiProofreadingClient : IProofreadingClient
             ["input"] = userMessage,
             ["reasoning"] = new JsonObject { ["effort"] = "low" },
             ["store"] = false,
+            // 出力上限を明示しないと既定値まかせになり、打ち切りの発生条件がモデル側の都合で
+            // 変わる。校正対象は 1 リクエストあたり 2,000 文字以下（要件 3.3.2）で、出力は
+            // 「修正版全文」1 本なので、推論トークンを含めても十分な余裕を取った値。
+            // モデルの最大出力 128,000（requirements.md 3.5.4）の範囲内。
+            // 万一これで足りなくても status=incomplete として弾かれる（黙って切れない）。
+            ["max_output_tokens"] = MaxOutputTokens,
         };
         return request.ToJsonString();
     }

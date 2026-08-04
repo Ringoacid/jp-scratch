@@ -22,6 +22,7 @@ internal static class GeminiProofreadingClientValidation
         bool permanentFailurePass = await TestPermanentFailureAsync();
         bool timeoutPass = await TestTimeoutAsync();
         bool missingKeyPass = await TestMissingKeyAsync();
+        bool truncatedPass = await TestTruncatedResponseAsync();
 
         Console.WriteLine($"Geminiクライアント（成功・差分）: {(successPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（前後文脈）: {(contextPass ? "PASS" : "FAIL")}");
@@ -31,10 +32,54 @@ internal static class GeminiProofreadingClientValidation
         Console.WriteLine($"Geminiクライアント（恒久エラー）: {(permanentFailurePass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（タイムアウト）: {(timeoutPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（キー未設定）: {(missingKeyPass ? "PASS" : "FAIL")}");
+        Console.WriteLine($"Geminiクライアント（打ち切り応答の拒否・maxOutputTokens）: {(truncatedPass ? "PASS" : "FAIL")}");
 
         return successPass && contextPass && alternativePass && invalidAlternativeUsagePass &&
                retryPass && permanentFailurePass &&
-               timeoutPass && missingKeyPass;
+               timeoutPass && missingKeyPass && truncatedPass;
+    }
+
+    /// <summary>
+    /// 出力上限などで途中までしか生成されなかった応答（finishReason ≠ STOP）を、正常な
+    /// 「修正版全文」として採用しないこと。採用してしまうと、切れた本文がそのまま差分に掛かって
+    /// 「本文末尾を削除する提案」になり、削除量が小さければ安全検査も通ってしまう。
+    /// あわせて、出力上限をリクエストで明示していることも確かめる。
+    /// </summary>
+    private static async Task<bool> TestTruncatedResponseAsync()
+    {
+        var handler = new StubHandler((_, _, _) =>
+        {
+            HttpResponseMessage response = SuccessResponse("この文章は", 11, 1, 2, 14);
+            // 応答本体へ finishReason=MAX_TOKENS を差し込む。
+            string body = response.Content.ReadAsStringAsync().Result;
+            JsonNode node = JsonNode.Parse(body)!;
+            node["candidates"]![0]!["finishReason"] = "MAX_TOKENS";
+            response.Content = new StringContent(
+                node.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
+            return Task.FromResult(response);
+        });
+        using HttpClient http = new(handler) { BaseAddress = new Uri("https://example.invalid/") };
+        using var client = CreateClient(http);
+
+        try
+        {
+            await client.ProofreadAsync(new ProofreadingRequest(
+                0, 12, "この文章は誤りです。", null, null, "hash", 0, 0, 1));
+            return false;   // 例外にならず採用されてしまった
+        }
+        catch (GeminiClientException ex) when (ex.Error == GeminiClientError.InvalidResponse)
+        {
+            // 期待どおり。続けて maxOutputTokens が送られていることを確認する。
+        }
+
+        if (handler.LastBody is null)
+            return false;
+
+        using JsonDocument request = JsonDocument.Parse(handler.LastBody);
+        return request.RootElement
+            .GetProperty("generationConfig")
+            .TryGetProperty("maxOutputTokens", out JsonElement maxOutputTokens) &&
+            maxOutputTokens.GetInt32() > 0;
     }
 
     private static async Task<bool> TestAlternativeRequestAsync()

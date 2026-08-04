@@ -54,6 +54,10 @@
              Link="Services\CredentialService.cs" />
     <Compile Include="..\Services\CustomDateRangeParser.cs"
              Link="Services\CustomDateRangeParser.cs" />
+    <!-- CrossTabSearchWindow 本体は WPF の Window なので取り込めない。
+         行番号の算出とプレビュー生成だけを純粋関数として切り出したこのファイルを検証する。 -->
+    <Compile Include="..\Services\CrossTabSearchPreview.cs"
+             Link="Services\CrossTabSearchPreview.cs" />
     <Compile Include="..\Services\Database.cs"
              Link="Services\Database.cs" />
     <Compile Include="..\Services\FxRateService.cs"

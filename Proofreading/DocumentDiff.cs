@@ -67,14 +67,24 @@ internal static class DocumentDiff
             BuildHunks(operations));
 
         List<DocumentChange> changes = [];
+        // 直前の変更が消費した最後の書記素の index。純粋な挿入は TextAnchor で監視できるよう
+        // 隣接する 1 書記素を借りて置換へ変換するが、借りる方向を調停しないと
+        // 「文頭への挿入」と「その直後への挿入」が同じ書記素を奪い合って範囲が重複し、
+        // 正しい校正結果が丸ごと破棄されて課金だけが残る。
+        int consumedThroughElement = -1;
         foreach (RawHunk hunk in hunks)
         {
             DocumentChange? change = ToAnchoredChange(
                 sourceForDiff,
                 sourceElements,
-                hunk);
+                hunk,
+                consumedThroughElement,
+                out int lastConsumedElement);
             if (change is not null)
+            {
                 changes.Add(change);
+                consumedThroughElement = lastConsumedElement;
+            }
         }
 
         int changedElements = hunks.Sum(
@@ -187,11 +197,20 @@ internal static class DocumentDiff
         return null;
     }
 
+    /// <param name="consumedThroughElement">
+    /// 直前の変更が消費した最後の書記素 index（無ければ -1）。純粋な挿入が「直前の書記素」を
+    /// 借りようとしたとき、そこが既に使われていれば代わりに「直後の書記素」を借りる。
+    /// </param>
+    /// <param name="lastConsumedElement">この変更が消費した最後の書記素 index。</param>
     private static DocumentChange? ToAnchoredChange(
         string source,
         IReadOnlyList<TextElement> sourceElements,
-        RawHunk hunk)
+        RawHunk hunk,
+        int consumedThroughElement,
+        out int lastConsumedElement)
     {
+        lastConsumedElement = consumedThroughElement;
+
         int startElement = hunk.SourceStart;
         int sourceElementCount = hunk.Deleted.Count;
         string original = Join(hunk.Deleted);
@@ -204,22 +223,35 @@ internal static class DocumentDiff
             if (sourceElements.Count == 0)
                 return null;
 
-            if (startElement > 0)
+            if (startElement > 0 && startElement - 1 > consumedThroughElement)
             {
+                // 直前の書記素を借りる（既定）。「その書記素＋挿入文字列」への置換になる。
                 TextElement borrowed = sourceElements[startElement - 1];
                 startElement--;
                 sourceElementCount = 1;
                 original = borrowed.Value;
                 suggestion = borrowed.Value + suggestion;
             }
-            else
+            else if (startElement < sourceElements.Count)
             {
-                TextElement borrowed = sourceElements[0];
+                // 文頭、または直前の書記素を先行する変更が既に消費している。直後の書記素を借りて
+                // 「挿入文字列＋その書記素」への置換にする。挿入 hunk の直後は必ず Equal 要素
+                // （BuildHunks が Equal で hunk を閉じる）なので、次の hunk とは重複しない。
+                TextElement borrowed = sourceElements[startElement];
                 sourceElementCount = 1;
                 original = borrowed.Value;
                 suggestion += borrowed.Value;
             }
+            else
+            {
+                // 文末への挿入で、直前の書記素も先行する変更に取られている。借りる先が無い。
+                // ここで null を返すと Apply による再現検査が落ち、この実行の結果は
+                // 「安全検査に失敗」として穏やかに破棄される（本文は変更しない）。
+                return null;
+            }
         }
+
+        lastConsumedElement = startElement + sourceElementCount - 1;
 
         int start = sourceElements[startElement].Start;
         TextElement last = sourceElements[startElement + sourceElementCount - 1];

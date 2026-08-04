@@ -215,7 +215,9 @@ internal sealed class ApiCallRepository
                 """
                 SELECT called_at, status, prompt_tokens, output_tokens, usd_cost, jpy_cost,
                        usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type
-                FROM api_calls;
+                FROM api_calls
+                WHERE ($from IS NULL OR called_at >= $from)
+                  AND ($to   IS NULL OR called_at <  $to);
                 """,
                 reader =>
                 {
@@ -264,7 +266,9 @@ internal sealed class ApiCallRepository
                     }
 
                     return 0;
-                });
+                },
+                ("$from", WidenedBound(from, -2)),
+                ("$to", WidenedBound(to, +2)));
 
             // 保持期限を過ぎて圧縮済みの日次サマリを合算する。ここを読まないと、
             // 圧縮した瞬間に「全期間」や過去月の合計が黙って減る。
@@ -272,7 +276,9 @@ internal sealed class ApiCallRepository
                 """
                 SELECT day, status, prompt_tokens, output_tokens, usd_cost, jpy_cost,
                        usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type, call_cnt
-                FROM api_call_daily;
+                FROM api_call_daily
+                WHERE ($from IS NULL OR day >= $from)
+                  AND ($to   IS NULL OR day <= $to);
                 """,
                 reader =>
                 {
@@ -325,7 +331,11 @@ internal sealed class ApiCallRepository
                     }
 
                     return 0;
-                });
+                },
+                // day はローカル日 yyyy-MM-dd。判定はその日の 0 時で行うので、
+                // 前後 1 日ぶん広げておけば境界の行を落とさない。
+                ("$from", from?.AddDays(-1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                ("$to", to?.AddDays(+1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
         });
 
         return accumulator.Build();
@@ -571,69 +581,80 @@ internal sealed class ApiCallRepository
     {
         var totals = new Dictionary<DailyKey, DailyTotals>();
         List<long> idsToRemove = [];
-
-        _database.Read(
-            """
-            SELECT id, called_at, trigger_type, model, status, prompt_tokens, output_tokens,
-                   usd_cost, usd_jpy_rate, rate_date, jpy_cost, suggestion_cnt, discarded_cnt
-            FROM api_calls;
-            """,
-            reader =>
-        {
-            while (reader.Read())
-            {
-                if (!DateTimeOffset.TryParse(
-                        reader.GetString(1),
-                        CultureInfo.InvariantCulture,
-                        DateTimeStyles.RoundtripKind,
-                        out DateTimeOffset calledAt) ||
-                    calledAt >= cutoff)
-                {
-                    continue;
-                }
-
-                if (!TryFromStorageTrigger(reader.GetString(2), out ApiCallTrigger trigger) ||
-                    !TryFromStorageStatus(reader.GetString(4), out ApiCallStatus status) ||
-                    !decimal.TryParse(
-                        reader.GetString(7),
-                        NumberStyles.Number,
-                        CultureInfo.InvariantCulture,
-                        out decimal usdCost))
-                {
-                    continue;
-                }
-
-                DailyKey key = new(
-                    DateOnly.FromDateTime(calledAt.LocalDateTime),
-                    trigger,
-                    reader.GetString(3),
-                    status,
-                    TryReadDecimal(reader, 8, out decimal rate) ? rate : null,
-                    TryReadDateOnly(reader, 9, out DateOnly rateDate) ? rateDate : null);
-
-                Accumulate(
-                    totals, key,
-                    calls: 1,
-                    promptTokens: reader.GetInt32(5),
-                    outputTokens: reader.GetInt32(6),
-                    usdCost: usdCost,
-                    jpyCost: TryReadDecimal(reader, 10, out decimal jpyCost) ? jpyCost : null,
-                    suggestionCount: reader.GetInt32(11),
-                    discardedCount: reader.GetInt32(12));
-
-                idsToRemove.Add(reader.GetInt64(0));
-            }
-
-            return 0;
-        });
-
-        if (idsToRemove.Count == 0) return ApiCallCompactionResult.None;
-
-        HashSet<DateOnly> affectedDays = [.. totals.Keys.Select(key => key.Day)];
+        HashSet<DateOnly> affectedDays = [];
         int unlinkedReactions = 0;
 
+        // 圧縮対象の抽出から明細の削除までを 1 つのトランザクション（＝1 つのロック区間）に収める。
+        // 抽出だけをトランザクションの外で行うと、Compact が重なったとき（起動時・保持期間変更時・
+        // 日付ロールオーバーの 3 経路がある）に、後発が先発の書き込み済みサマリへ同じ明細を
+        // 再加算しうる。明細は既に消えているので、日次サマリの二重計上は復旧不能になる。
+        // Database の lock は同一スレッドで再入できるため、InTransaction の中で db.Read を呼んでも
+        // デッドロックしない（GetUsageSummary と同じ構造）。
         _database.InTransaction(db =>
         {
+            db.Read(
+                """
+                SELECT id, called_at, trigger_type, model, status, prompt_tokens, output_tokens,
+                       usd_cost, usd_jpy_rate, rate_date, jpy_cost, suggestion_cnt, discarded_cnt
+                FROM api_calls
+                WHERE called_at < $cutoff_upper;
+                """,
+                reader =>
+                {
+                    while (reader.Read())
+                    {
+                        if (!DateTimeOffset.TryParse(
+                                reader.GetString(1),
+                                CultureInfo.InvariantCulture,
+                                DateTimeStyles.RoundtripKind,
+                                out DateTimeOffset calledAt) ||
+                            calledAt >= cutoff)
+                        {
+                            continue;
+                        }
+
+                        if (!TryFromStorageTrigger(reader.GetString(2), out ApiCallTrigger trigger) ||
+                            !TryFromStorageStatus(reader.GetString(4), out ApiCallStatus status) ||
+                            !decimal.TryParse(
+                                reader.GetString(7),
+                                NumberStyles.Number,
+                                CultureInfo.InvariantCulture,
+                                out decimal usdCost))
+                        {
+                            continue;
+                        }
+
+                        DailyKey key = new(
+                            DateOnly.FromDateTime(calledAt.LocalDateTime),
+                            trigger,
+                            reader.GetString(3),
+                            status,
+                            TryReadDecimal(reader, 8, out decimal rate) ? rate : null,
+                            TryReadDateOnly(reader, 9, out DateOnly rateDate) ? rateDate : null);
+
+                        Accumulate(
+                            totals, key,
+                            calls: 1,
+                            promptTokens: reader.GetInt32(5),
+                            outputTokens: reader.GetInt32(6),
+                            usdCost: usdCost,
+                            jpyCost: TryReadDecimal(reader, 10, out decimal jpyCost) ? jpyCost : null,
+                            suggestionCount: reader.GetInt32(11),
+                            discardedCount: reader.GetInt32(12));
+
+                        idsToRemove.Add(reader.GetInt64(0));
+                    }
+
+                    return 0;
+                },
+                // 索引 idx_api_calls_at を効かせるための安全側の絞り込み。
+                // 実際の cutoff 判定は上のループで DateTimeOffset として行う。
+                ("$cutoff_upper", ToStorageValue(cutoff.AddDays(2))));
+
+            if (idsToRemove.Count == 0) return;
+
+            affectedDays.UnionWith(totals.Keys.Select(key => key.Day));
+
             // 既存のサマリを取り込んでから書き直す。同じ日を二度圧縮しても（保持期間を
             // 短くして再実行した場合など）合算が壊れず、何度実行しても結果が同じになる。
             // トランザクションの内側で読むことで、読み込みと書き戻しの間に割り込まれない。
@@ -730,7 +751,9 @@ internal sealed class ApiCallRepository
             }
         });
 
-        return new ApiCallCompactionResult(idsToRemove.Count, affectedDays.Count, unlinkedReactions);
+        return idsToRemove.Count == 0
+            ? ApiCallCompactionResult.None
+            : new ApiCallCompactionResult(idsToRemove.Count, affectedDays.Count, unlinkedReactions);
     }
 
     private static void Accumulate(
@@ -802,6 +825,19 @@ internal sealed class ApiCallRepository
 
     private static string ToStorageValue(DateTimeOffset value)
         => value.ToString("O", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// <c>called_at</c>（ラウンドトリップ書式のローカル日時＋オフセット）に対する、
+    /// 索引 <c>idx_api_calls_at</c> を効かせるための**安全側に広げた**文字列境界。
+    ///
+    /// 保存文字列は固定幅なので辞書順＝表記上の日時順だが、行ごとにオフセットが違いうるため、
+    /// 実時刻の順序とは最大で ±14 時間ずれる。前後 2 日ぶん広げれば取りこぼしは起きない。
+    /// 実際の期間判定は従来どおり <see cref="DateTimeOffset"/> として行うので、
+    /// この境界は「明らかに範囲外の行を SQLite 側で落とすだけ」の絞り込みでしかない。
+    /// 12 か月ぶん貯まった状態でのステータスバー更新・コールドスタートを守るために要る。
+    /// </summary>
+    private static string? WidenedBound(DateTimeOffset? value, int days)
+        => value is { } bound ? ToStorageValue(bound.AddDays(days)) : null;
 
     private static bool TryFromStorageTrigger(string value, out ApiCallTrigger trigger)
     {

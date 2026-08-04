@@ -132,7 +132,11 @@ internal sealed class PricingService
 
         try
         {
-            string json = File.ReadAllText(_pricingFile);
+            // strict UTF-8 で読む。既定のデコーダは不正バイトを U+FFFD へ黙って置換するため、
+            // CP932 で保存された pricing.json がモデルIDの化けた状態で「読めた」ことになり、
+            // 直後の TrySave（既定モデルの補完）で化けたまま書き戻されてユーザーの単価が失われる。
+            if (!AtomicFile.TryReadAllText(_pricingFile, out string json))
+                throw new InvalidDataException("モデル単価ファイルを読み込めませんでした。");
             Dictionary<string, ModelPricing>? loaded =
                 JsonSerializer.Deserialize<Dictionary<string, ModelPricing>>(
                     json,

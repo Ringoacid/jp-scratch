@@ -106,6 +106,9 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
     internal const string DefaultModel = "gemini-3.5-flash-lite";
     internal static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
 
+    /// <summary>1 リクエストの出力トークン上限（思考トークンを含む）。<see cref="BuildRequestJson"/> 参照。</summary>
+    private const int MaxOutputTokens = 16384;
+
     private static readonly Uri DefaultBaseAddress =
         new("https://generativelanguage.googleapis.com/");
 
@@ -417,7 +420,10 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
         TimeSpan elapsed,
         int attempts)
     {
-        (string correctedText, GeminiUsage usage) = ParseRaw(body);
+        (string rawText, GeminiUsage usage) = ParseRaw(body);
+        // 送信時に逃がした閉じタグを元へ戻してから差分を取る（逃がしたままだと
+        // 「\/document を /document へ直す」提案が出る）。
+        string correctedText = ProofreadingPrompt.UnescapeDocumentBoundary(rawText);
         DocumentDiffResult diff = DocumentDiff.Create(sourceText, correctedText);
         return new GeminiProofreadingResult(correctedText, diff, usage, elapsed, attempts);
     }
@@ -468,6 +474,21 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
         }
 
         JsonElement first = candidates[0];
+
+        // 打ち切り（MAX_TOKENS）・安全フィルタ等で途中までしか生成されていない応答を、
+        // 正常な「修正版全文」として扱ってはいけない。切れた本文をそのまま差分に掛けると
+        // 「本文末尾を削除する提案」になり、削除量が 200 書記素以下かつ変更比率 20% 以下なら
+        // 安全検査を通過して、誤字修正と同じ見た目で提示されてしまう（一括許可で本文が失われる）。
+        // finishReason は生成が正常終了したときだけ STOP になる（未指定は旧仕様互換として許容）。
+        if (first.TryGetProperty("finishReason", out JsonElement finishReason) &&
+            finishReason.ValueKind == JsonValueKind.String &&
+            !string.Equals(finishReason.GetString(), "STOP", StringComparison.Ordinal))
+        {
+            throw new GeminiClientException(
+                GeminiClientError.InvalidResponse,
+                $"Gemini APIの生成が最後まで完了しませんでした（{finishReason.GetString()}）。");
+        }
+
         if (!first.TryGetProperty("content", out JsonElement content) ||
             !content.TryGetProperty("parts", out JsonElement parts) ||
             parts.ValueKind != JsonValueKind.Array)
@@ -536,7 +557,13 @@ internal sealed class GeminiProofreadingClient : IProofreadingClient
             ["generationConfig"] = new JsonObject
             {
                 ["temperature"] = 1.0,
-                ["responseMimeType"] = "text/plain"
+                ["responseMimeType"] = "text/plain",
+                // 出力上限を明示しないと既定値まかせになり、打ち切りの発生条件がモデル側の
+                // 都合で変わる。校正対象は 1 リクエストあたり 2,000 文字以下（要件 3.3.2）で、
+                // 出力は「修正版全文」1 本なので、思考トークンを含めても十分な余裕を取った値。
+                // モデルの出力上限 65,536（requirements.md 3.5.4）の範囲内。
+                // 万一これで足りなくても finishReason=MAX_TOKENS として弾かれる（黙って切れない）。
+                ["maxOutputTokens"] = MaxOutputTokens
             }
         };
 

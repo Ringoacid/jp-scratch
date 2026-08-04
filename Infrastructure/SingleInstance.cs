@@ -107,14 +107,31 @@ internal sealed class SingleInstance : IDisposable
     /// <summary>
     /// 先行インスタンスとして、後続からの呼び出しを待ち受ける。
     /// <paramref name="onActivate"/> はスレッドプールから呼ばれるので、UI 操作は呼び出し側で marshal すること。
+    ///
+    /// コールバック全体を try/catch で囲うのは必須。ここは ThreadPool のスレッドなので、
+    /// 例外を漏らすと DispatcherUnhandledException には拾われず AppDomain.UnhandledException を
+    /// 経てプロセスが強制終了する（＝ショートカット再クリックのたびに常駐が落ちうる）。
+    /// 呼び戻しは「ウィンドウを前に出す」だけの補助動作であり、失敗しても落とす理由がない。
     /// </summary>
     public void ListenForActivation(Action onActivate)
     {
+        ArgumentNullException.ThrowIfNull(onActivate);
+
         _activateEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ActivateEventName);
 
         _registration = ThreadPool.RegisterWaitForSingleObject(
             _activateEvent,
-            (_, _) => onActivate(),
+            (_, _) =>
+            {
+                try
+                {
+                    onActivate();
+                }
+                catch (Exception)
+                {
+                    // 呼び戻しに失敗しても常駐は続ける。ユーザーはホットキーやトレイから開ける。
+                }
+            },
             state: null,
             millisecondsTimeOutInterval: Timeout.Infinite,
             executeOnlyOnce: false);
