@@ -20,6 +20,8 @@
 dotnet build    # デバッグビルド / dotnet run で実行
 powershell -File tools\smoke-test.ps1 publish\fdd\JpScratch.exe   # 煙テスト（%APPDATA%\JpScratch を消すので注意）
 dotnet run --project PromptValidation -- --self-test   # オフライン回帰テスト（外部 API 不使用）
+dotnet run --project PromptValidation -- --model-benchmark   # 全モデル比較（実課金。--self-test には入れない）
+python tools/plot-model-benchmark.py   # 上の結果から README 用の比較図を生成
 ```
 
 - `PromptValidation/` は本体とソースを共有する独立コンソールアプリ。校正ロジック変更時は必ず `--self-test` を通す。

@@ -49,6 +49,34 @@ dotnet run --project PromptValidation -- --max-cost 0.25
 終了コードは、全件合格なら `0`、検証失敗なら `1`、設定・通信エラーなら `2`。
 各API呼び出しと集計には、`usageMetadata` と現行単価に基づく推定USD料金を表示する。
 
+## モデル比較ベンチマーク（`--model-benchmark`）
+
+上の精度検証とは別系統のサブコマンド。カタログ収録の全モデルへ**同じ日本語文章**を送り、
+所要時間・トークン・料金・**全提案を承諾した結果の本文**を 1 つの JSON に残す。
+
+```powershell
+$env:GEMINI_API_KEY = "..."; $env:OPENAI_API_KEY = "..."
+$env:ANTHROPIC_API_KEY = "..."; $env:PLAMO_API_KEY = "..."
+dotnet run --project PromptValidation -- --model-benchmark --trials 3 --max-cost 10
+```
+
+- 実課金する。`--self-test` には入れていない（self-test が無課金・無キーで動く前提を壊すため）。
+  計算部分だけは `ModelBenchmarkValidation` として self-test に入っている。
+- キーが取れないプロバイダーは黙って落とさず、JSON の `skippedProviders` に理由つきで残す。
+  環境変数が無いときだけ `credentials.dat`（DPAPI）へフォールバックする。
+- `api_calls` にも `%APPDATA%\JpScratch\pricing.json` にも書き込まない。単価と為替は
+  一時ディレクトリのファイルで扱う（実利用の課金履歴・月間上限・当日1回の為替試行を汚さない）。
+- **タイムアウトは全モデル共通**（既定 120 秒）。モデルごとの推奨値（15〜90 秒）を使うと
+  遅いモデルほど打ち切られ、比較したい所要時間の軸が歪む。
+- 文章は `benchmark-texts.json`（7 本）。すべて単一段落・2,000 字未満にしてあり、
+  1 文章 = 1 リクエストになる。段落計画は通さない。
+- `quoted-typo` と `instruction-like` の 2 本は `mustNotChange` を持つ。全提案を承諾した本文から
+  その文字列が消えていれば「引用内の意図的な誤字を直してしまった」「本文中の指示に従ってしまった」
+  ということなので、`protectionViolations` に記録する。
+
+主なオプションは `--trials` / `--max-cost` / `--models` / `--texts` / `--timeout` / `--output` / `--yes`。
+詳細は `--model-benchmark --help`。図の生成は `python tools/plot-model-benchmark.py`。
+
 プロンプト案:
 
 - `full-rewrite-safe`（既定）: 全文の修正版を返す。文書境界と文中命令の無視を明示。

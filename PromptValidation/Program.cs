@@ -26,6 +26,10 @@ internal static class Program
             // （実APIを呼ぶ診断のため、self-testが無課金・無キーで動く前提を壊す）。
             if (args.Length > 0 && args[0] == "--probe-openai-cache")
                 return await OpenAiCacheProbeCommand.RunAsync();
+            // --model-benchmark も同じ理由で別系統・--self-test 対象外（全プロバイダーへ実課金する）。
+            // 計算部分だけは ModelBenchmarkValidation として self-test に入れてある。
+            if (args.Length > 0 && args[0] == "--model-benchmark")
+                return await ModelBenchmarkCommand.RunAsync(args.Skip(1).ToArray());
 
             Options options = Options.Parse(args);
             if (options.ShowHelp)
@@ -267,6 +271,7 @@ internal static class Program
         bool missedCorrectionPass = MissedCorrectionActionValidation.RunSelfTests();
         bool crossTabPreviewPass = CrossTabSearchPreviewValidation.RunSelfTests();
         bool atomicFilePass = AtomicFileValidation.RunSelfTests();
+        bool modelBenchmarkPass = ModelBenchmarkValidation.RunSelfTests();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
                credentialPass && pricingPass && apiCallPass && apiCallHistoryPass &&
                apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
@@ -278,7 +283,7 @@ internal static class Program
                apiLogCompactionPass && trayIconStatePass &&
                fewShotPass && styleGuidePass && promptV3Pass && inlineDiffPass &&
                statusBarFormatterPass && missedCorrectionPass &&
-               crossTabPreviewPass && atomicFilePass ? 0 : 1;
+               crossTabPreviewPass && atomicFilePass && modelBenchmarkPass ? 0 : 1;
     }
 
     private static void PrintHelp()
@@ -315,6 +320,14 @@ internal static class Program
                                  目視確認用データを投入する（APIは呼ばない）。
                                  --bulk は2000件を超える大量データ（Truncated確認用）。
                                  --force は既存app.dbの上書きを明示的に許可する。
+              --model-benchmark [--trials N] [--max-cost USD] [--models a,b] [--texts a,b]
+                                 [--timeout S] [--output PATH] [--yes]
+                                 カタログ収録の全モデルへ同じ文章を送り、所要時間・料金・
+                                 全提案を承諾した結果をJSONへ保存する比較ベンチマーク。
+                                 課金が発生する。api_calls とpricing.json へは書き込まない。
+                                 APIキーは GEMINI_API_KEY / OPENAI_API_KEY /
+                                 ANTHROPIC_API_KEY / PLAMO_API_KEY から読む。
+                                 詳細は --model-benchmark --help を参照。
               --probe-openai-cache
                                  v3相当の長いシステム指示を同一内容で2回連続送信し、OpenAIの
                                  自動プロンプトキャッシュ（cached_tokens）が働くかを実APIで確認する
