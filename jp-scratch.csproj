@@ -11,7 +11,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Product>JP Scratch</Product>
     <!-- 常駐アプリなので起動時間を優先する（2.1 非機能要件） -->
     <PublishReadyToRun>true</PublishReadyToRun>
