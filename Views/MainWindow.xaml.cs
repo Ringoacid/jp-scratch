@@ -190,6 +190,13 @@ public partial class MainWindow : Window
         Editor.TextArea.SelectionChanged += (_, _) => ScheduleStatusUpdate();
         Editor.TextChanged += (_, _) => ScheduleStatusUpdate();
 
+        // Ctrl+C / ドラッグ&ドロップで AvalonEdit が載せる HTML 形式は捨てる。
+        // AvalonEdit のフラグメントは行間が "<br>\r\n"、前後に "<HTML>\r\n<BODY>\r\n" などの
+        // 生の改行を含む。HTML を優先して受け取る貼り付け先（Google Chat など）は <br> と
+        // 生の改行の両方を改行として扱うため、行間が倍になり先頭・末尾にも空行が入る。
+        // プレーンテキストのスクラッチパッドに書式は要らないので、テキスト形式だけを渡す。
+        DataObject.AddSettingDataHandler(Editor.TextArea, OnEditorClipboardSettingData);
+
         FindPanel.Attach(Editor);
         FindPanel.CrossTabSearchRequested += OpenCrossTabSearch;
         FindPanel.Closed += () => Editor.TextArea.Focus();
@@ -436,6 +443,16 @@ public partial class MainWindow : Window
         var text = Editor.SelectionLength > 0 ? Editor.SelectedText : Editor.Document.Text;
         if (!ClipboardHelper.TrySetText(text))
             SetTransientStatus("クリップボードにコピーできませんでした");
+    }
+
+    /// <summary>
+    /// AvalonEdit がコピー・ドラッグ時に HTML 形式を載せようとしたら取り消す。
+    /// AvalonEdit は書式（CF_HTML）とテキストを別々に <c>DataObject.SettingData</c> で確認するので、
+    /// HTML だけを落としてもプレーンテキストのコピーは通常どおり成立する。
+    /// </summary>
+    private static void OnEditorClipboardSettingData(object sender, DataObjectSettingDataEventArgs e)
+    {
+        if (e.Format == DataFormats.Html) e.CancelCommand();
     }
 
     // ================= 設定の反映 =================

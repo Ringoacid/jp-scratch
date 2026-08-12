@@ -50,6 +50,7 @@ python tools/plot-model-benchmark.py   # 上の結果から README 用の比較�
 - **タイムアウトでは再試行しない**（二重課金と待ち時間の倍化を避ける）。再試行は 429 / 5xx のみ。
 - **モデルごとの差異は `ProofreadingModelCatalog` の表に持たせる**（単価・推奨タイムアウト・用途別の思考量・プロバイダー）。if 分岐を増やさない。
 - **`pricing.json` の `currency` は編集で落とさない**（省略時 USD。円建ての PLaMo が $ 扱いになると桁が狂う）。
+- **コピー時の HTML 形式は捨てる**（`MainWindow` が `DataObject.SettingData` で `DataFormats.Html` をキャンセル）。AvalonEdit の HTML フラグメントは行間が `<br>` ＋生の改行のため、HTML を優先する貼り付け先（Google Chat など）で行間が倍になり前後にも空行が入る。
 - 書き込みは一時ファイル→`File.Replace`（`Infrastructure/AtomicFile.cs`）。SQLitePCLRaw は脆弱性対応で 2.1.12 に固定。
 
 ## コーディング規約
