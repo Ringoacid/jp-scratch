@@ -53,6 +53,11 @@ python tools/plot-model-benchmark.py   # 上の結果から README 用の比較�
 - **コピー時の HTML 形式は捨てる**（`MainWindow` が `DataObject.SettingData` で `DataFormats.Html` をキャンセル）。AvalonEdit の HTML フラグメントは行間が `<br>` ＋生の改行のため、HTML を優先する貼り付け先（Google Chat など）で行間が倍になり前後にも空行が入る。
 - 書き込みは一時ファイル→`File.Replace`（`Infrastructure/AtomicFile.cs`）。SQLitePCLRaw は脆弱性対応で 2.1.12 に固定。
 
+## 作業の進め方
+
+- **ブランチは切らない**。指示がない限り `main` に直接コミットする（このプロジェクトは単独開発でレビュー工程がないため、ブランチを作ってもマージ待ちが増えるだけ）。
+- ブランチを切る必要があると判断した場合は、**作る前に必ず確認を取る**。
+
 ## コーディング規約
 
 - UI 文言はすべて日本語ハードコード。サテライトリソースは使わない。
