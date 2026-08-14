@@ -99,9 +99,12 @@ internal static class PricingServiceValidation
             bool replacePass = RunReplaceTests(pricingFile);
 
             bool migrationPass = RunOpenAiPricingMigrationTest(root);
+            bool scheduledPricingPass = RunScheduledPricingTests(root);
+            bool historyPass = RunPricingHistoryTests(root);
             bool pass =
                 defaultPass && openAiDefaultPass && customPass && recoveryPass &&
-                capModelRejected && parseCapPass && unknownPass && replacePass && migrationPass;
+                capModelRejected && parseCapPass && unknownPass && replacePass && migrationPass &&
+                scheduledPricingPass && historyPass;
             Console.WriteLine(
                 "料金設定（作成・モデル別計算・破損復旧・設定画面からの編集API）: " +
                 (pass ? "PASS" : "FAIL"));
@@ -121,6 +124,126 @@ internal static class PricingServiceValidation
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
+    }
+
+    private static bool RunScheduledPricingTests(string root)
+    {
+        string pricingFile = Path.Combine(root, "scheduled-pricing.json");
+        File.WriteAllText(pricingFile, "{\"gemini-3.6-flash\":{\"input_usd_per_1m\":1.50,\"output_usd_per_1m\":7.50,\"updated_at\":\"2026-08-04\"},\"claude-sonnet-5\":{\"input_usd_per_1m\":3.00,\"output_usd_per_1m\":15.00,\"updated_at\":\"2026-08-04\"},\"custom-gemini\":{\"input_usd_per_1m\":9.00,\"output_usd_per_1m\":19.00,\"updated_at\":\"2026-08-04\"}}");
+        DateOnly geminiToday = new DateOnly(2026, 12, 31);
+        var beforeGemini = new PricingService(
+            pricingFile, utcTodayProvider: () => geminiToday);
+        ModelPricing geminiBefore = beforeGemini.GetPricing("gemini-3.6-flash");
+        ModelPricing sonnetBefore = beforeGemini.GetPricing("claude-sonnet-5");
+        ModelPricing customBefore = beforeGemini.GetPricing("custom-gemini");
+        ModelPricing newModelBefore = beforeGemini.GetPricing("gemini-3.7-flash");
+        bool endDatePass =
+            geminiBefore.CatalogManaged &&
+            geminiBefore.InputUsdPerMillion == 0.75m &&
+            geminiBefore.OutputUsdPerMillion == 3.75m &&
+            sonnetBefore.CatalogManaged &&
+            sonnetBefore.InputUsdPerMillion == 3.00m &&
+            sonnetBefore.OutputUsdPerMillion == 15.00m &&
+            newModelBefore.CatalogManaged &&
+            newModelBefore.InputUsdPerMillion == 0.75m &&
+            newModelBefore.OutputUsdPerMillion == 3.75m;
+
+        geminiToday = new DateOnly(2027, 1, 1);
+        ModelPricing geminiAfter = beforeGemini.GetPricing("gemini-3.6-flash");
+        ModelPricing sonnetAfter = beforeGemini.GetPricing("claude-sonnet-5");
+        ModelPricing customAfter = beforeGemini.GetPricing("custom-gemini");
+        ModelPricing newModelAfter = beforeGemini.GetPricing("gemini-3.7-flash");
+        bool nextDayPass =
+            geminiAfter.CatalogManaged &&
+            geminiAfter.InputUsdPerMillion == 1.50m &&
+            geminiAfter.OutputUsdPerMillion == 7.50m &&
+            newModelAfter.CatalogManaged &&
+            newModelAfter.InputUsdPerMillion == 1.50m &&
+            newModelAfter.OutputUsdPerMillion == 7.50m &&
+            sonnetAfter.InputUsdPerMillion == 3.00m &&
+            sonnetAfter.OutputUsdPerMillion == 15.00m;
+        bool customHeldPass =
+            !customBefore.CatalogManaged &&
+            !customAfter.CatalogManaged &&
+            customBefore.InputUsdPerMillion == 9.00m &&
+            customAfter.InputUsdPerMillion == 9.00m &&
+            customBefore.OutputUsdPerMillion == 19.00m &&
+            customAfter.OutputUsdPerMillion == 19.00m;
+
+        var sonnetPromo = new PricingService(
+            pricingFile, utcTodayProvider: () => new DateOnly(2026, 8, 31));
+        var sonnetStandard = new PricingService(
+            pricingFile, utcTodayProvider: () => new DateOnly(2026, 9, 1));
+        bool sonnetBoundaryPass =
+            sonnetPromo.GetPricing("claude-sonnet-5").InputUsdPerMillion == 2.00m &&
+            sonnetPromo.GetPricing("claude-sonnet-5").OutputUsdPerMillion == 10.00m &&
+            sonnetStandard.GetPricing("claude-sonnet-5").InputUsdPerMillion == 3.00m &&
+            sonnetStandard.GetPricing("claude-sonnet-5").OutputUsdPerMillion == 15.00m;
+
+        bool pass = endDatePass && nextDayPass && customHeldPass && sonnetBoundaryPass;
+        return pass;
+    }
+
+    private static bool RunPricingHistoryTests(string root)
+    {
+        string pricingFile = Path.Combine(root, "pricing-history.json");
+        DateOnly today = new(2026, 8, 19);
+        var service = new PricingService(pricingFile, () => today);
+        const string model = "claude-sonnet-5";
+        PricingEvent[] events =
+        [
+            new(new DateOnly(2026, 8, 20), PricingEventType.Override, 7m, 17m),
+            new(new DateOnly(2026, 9, 15), PricingEventType.UseCatalog),
+        ];
+        service.ReplaceUserEvents(model, events);
+
+        bool futureUnaffected =
+            service.GetPricing(model).InputUsdPerMillion == 2m;
+        bool overrideStartsOnDate =
+            service.GetPricing(model, new DateOnly(2026, 8, 20)).InputUsdPerMillion == 7m &&
+            service.GetPricing(model, new DateOnly(2026, 9, 1)).OutputUsdPerMillion == 17m;
+        bool resetStartsOnDate =
+            service.GetPricing(model, new DateOnly(2026, 9, 15)).CatalogManaged &&
+            service.GetPricing(model, new DateOnly(2026, 9, 15)).InputUsdPerMillion == 3m;
+
+        var reloaded = new PricingService(
+            pricingFile,
+            () => new DateOnly(2026, 9, 20));
+        bool persisted =
+            reloaded.GetUserEvents(model).SequenceEqual(events) &&
+            reloaded.GetPricing(model).InputUsdPerMillion == 3m &&
+            File.ReadAllText(pricingFile).Contains("version", StringComparison.Ordinal);
+        IReadOnlyList<PricingHistoryEntry> history = reloaded.GetHistory(model);
+        bool officialAndUserVisible =
+            history.Any(row => row.IsCatalog && row.IsPromotional &&
+                               row.EffectiveFrom == new DateOnly(2026, 8, 14)) &&
+            history.Any(row => row.IsCatalog && !row.IsPromotional &&
+                               row.EffectiveFrom == new DateOnly(2026, 9, 1)) &&
+            history.Count(row => !row.IsCatalog) == 2;
+
+        bool duplicateRejected;
+        try
+        {
+            reloaded.ReplaceUserEvents(
+                model,
+                [
+                    events[0],
+                    new(events[0].EffectiveFrom, PricingEventType.UseCatalog),
+                ]);
+            duplicateRejected = false;
+        }
+        catch (InvalidDataException)
+        {
+            duplicateRejected =
+                reloaded.GetUserEvents(model).SequenceEqual(events);
+        }
+
+        bool pass = futureUnaffected && overrideStartsOnDate && resetStartsOnDate &&
+                    persisted && officialAndUserVisible && duplicateRejected;
+        Console.WriteLine(
+            "  料金履歴（将来予約・ユーザー優先・公式復帰・永続化・重複拒否）: " +
+            (pass ? "PASS" : "FAIL"));
+        return pass;
     }
 
     private static bool RunOpenAiPricingMigrationTest(string root)

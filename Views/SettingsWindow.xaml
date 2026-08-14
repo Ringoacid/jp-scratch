@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:system="clr-namespace:System;assembly=System.Runtime"
+        xmlns:controls="clr-namespace:JpScratch.Controls"
         Title="JP Scratch の設定"
         Width="760" Height="920"
         MinWidth="680" MinHeight="640"
@@ -784,62 +785,90 @@
                                     </StackPanel>
 
                                     <Border Style="{StaticResource SettingsRow}">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="420" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="入力単価" Style="{StaticResource FieldLabel}" />
-                                            <Grid Grid.Column="1">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="130" />
-                                                    <ColumnDefinition Width="10" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBox x:Name="PricingInputBox" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
-                                                <TextBlock Grid.Column="2" Text="USD / 1M tokens" Style="{StaticResource FieldLabel}" Margin="0" />
-                                            </Grid>
-                                        </Grid>
-                                    </Border>
-                                    <Border Style="{StaticResource SettingsRow}">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="420" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Text="出力単価" Style="{StaticResource FieldLabel}" />
-                                            <Grid Grid.Column="1">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="130" />
-                                                    <ColumnDefinition Width="10" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBox x:Name="PricingOutputBox" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
-                                                <TextBlock Grid.Column="2" Text="USD / 1M tokens（thinking を含む）" Style="{StaticResource FieldLabel}" Margin="0" />
-                                            </Grid>
-                                        </Grid>
+                                        <StackPanel>
+                                            <DockPanel Margin="0,0,0,6">
+                                                <TextBlock Text="モデル単価の推移"
+                                                           Style="{StaticResource FieldLabel}" />
+                                                <TextBlock x:Name="PricingCurrentSummaryText"
+                                                           DockPanel.Dock="Right"
+                                                           HorizontalAlignment="Right"
+                                                           Foreground="{DynamicResource SubtleTextBrush}"
+                                                           FontSize="11" />
+                                            </DockPanel>
+                                            <Border Height="230"
+                                                    BorderBrush="{DynamicResource SettingsSeparatorBrush}"
+                                                    BorderThickness="1"
+                                                    Padding="6">
+                                                <controls:PricingHistoryChart
+                                                    x:Name="PricingHistoryChart"
+                                                    AutomationProperties.Name="入力単価と出力単価の履歴グラフ" />
+                                            </Border>
+                                        </StackPanel>
                                     </Border>
                                     <Border Style="{StaticResource SettingsLastRow}">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="420" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel>
-                                                <TextBlock Text="単価の更新日" Style="{StaticResource FieldLabel}" />
-                                                <TextBlock Text="モデルの公式API料金が変更され、上の単価を更新した日を入力します。"
-                                                           Style="{StaticResource SettingsDescription}" Margin="0,4,12,0" />
+                                        <StackPanel>
+                                            <TextBlock Text="料金履歴"
+                                                       Style="{StaticResource FieldLabel}"
+                                                       Margin="0,0,0,6" />
+                                            <ListView x:Name="PricingHistoryList"
+                                                      Height="210"
+                                                      SelectionMode="Single"
+                                                      Background="{DynamicResource ControlBackgroundBrush}"
+                                                      Foreground="{DynamicResource TextBrush}"
+                                                      BorderBrush="{DynamicResource BorderBrush}"
+                                                      BorderThickness="1"
+                                                      ItemContainerStyle="{StaticResource AppListViewItem}"
+                                                      SelectionChanged="PricingHistoryList_SelectionChanged"
+                                                      AutomationProperties.Name="選択モデルの料金履歴">
+                                                <ListView.View>
+                                                    <GridView>
+                                                        <GridViewColumn Header="適用日" Width="86"
+                                                                        DisplayMemberBinding="{Binding EffectiveFromText}" />
+                                                        <GridViewColumn Header="出典" Width="104"
+                                                                        DisplayMemberBinding="{Binding SourceText}" />
+                                                        <GridViewColumn Header="入力" Width="76"
+                                                                        DisplayMemberBinding="{Binding InputText}" />
+                                                        <GridViewColumn Header="入力の増減" Width="108"
+                                                                        DisplayMemberBinding="{Binding InputDeltaText}" />
+                                                        <GridViewColumn Header="出力" Width="76"
+                                                                        DisplayMemberBinding="{Binding OutputText}" />
+                                                        <GridViewColumn Header="出力の増減" Width="108"
+                                                                        DisplayMemberBinding="{Binding OutputDeltaText}" />
+                                                        <GridViewColumn Header="状態" Width="78"
+                                                                        DisplayMemberBinding="{Binding StatusText}" />
+                                                    </GridView>
+                                                </ListView.View>
+                                            </ListView>
+                                            <StackPanel Orientation="Horizontal"
+                                                        Margin="0,8,0,0">
+                                                <Button x:Name="PricingAddButton"
+                                                        Style="{StaticResource AppButton}"
+                                                        Content="価格を追加"
+                                                        Click="PricingAddButton_Click" />
+                                                <Button x:Name="PricingRestoreButton"
+                                                        Style="{StaticResource AppButton}"
+                                                        Content="公式価格へ戻す"
+                                                        Margin="8,0,0,0"
+                                                        Click="PricingRestoreButton_Click" />
+                                                <Button x:Name="PricingEditButton"
+                                                        Style="{StaticResource AppButton}"
+                                                        Content="編集"
+                                                        Margin="8,0,0,0"
+                                                        IsEnabled="False"
+                                                        Click="PricingEditButton_Click" />
+                                                <Button x:Name="PricingDeleteButton"
+                                                        Style="{StaticResource AppButton}"
+                                                        Content="削除"
+                                                        Margin="8,0,0,0"
+                                                        IsEnabled="False"
+                                                        Click="PricingDeleteButton_Click" />
                                             </StackPanel>
-                                            <Grid Grid.Column="1">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="130" />
-                                                    <ColumnDefinition Width="10" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBox x:Name="PricingUpdatedAtBox" Style="{StaticResource AppTextBox}" TextAlignment="Right" />
-                                                <TextBlock Grid.Column="2" Text="yyyy-MM-dd" Style="{StaticResource FieldLabel}" Margin="0" />
-                                            </Grid>
-                                        </Grid>
+                                            <TextBlock x:Name="PricingSelectionHelpText"
+                                                       Margin="0,6,0,0"
+                                                       Text="公式価格は読み取り専用です。ユーザー設定の行を選ぶと編集・削除できます。"
+                                                       Style="{StaticResource SettingsDescription}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
                                     </Border>
                                     </StackPanel>
                                     </Border>
@@ -866,6 +895,9 @@
                     MinWidth="140"
                     Click="OpenFolderButton_Click" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="CancelButton" Style="{StaticResource AppButton}" Content="キャンセル"
+                        MinWidth="100" Height="38" IsCancel="True"
+                        Click="CancelButton_Click" />
                 <Button x:Name="OkButton" Style="{StaticResource AppButton}" Content="OK"
                         MinWidth="120" Height="38" Margin="8,0,0,0" IsDefault="True"
                         Background="{DynamicResource AccentBrush}"

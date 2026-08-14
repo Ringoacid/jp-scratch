@@ -156,6 +156,7 @@ internal static class SettingsFieldFormattingValidation
     {
         var original = new ModelPricing
         {
+            CatalogManaged = true,
             InputUsdPerMillion = 0.123456789m,
             OutputUsdPerMillion = 2.987654321m,
             UpdatedAt = "2026-07-29",
@@ -173,6 +174,7 @@ internal static class SettingsFieldFormattingValidation
             inputText, outputText, original.UpdatedAt, original, out ModelPricing result, out string error);
 
         bool passed = displayRounds && built && error == "" &&
+                      result.CatalogManaged &&
                       result.InputUsdPerMillion == original.InputUsdPerMillion &&
                       result.OutputUsdPerMillion == original.OutputUsdPerMillion &&
                       result.UpdatedAt == original.UpdatedAt;
@@ -187,6 +189,7 @@ internal static class SettingsFieldFormattingValidation
     {
         var original = new ModelPricing
         {
+            CatalogManaged = true,
             InputUsdPerMillion = 0.30m,
             OutputUsdPerMillion = 2.50m,
             UpdatedAt = "2026-07-29",
@@ -196,6 +199,7 @@ internal static class SettingsFieldFormattingValidation
             SettingsFieldFormatting.TryBuildPricing(
                 "0.40", "2.60", "2026-08-01", original, out ModelPricing edited, out string editedError) &&
             editedError == "" &&
+            !edited.CatalogManaged &&
             edited.InputUsdPerMillion == 0.40m &&
             edited.OutputUsdPerMillion == 2.60m &&
             edited.UpdatedAt == "2026-08-01";

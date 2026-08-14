@@ -42,6 +42,18 @@ internal static class ProofreadingModelCatalogValidation
             ProofreadingModelCatalog.IsSupported(ProofreadingModelCatalog.DefaultAutomaticModel) &&
             ProofreadingModelCatalog.IsSupported(ProofreadingModelCatalog.DefaultManualModel);
 
+        ModelDescriptor? gemini37 = ProofreadingModelCatalog.All
+            .SingleOrDefault(descriptor => descriptor.Id == "gemini-3.7-flash");
+        bool gemini37Pass =
+            ProofreadingModelCatalog.All.Count == 12 &&
+            gemini37 is not null &&
+            gemini37.Provider == ApiProvider.Google &&
+            gemini37.RecommendedTimeout == TimeSpan.FromSeconds(30) &&
+            gemini37.EffortFor(ProofreadingPurpose.Automatic) == "low" &&
+            gemini37.EffortFor(ProofreadingPurpose.Manual) == "medium" &&
+            ProofreadingModelCatalog.IsSupported("gemini-3.7-flash") &&
+            ProofreadingModelCatalog.DefaultAutomaticModel != "gemini-3.7-flash";
+
         // 用途別の思考量は、Haiku 4.5（effort 非対応）以外のすべてで定義されていること。
         bool effortPass = ProofreadingModelCatalog.All.All(descriptor =>
             descriptor.Id == "claude-haiku-4-5-20251001"
@@ -70,7 +82,7 @@ internal static class ProofreadingModelCatalogValidation
         Console.WriteLine($"モデルカタログ（通貨はPLaMoのみJPY）: {(currencyPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（タイムアウトの丸め）: {(clampPass ? "PASS" : "FAIL")}");
 
-        return legacyPass && freshPass && unknownPass && defaultsPass &&
-               effortPass && currencyPass && clampPass;
+        return legacyPass && freshPass && unknownPass && defaultsPass && gemini37Pass &&
+            effortPass && currencyPass && clampPass;
     }
 }

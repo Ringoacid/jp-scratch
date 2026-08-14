@@ -130,6 +130,8 @@ internal static class SettingsFieldFormatting
             InputUsdPerMillion = input,
             OutputUsdPerMillion = output,
             UpdatedAt = normalizedUpdatedAt,
+            // 3欄のいずれかを編集した時点で、公式の日付別価格ではなくユーザー指定値として固定する。
+            CatalogManaged = false,
         };
         error = "";
         return true;

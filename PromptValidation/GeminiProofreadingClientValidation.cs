@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ICSharpCode.AvalonEdit.Document;
+using JpScratch.Models;
 using JpScratch.Proofreading;
 
 namespace JpScratch.PromptValidation;
@@ -23,6 +24,7 @@ internal static class GeminiProofreadingClientValidation
         bool timeoutPass = await TestTimeoutAsync();
         bool missingKeyPass = await TestMissingKeyAsync();
         bool truncatedPass = await TestTruncatedResponseAsync();
+        bool gemini37Pass = await TestGemini37RequestAsync();
 
         Console.WriteLine($"Geminiクライアント（成功・差分）: {(successPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（前後文脈）: {(contextPass ? "PASS" : "FAIL")}");
@@ -33,10 +35,11 @@ internal static class GeminiProofreadingClientValidation
         Console.WriteLine($"Geminiクライアント（タイムアウトで再試行しない）: {(timeoutPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（キー未設定）: {(missingKeyPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"Geminiクライアント（打ち切り応答の拒否・maxOutputTokens）: {(truncatedPass ? "PASS" : "FAIL")}");
+        Console.WriteLine($"Geminiクライアント（3.7 FlashのURI・思考レベル）: {(gemini37Pass ? "PASS" : "FAIL")}");
 
         return successPass && contextPass && alternativePass && invalidAlternativeUsagePass &&
                retryPass && permanentFailurePass &&
-               timeoutPass && missingKeyPass && truncatedPass;
+               timeoutPass && missingKeyPass && truncatedPass && gemini37Pass;
     }
 
     /// <summary>
@@ -80,6 +83,35 @@ internal static class GeminiProofreadingClientValidation
             .GetProperty("generationConfig")
             .TryGetProperty("maxOutputTokens", out JsonElement maxOutputTokens) &&
             maxOutputTokens.GetInt32() > 0;
+    }
+
+    private static async Task<bool> TestGemini37RequestAsync()
+    {
+        var handler = new StubHandler((_, _, _) => Task.FromResult(
+            SuccessResponse("文章です。", 2, 1, 0, 3)));
+        using HttpClient http = new(handler) { BaseAddress = new Uri("https://example.invalid/") };
+        using var client = new GeminiProofreadingClient(
+            () => TestApiKey,
+            http,
+            model: "gemini-3.7-flash",
+            delay: (_, _) => Task.CompletedTask,
+            requestTimeout: TimeSpan.FromSeconds(1),
+            purposeProvider: () => ProofreadingPurpose.Manual);
+
+        await client.ProofreadAsync("文s尿です。");
+        if (handler.LastBody is null || handler.LastRequestUri is null)
+            return false;
+
+        using JsonDocument request = JsonDocument.Parse(handler.LastBody);
+        string? thinkingLevel = request.RootElement
+            .GetProperty("generationConfig")
+            .GetProperty("thinkingConfig")
+            .GetProperty("thinkingLevel")
+            .GetString();
+        return handler.LastRequestUri.EndsWith(
+                   "/v1beta/models/gemini-3.7-flash:generateContent",
+                   StringComparison.Ordinal) &&
+               thinkingLevel == "medium";
     }
 
     private static async Task<bool> TestAlternativeRequestAsync()

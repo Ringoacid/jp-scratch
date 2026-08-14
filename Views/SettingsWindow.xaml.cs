@@ -10,6 +10,7 @@ using JpScratch.Editor;
 using JpScratch.Infrastructure;
 using JpScratch.Models;
 using JpScratch.Services;
+using JpScratch.Controls;
 
 namespace JpScratch.Views;
 
@@ -35,14 +36,26 @@ public partial class SettingsWindow : Window
     private bool _loadingProofreadingModelControls;
     private bool _settingsApplied;
 
-    // モデル単価編集用。入力途中の値はモデルごとに「生テキスト」で保持し、検証はOK押下時にまとめて
-    // 行う（コンボを切り替えるたびに検証して選択を巻き戻すような作りにしない）。
-    private Dictionary<string, ModelPricing> _pricingOriginal = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, (string Input, string Output, string UpdatedAt)> _pricingText =
+    // 料金履歴はOKを押すまでメモリ内で編集し、キャンセル時はpricing.jsonへ触れない。
+    private readonly Dictionary<string, List<PricingEvent>> _pricingEvents =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<PricingEvent>> _pricingOriginalEvents =
         new(StringComparer.Ordinal);
     private string? _selectedPricingModel;
     private bool _loadingPricingControls;
     private bool _pricingControlsLoaded;
+    private bool _discardSettings;
+
+    private sealed record PricingHistoryRow(
+        DateOnly EffectiveFrom,
+        string EffectiveFromText,
+        string SourceText,
+        string InputText,
+        string InputDeltaText,
+        string OutputText,
+        string OutputDeltaText,
+        string StatusText,
+        PricingEvent? UserEvent);
 
     // スタイルガイドの世代管理。編集・有効化・削除はOKボタンを待たずその場でDBへ書く
     // （AppSettingsのJSON保存とは独立した操作のため）。
@@ -344,12 +357,17 @@ public partial class SettingsWindow : Window
         // 場合でも、より重要なキーだけが先に書き込まれた状態を残さないため。
         // 単価コントロールの初期化に失敗した状態で閉じる場合、空の単価表を保存して
         // pricing.json を壊さない。通常の操作では LoadPricingControls が必ず先に完了する。
-        if (_pricingControlsLoaded && _pricingText.Count > 0)
+        bool pricingSaved = false;
+        if (_pricingControlsLoaded && _pricingEvents.Count > 0)
         {
-            if (!TryBuildPricingTable(out Dictionary<string, ModelPricing> pricingTable)) return false;
-            if (!TrySavePricing(pricingTable)) return false;
+            if (!TrySavePricingHistory()) return false;
+            pricingSaved = true;
         }
-        if (!TryApplyCredentialChanges(updated)) return false;
+        if (!TryApplyCredentialChanges(updated))
+        {
+            if (pricingSaved) TryRestoreOriginalPricingHistory();
+            return false;
+        }
         _service.Replace(updated);
         return true;
     }
@@ -363,19 +381,23 @@ public partial class SettingsWindow : Window
         Close();
     }
 
-    private void TitleBarCloseButton_Click(object sender, RoutedEventArgs e) => SaveAndClose();
+    private void TitleBarCloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        _discardSettings = true;
+        Close();
+    }
+
+    private void CancelButton_Click(object sender, RoutedEventArgs e)
+    {
+        _discardSettings = true;
+        DialogResult = false;
+        Close();
+    }
 
     private void SettingsWindow_Closing(object? sender, CancelEventArgs e)
     {
-        if (_settingsApplied) return;
-
-        if (TrySaveSettings())
-        {
-            _settingsApplied = true;
-            return;
-        }
-
-        e.Cancel = true;
+        if (_settingsApplied || _discardSettings) return;
+        _discardSettings = true;
     }
 
     private void CredentialSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -747,22 +769,21 @@ public partial class SettingsWindow : Window
     private void LoadPricingControls()
     {
         _loadingPricingControls = true;
-
-        _pricingOriginal = new Dictionary<string, ModelPricing>(_pricing.Snapshot(), StringComparer.Ordinal);
-        _pricingText.Clear();
-        foreach ((string model, ModelPricing pricing) in _pricingOriginal)
+        _pricingEvents.Clear();
+        _pricingOriginalEvents.Clear();
+        foreach ((string model, IReadOnlyList<PricingEvent> events) in
+                 _pricing.SnapshotUserEvents())
         {
-            _pricingText[model] = (
-                SettingsFieldFormatting.FormatUnitPrice(pricing.InputUsdPerMillion),
-                SettingsFieldFormatting.FormatUnitPrice(pricing.OutputUsdPerMillion),
-                pricing.UpdatedAt);
+            PricingEvent[] snapshot = events.ToArray();
+            _pricingEvents[model] = snapshot.ToList();
+            _pricingOriginalEvents[model] = snapshot;
         }
 
-        List<string> models = _pricingOriginal.Keys
+        List<string> models = _pricing.Snapshot().Keys
             .Where(model => model != PricingService.DefaultModel)
             .OrderBy(model => model, StringComparer.Ordinal)
             .ToList();
-        if (_pricingOriginal.ContainsKey(PricingService.DefaultModel))
+        if (_pricingEvents.ContainsKey(PricingService.DefaultModel))
             models.Insert(0, PricingService.DefaultModel);
 
         PricingModelCombo.ItemsSource = models;
@@ -779,35 +800,59 @@ public partial class SettingsWindow : Window
     {
         if (_loadingPricingControls) return;
 
-        // 資格情報パネルの入力内容は、選択が切り替わる前に必ず退避する。
-        StashCurrentPricingModel();
         StashShownCredentialProvider();
         _selectedPricingModel = PricingModelCombo.SelectedItem as string;
         ShowSelectedPricingModel();
     }
 
-    /// <summary>現在表示中の3欄を、選択中モデルの「生テキスト」として <see cref="_pricingText"/> へ退避する。</summary>
-    private void StashCurrentPricingModel()
-    {
-        if (_selectedPricingModel is null) return;
-        _pricingText[_selectedPricingModel] = (PricingInputBox.Text, PricingOutputBox.Text, PricingUpdatedAtBox.Text);
-    }
-
     private void ShowSelectedPricingModel()
     {
         UpdateCredentialPanelVisibility();
+        PricingHistoryList.ItemsSource = null;
+        PricingEditButton.IsEnabled = false;
+        PricingDeleteButton.IsEnabled = false;
+        PricingRestoreButton.IsEnabled =
+            _selectedPricingModel is not null &&
+            ProofreadingModelCatalog.IsSupported(_selectedPricingModel);
 
-        if (_selectedPricingModel is null || !_pricingText.TryGetValue(_selectedPricingModel, out var text))
+        if (_selectedPricingModel is null ||
+            !_pricingEvents.ContainsKey(_selectedPricingModel))
         {
-            PricingInputBox.Text = "";
-            PricingOutputBox.Text = "";
-            PricingUpdatedAtBox.Text = "";
+            PricingCurrentSummaryText.Text = "";
+            PricingHistoryChart.SetData([], PricingCurrency.Usd);
             return;
         }
 
-        PricingInputBox.Text = text.Input;
-        PricingOutputBox.Text = text.Output;
-        PricingUpdatedAtBox.Text = text.UpdatedAt;
+        string model = _selectedPricingModel;
+        List<PricingHistoryRow> rows = BuildPricingHistoryRows(model);
+        PricingHistoryList.ItemsSource = rows;
+
+        string currency = CurrencyForModel(model);
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (TryResolveStagedPricing(model, today, out ModelPricing? current))
+        {
+            PricingCurrentSummaryText.Text =
+                $"現在: 入力 {FormatPrice(current!.InputUsdPerMillion, currency)} / " +
+                $"出力 {FormatPrice(current.OutputUsdPerMillion, currency)}";
+        }
+        else
+        {
+            PricingCurrentSummaryText.Text = "現在の単価は未設定です";
+        }
+
+        DateOnly[] dates = rows.Select(row => row.EffectiveFrom).Distinct().Order().ToArray();
+        var chartPoints = new List<PricingChartPoint>();
+        foreach (DateOnly date in dates)
+        {
+            if (TryResolveStagedPricing(model, date, out ModelPricing? price))
+            {
+                chartPoints.Add(new PricingChartPoint(
+                    date,
+                    price!.InputUsdPerMillion,
+                    price.OutputUsdPerMillion));
+            }
+        }
+        PricingHistoryChart.SetData(chartPoints, currency);
     }
 
     /// <summary>
@@ -849,54 +894,324 @@ public partial class SettingsWindow : Window
         RefreshCredentialStatus();
     }
 
-    /// <summary>
-    /// 全モデルの生テキストを検証する（副作用なし・ファイルには触らない）。失敗したらエラーを表示し、
-    /// 該当モデルをコンボで選択し直して該当欄へフォーカスを当ててから false を返す
-    /// （ウィンドウは閉じない）。
-    /// </summary>
-    private bool TryBuildPricingTable(out Dictionary<string, ModelPricing> table)
+    private List<PricingHistoryRow> BuildPricingHistoryRows(string model)
     {
-        StashCurrentPricingModel();
+        var items = new List<(
+            DateOnly Date,
+            bool IsCatalog,
+            bool IsPromotional,
+            PricingEvent? UserEvent,
+            decimal Input,
+            decimal Output,
+            string Currency,
+            bool IsEffective)>();
 
-        var built = new Dictionary<string, ModelPricing>(StringComparer.Ordinal);
-        foreach ((string model, (string input, string output, string updatedAt)) in _pricingText)
+        if (ProofreadingModelCatalog.TryGet(model, out ModelDescriptor descriptor))
         {
-            ModelPricing original = _pricingOriginal[model];
-            if (!SettingsFieldFormatting.TryBuildPricing(
-                    input, output, updatedAt, original, out ModelPricing pricing, out string error))
+            foreach (CatalogPricingHistoryEntry catalog in descriptor.PricingHistory())
             {
-                ShowPricingError(model, error);
-                table = built;
-                return false;
+                PricingEvent? controlling = _pricingEvents[model]
+                    .LastOrDefault(entry => entry.EffectiveFrom <= catalog.EffectiveFrom);
+                bool effective = controlling is null ||
+                    controlling.Type == PricingEventType.UseCatalog;
+                items.Add((
+                    catalog.EffectiveFrom,
+                    IsCatalog: true,
+                    catalog.IsPromotional,
+                    UserEvent: null,
+                    catalog.InputPricePerMillion,
+                    catalog.OutputPricePerMillion,
+                    catalog.Currency,
+                    effective));
             }
-
-            built[model] = pricing;
         }
 
-        table = built;
-        return true;
+        foreach (PricingEvent userEvent in _pricingEvents[model])
+        {
+            decimal input = userEvent.InputPricePerMillion ?? 0m;
+            decimal output = userEvent.OutputPricePerMillion ?? 0m;
+            string currency = CurrencyForModel(model);
+            if (userEvent.Type == PricingEventType.UseCatalog &&
+                TryResolveStagedPricing(model, userEvent.EffectiveFrom, out ModelPricing? restored))
+            {
+                input = restored!.InputUsdPerMillion;
+                output = restored.OutputUsdPerMillion;
+            }
+            items.Add((
+                userEvent.EffectiveFrom,
+                IsCatalog: false,
+                IsPromotional: false,
+                userEvent,
+                input,
+                output,
+                currency,
+                IsEffective: true));
+        }
+
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly? currentDate = items
+            .Where(item => item.IsEffective && item.Date <= today)
+            .Select(item => (DateOnly?)item.Date)
+            .Max();
+        var rows = new List<PricingHistoryRow>();
+        foreach (var item in items.OrderBy(item => item.Date).ThenBy(item => item.IsCatalog ? 0 : 1))
+        {
+            string source = item.UserEvent?.Type switch
+            {
+                PricingEventType.Override => "ユーザー設定",
+                PricingEventType.UseCatalog => "公式へ復帰",
+                _ when item.IsPromotional => "公式（期間限定）",
+                _ => "公式（通常）",
+            };
+            string inputDelta = "—";
+            string outputDelta = "—";
+            if (!item.IsEffective)
+            {
+                inputDelta = "非適用";
+                outputDelta = "非適用";
+            }
+            else if (item.Date != DateOnly.MinValue &&
+                     TryResolveStagedPricing(model, item.Date.AddDays(-1), out ModelPricing? before))
+            {
+                inputDelta = FormatDelta(item.Input, before!.InputUsdPerMillion, item.Currency);
+                outputDelta = FormatDelta(item.Output, before.OutputUsdPerMillion, item.Currency);
+            }
+
+            string status = !item.IsEffective ? "非適用"
+                : item.Date > today ? "予約"
+                : item.Date == currentDate ? "現在"
+                : "過去";
+            rows.Add(new PricingHistoryRow(
+                item.Date,
+                item.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                source,
+                FormatPrice(item.Input, item.Currency),
+                inputDelta,
+                FormatPrice(item.Output, item.Currency),
+                outputDelta,
+                status,
+                item.UserEvent));
+        }
+        return rows;
     }
 
-    /// <summary>
-    /// 検証済みの単価表を <see cref="_pricing"/> へ保存する。IO失敗・検証二重チェック失敗は
-    /// <see cref="TryApplyCredentialChanges"/> と同じ体裁の <see cref="MessageBox"/> で伝える。
-    /// </summary>
-    private bool TrySavePricing(Dictionary<string, ModelPricing> table)
+    private bool TryResolveStagedPricing(
+        string model,
+        DateOnly date,
+        out ModelPricing? pricing)
+    {
+        PricingEvent? userEvent = _pricingEvents[model]
+            .LastOrDefault(entry => entry.EffectiveFrom <= date);
+        string currency = CurrencyForModel(model);
+        if (userEvent is { Type: PricingEventType.Override })
+        {
+            pricing = new ModelPricing
+            {
+                Currency = currency,
+                InputUsdPerMillion = userEvent.InputPricePerMillion!.Value,
+                OutputUsdPerMillion = userEvent.OutputPricePerMillion!.Value,
+                UpdatedAt = userEvent.EffectiveFrom.ToString(
+                    "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture),
+            };
+            return true;
+        }
+
+        if (ProofreadingModelCatalog.TryGet(model, out ModelDescriptor descriptor))
+        {
+            EffectiveModelPricing catalog = descriptor.PricingFor(date);
+            pricing = new ModelPricing
+            {
+                Currency = catalog.Currency,
+                InputUsdPerMillion = catalog.InputPricePerMillion,
+                OutputUsdPerMillion = catalog.OutputPricePerMillion,
+                UpdatedAt = catalog.PricingUpdatedAt,
+                CatalogManaged = true,
+            };
+            return true;
+        }
+
+        pricing = null;
+        return false;
+    }
+
+    private string CurrencyForModel(string model)
+    {
+        if (ProofreadingModelCatalog.TryGet(model, out ModelDescriptor descriptor))
+            return descriptor.Currency;
+        return _pricing.GetPricing(model).Currency;
+    }
+
+    private static string FormatPrice(decimal value, string currency)
+    {
+        string symbol = currency == PricingCurrency.Jpy ? "¥" : "$";
+        return symbol + SettingsFieldFormatting.FormatUnitPrice(value);
+    }
+
+    private static string FormatDelta(decimal current, decimal previous, string currency)
+    {
+        decimal difference = current - previous;
+        string sign = difference > 0 ? "+" : "";
+        string amount = sign + FormatPrice(difference, currency);
+        if (previous == 0m) return amount + " (—)";
+        decimal percent = difference / previous * 100m;
+        string percentSign = percent > 0 ? "+" : "";
+        return $"{amount} ({percentSign}{percent:0.#}%)";
+    }
+
+    private void PricingHistoryList_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        bool editable = PricingHistoryList.SelectedItem is PricingHistoryRow
+        {
+            UserEvent: not null,
+        };
+        PricingEditButton.IsEnabled = editable;
+        PricingDeleteButton.IsEnabled = editable;
+        PricingSelectionHelpText.Text = editable
+            ? "選択したユーザー履歴を編集または削除できます。"
+            : "公式価格は読み取り専用です。ユーザー設定の行を選ぶと編集・削除できます。";
+    }
+
+    private void PricingAddButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedPricingModel is not string model) return;
+        DateOnly date = DateOnly.FromDateTime(DateTime.UtcNow);
+        TryResolveStagedPricing(model, date, out ModelPricing? current);
+        var dialog = new PricingHistoryEditDialog(
+            ProofreadingModelCatalog.DisplayName(model),
+            CurrencyForModel(model),
+            useCatalog: false,
+            effectiveFrom: date,
+            inputPrice: current?.InputUsdPerMillion,
+            outputPrice: current?.OutputUsdPerMillion)
+        {
+            Owner = this,
+        };
+        if (dialog.ShowDialog() != true) return;
+        UpsertPricingEvent(
+            model,
+            new PricingEvent(
+                dialog.EffectiveFrom,
+                PricingEventType.Override,
+                dialog.InputPricePerMillion,
+                dialog.OutputPricePerMillion),
+            original: null);
+    }
+
+    private void PricingRestoreButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedPricingModel is not string model ||
+            !ProofreadingModelCatalog.IsSupported(model))
+            return;
+        var dialog = new PricingHistoryEditDialog(
+            ProofreadingModelCatalog.DisplayName(model),
+            CurrencyForModel(model),
+            useCatalog: true)
+        {
+            Owner = this,
+        };
+        if (dialog.ShowDialog() != true) return;
+        UpsertPricingEvent(
+            model,
+            new PricingEvent(dialog.EffectiveFrom, PricingEventType.UseCatalog),
+            original: null);
+    }
+
+    private void PricingEditButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedPricingModel is not string model ||
+            PricingHistoryList.SelectedItem is not PricingHistoryRow
+            {
+                UserEvent: PricingEvent original,
+            })
+            return;
+
+        bool useCatalog = original.Type == PricingEventType.UseCatalog;
+        var dialog = new PricingHistoryEditDialog(
+            ProofreadingModelCatalog.DisplayName(model),
+            CurrencyForModel(model),
+            useCatalog,
+            original.EffectiveFrom,
+            original.InputPricePerMillion,
+            original.OutputPricePerMillion)
+        {
+            Owner = this,
+        };
+        if (dialog.ShowDialog() != true) return;
+        PricingEvent updated = useCatalog
+            ? new PricingEvent(dialog.EffectiveFrom, PricingEventType.UseCatalog)
+            : new PricingEvent(
+                dialog.EffectiveFrom,
+                PricingEventType.Override,
+                dialog.InputPricePerMillion,
+                dialog.OutputPricePerMillion);
+        UpsertPricingEvent(model, updated, original);
+    }
+
+    private void PricingDeleteButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedPricingModel is not string model ||
+            PricingHistoryList.SelectedItem is not PricingHistoryRow
+            {
+                UserEvent: PricingEvent selected,
+            })
+            return;
+
+        MessageBoxResult result = MessageBox.Show(
+            this,
+            $"{selected.EffectiveFrom:yyyy-MM-dd}のユーザー料金履歴を削除します。過去を含む実効価格の推移が再計算されます。",
+            "JP Scratch",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+        if (result != MessageBoxResult.Yes) return;
+
+        _pricingEvents[model].Remove(selected);
+        PricingErrorText.Visibility = Visibility.Collapsed;
+        ShowSelectedPricingModel();
+    }
+
+    private void UpsertPricingEvent(
+        string model,
+        PricingEvent updated,
+        PricingEvent? original)
+    {
+        List<PricingEvent> events = _pricingEvents[model];
+        if (events.Any(entry =>
+                !ReferenceEquals(entry, original) &&
+                entry.EffectiveFrom == updated.EffectiveFrom))
+        {
+            PricingErrorText.Text =
+                $"{updated.EffectiveFrom:yyyy-MM-dd}には既にユーザー料金履歴があります。既存の行を編集してください。";
+            PricingErrorText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        if (original is not null) events.Remove(original);
+        events.Add(updated);
+        events.Sort((left, right) => left.EffectiveFrom.CompareTo(right.EffectiveFrom));
+        PricingErrorText.Visibility = Visibility.Collapsed;
+        ShowSelectedPricingModel();
+    }
+
+    private bool TrySavePricingHistory()
     {
         try
         {
-            _pricing.Replace(table);
+            var snapshot = _pricingEvents.ToDictionary(
+                pair => pair.Key,
+                pair => (IReadOnlyList<PricingEvent>)pair.Value.ToArray(),
+                StringComparer.Ordinal);
+            _pricing.ReplaceAllUserEvents(snapshot);
+            PricingErrorText.Visibility = Visibility.Collapsed;
+            return true;
         }
         catch (InvalidDataException ex)
         {
-            // TryBuildPricingTableを個別に通した後の二重チェック（Replace側のValidate）で弾かれるのは、
-            // 既定モデルのエントリを丸ごと削除した場合など、UIの操作だけでは起きにくいケース。
-            MessageBox.Show(
-                this,
-                "モデル単価を保存できませんでした。" + ex.Message,
-                "JP Scratch",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            PricingErrorText.Text = ex.Message;
+            PricingErrorText.Visibility = Visibility.Visible;
             return false;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -909,36 +1224,23 @@ public partial class SettingsWindow : Window
                 MessageBoxImage.Warning);
             return false;
         }
-
-        PricingErrorText.Visibility = Visibility.Collapsed;
-        return true;
     }
 
-    private void ShowPricingError(string model, string error)
+    private void TryRestoreOriginalPricingHistory()
     {
-        PricingErrorText.Text = $"{model}: {error}";
-        PricingErrorText.Visibility = Visibility.Visible;
-
-        if (model.Length > 0 && PricingModelCombo.SelectedItem as string != model)
+        try
         {
-            _loadingPricingControls = true;
-            PricingModelCombo.SelectedItem = model;
-            // 資格情報パネルも一緒に切り替わるので、退避は選択が変わる前に必ず済ませる
-            // （PricingModelCombo_SelectionChanged と同じ規約。順序を誤ると入力途中のキーが
-            // 別プロバイダーのスロットへ入る）。
-            StashShownCredentialProvider();
-            _selectedPricingModel = model;
-            ShowSelectedPricingModel();
-            _loadingPricingControls = false;
+            _pricing.ReplaceAllUserEvents(_pricingOriginalEvents);
         }
-
-        // エラー文言（SettingsFieldFormatting.TryBuildPricing）から該当欄を判別してフォーカスする。
-        if (error.StartsWith("出力単価", StringComparison.Ordinal))
-            PricingOutputBox.Focus();
-        else if (error.StartsWith("更新日", StringComparison.Ordinal))
-            PricingUpdatedAtBox.Focus();
-        else
-            PricingInputBox.Focus();
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            MessageBox.Show(
+                this,
+                "APIキーの保存に失敗し、先に保存したモデル料金も元へ戻せませんでした。料金履歴を確認してください。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 
     private bool TryApplyCredentialChanges(AppSettings updated)

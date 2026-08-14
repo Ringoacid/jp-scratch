@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace JpScratch.Models;
 
 /// <summary>
@@ -22,11 +24,95 @@ public sealed record ModelDescriptor(
     decimal InputPricePerMillion,
     decimal OutputPricePerMillion,
     string Currency,
-    string PricingUpdatedAt)
+    string PricingUpdatedAt,
+    PromotionalModelPricing? PromotionalPricing = null)
 {
     public string? EffortFor(ProofreadingPurpose purpose)
         => purpose == ProofreadingPurpose.Manual ? ManualEffort : AutomaticEffort;
+
+    public EffectiveModelPricing PricingFor(DateOnly utcDate)
+    {
+        if (PromotionalPricing is { } promotional &&
+            utcDate >= promotional.EffectiveFrom &&
+            utcDate <= promotional.EndsOn)
+        {
+            return new EffectiveModelPricing(
+                promotional.InputPricePerMillion,
+                promotional.OutputPricePerMillion,
+                Currency,
+                promotional.PricingUpdatedAt);
+        }
+
+        return new EffectiveModelPricing(
+            InputPricePerMillion,
+            OutputPricePerMillion,
+            Currency,
+            PricingUpdatedAt);
+    }
+
+    public IReadOnlyList<CatalogPricingHistoryEntry> PricingHistory()
+    {
+        if (PromotionalPricing is not { } promotional)
+        {
+            return
+            [
+                new CatalogPricingHistoryEntry(
+                    DateOnly.ParseExact(
+                        PricingUpdatedAt,
+                        "yyyy-MM-dd",
+                        CultureInfo.InvariantCulture),
+                    InputPricePerMillion,
+                    OutputPricePerMillion,
+                    Currency,
+                    IsPromotional: false),
+            ];
+        }
+
+        return
+        [
+            new CatalogPricingHistoryEntry(
+                promotional.EffectiveFrom,
+                promotional.InputPricePerMillion,
+                promotional.OutputPricePerMillion,
+                Currency,
+                IsPromotional: true),
+            new CatalogPricingHistoryEntry(
+                promotional.EndsOn.AddDays(1),
+                InputPricePerMillion,
+                OutputPricePerMillion,
+                Currency,
+                IsPromotional: false),
+        ];
+    }
 }
+
+/// <summary>終了日を含む期間限定の標準API単価。</summary>
+public sealed record PromotionalModelPricing(
+    decimal InputPricePerMillion,
+    decimal OutputPricePerMillion,
+    string PricingUpdatedAt,
+    DateOnly EndsOn)
+{
+    public DateOnly EffectiveFrom =>
+        DateOnly.ParseExact(
+            PricingUpdatedAt,
+            "yyyy-MM-dd",
+            CultureInfo.InvariantCulture);
+}
+
+public sealed record CatalogPricingHistoryEntry(
+    DateOnly EffectiveFrom,
+    decimal InputPricePerMillion,
+    decimal OutputPricePerMillion,
+    string Currency,
+    bool IsPromotional);
+
+/// <summary>指定したUTC日付に適用されるモデル単価。</summary>
+public sealed record EffectiveModelPricing(
+    decimal InputPricePerMillion,
+    decimal OutputPricePerMillion,
+    string Currency,
+    string PricingUpdatedAt);
 
 /// <summary>校正で利用できるAIモデルと、そのAPIプロバイダーの対応。</summary>
 public static class ProofreadingModelCatalog
@@ -67,7 +153,11 @@ public static class ProofreadingModelCatalog
         new("gemini-3.1-pro-preview", "Gemini 3.1 Pro (Preview)", ApiProvider.Google, Slow,
             "low", "medium", 2.00m, 12.00m, "USD", "2026-08-04"),
         new("gemini-3.6-flash", "Gemini 3.6 Flash", ApiProvider.Google, Medium,
-            "low", "medium", 1.50m, 7.50m, "USD", "2026-08-04"),
+            "low", "medium", 1.50m, 7.50m, "USD", "2026-08-14",
+            new(0.75m, 3.75m, "2026-08-14", new DateOnly(2026, 12, 31))),
+        new("gemini-3.7-flash", "Gemini 3.7 Flash", ApiProvider.Google, Medium,
+            "low", "medium", 1.50m, 7.50m, "USD", "2026-08-14",
+            new(0.75m, 3.75m, "2026-08-14", new DateOnly(2026, 12, 31))),
         new(GeminiModel, "Gemini 3.5 Flash Lite", ApiProvider.Google, Fast,
             "low", "medium", 0.30m, 2.50m, "USD", "2026-07-29"),
 
@@ -79,7 +169,8 @@ public static class ProofreadingModelCatalog
         new("claude-opus-5", "Claude Opus 5", ApiProvider.Anthropic, Slow,
             "low", "medium", 5.00m, 25.00m, "USD", "2026-08-04"),
         new(DefaultManualModel, "Claude Sonnet 5", ApiProvider.Anthropic, Medium,
-            "low", "medium", 3.00m, 15.00m, "USD", "2026-08-04"),
+            "low", "medium", 3.00m, 15.00m, "USD", "2026-08-14",
+            new(2.00m, 10.00m, "2026-08-14", new DateOnly(2026, 8, 31))),
         new("claude-haiku-4-5-20251001", "Claude Haiku 4.5", ApiProvider.Anthropic, Fast,
             null, null, 1.00m, 5.00m, "USD", "2026-08-04"),
 
@@ -122,6 +213,9 @@ public static class ProofreadingModelCatalog
 
     public static string DisplayName(string model)
         => TryGet(model, out ModelDescriptor descriptor) ? descriptor.DisplayName : model;
+
+    public static EffectiveModelPricing GetEffectivePricing(string? model, DateOnly utcDate)
+        => Get(model).PricingFor(utcDate);
 
     public static string ProviderDisplayName(ApiProvider provider)
         => provider switch

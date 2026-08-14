@@ -150,14 +150,20 @@ AI の利用料は**使った分だけ**かかります。JP Scratch はそれ�
 
 <img src="docs/images/settings-billing.png" alt="設定画面の「API・料金」タブ。モデルを選ぶと、そのモデル専用の API キー欄と単価設定が表示される。" width="760">
 
-対応しているのは **4 社 11 モデル**です。
+対応しているのは **4 社 12 モデル**です。
 
 | 提供元 | モデル | 環境変数（キーの代わりに使えます） |
 |---|---|---|
 | OpenAI | GPT 5.6 Sol / Terra / Luna | `OPENAI_API_KEY` |
-| Google | Gemini 3.1 Pro (Preview) / 3.6 Flash / 3.5 Flash Lite | `GEMINI_API_KEY` |
+| Google | Gemini 3.1 Pro (Preview) / 3.7 Flash / 3.6 Flash / 3.5 Flash Lite | `GEMINI_API_KEY` |
 | Anthropic | Claude Fable 5 / Opus 5 / Sonnet 5 / Haiku 4.5 | `ANTHROPIC_API_KEY` |
 | Preferred Networks | PLaMo 3.0 Prime | `PLAMO_API_KEY` |
+
+Gemini 3.6 / 3.7 Flash と Claude Sonnet 5 の期間限定価格は、終了日までは割引価格、翌日からは
+通常価格として概算料金へ自動反映します。「API・料金」では、横軸が日付・縦軸が単価の入力／出力グラフと
+履歴表で、公式価格とユーザー設定の推移、変更額・変更率、現在／予約／過去の状態を確認できます。
+公式価格は読み取り専用で、ユーザー設定は過去・当日・未来の日付で追加・編集・削除でき、必要な日から
+「公式価格へ戻す」こともできます。ユーザー設定は、次のユーザー変更または公式価格への復帰まで優先されます。
 
 環境変数が見つかったときは、初回に「環境変数とアプリ保存のどちらを使うか」を確認して覚えます。
 取得元の切り替えと保存済みキーの削除は、いつでも設定画面から行えます。
@@ -241,7 +247,7 @@ AI の利用料は**使った分だけ**かかります。JP Scratch はそれ�
   課金履歴画面、月間上限の進捗表示とガード、CSVエクスポート、明細の保持期限後圧縮、
   トレイアイコンの4状態表示。
 - **v3 文体の学習** — リアクション履歴からの few-shot 選定、スタイルガイドの自動生成、カスタム指示。
-- **v4 プロバイダー拡張** — Google / OpenAI / Anthropic / Preferred Networks の 4 社 11 モデル、
+- **v4 プロバイダー拡張** — Google / OpenAI / Anthropic / Preferred Networks の 4 社 12 モデル、
   自動用と手動用でモデルを分ける 2 枠構成。
 
 残っているのはコンテキストキャッシュの適用だけで、これは Gemini 側の割引単価と最小トークン数が
