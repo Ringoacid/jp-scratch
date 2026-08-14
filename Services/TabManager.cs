@@ -238,6 +238,15 @@ internal sealed class TabManager : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// ゴミ箱のタブを完全に削除する（ゴミ箱一覧ウィンドウ用）。本文ファイルと DB 行の両方を消す。
+    /// 失敗は例外で伝える（呼び出し元がユーザーへ伝える）。
+    /// </summary>
+    public void DeletePermanently(ScratchTab trashed) => _repository.DeletePermanently(trashed);
+
+    /// <summary>ゴミ箱を空にする（ゴミ箱一覧ウィンドウ用）。戻り値は削除できた件数。</summary>
+    public int EmptyTrash() => _repository.DeleteAllTrash();
+
+    /// <summary>
     /// 直近に閉じたタブを戻す（Ctrl+Shift+T、要件 3.2.1）。
     ///
     /// ID の形式が壊れている行は**飛ばして次の行を試す**。ここで諦めると、壊れた 1 行が
@@ -251,10 +260,17 @@ internal sealed class TabManager : INotifyPropertyChanged
     {
         foreach (var candidate in _repository.LoadTrash())
         {
-            if (TryRestore(candidate) is { } restored) return restored;
+            if (Restore(candidate) is { } restored) return restored;
         }
         return null;
     }
+
+    /// <summary>
+    /// ゴミ箱のタブを 1 件指定して復元する（ゴミ箱一覧ウィンドウ用）。復元したタブを返す。
+    /// null は「この行は構造的に壊れている（タブIDの形式が不正）ので復元できない」。
+    /// 一時的な I/O 失敗はゴミ箱へロールバック済みで例外を投げる（呼び出し元がユーザーへ伝える）。
+    /// </summary>
+    public ScratchTab? Restore(ScratchTab trashed) => TryRestore(trashed);
 
     /// <summary>戻り値 null は「この行は構造的に壊れているので飛ばす」。</summary>
     private ScratchTab? TryRestore(ScratchTab trashed)

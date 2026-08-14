@@ -101,6 +101,7 @@ public partial class MainWindow : Window
 
     private CrossTabSearchWindow? _crossTabSearch;
     private BillingHistoryWindow? _billingHistory;
+    private TrashWindow? _trashWindow;
     private ProofreadingSession? _activeProofreading;
     private ProofreadingProposal? _selectedProposal;
     private bool _alternativeInProgress;
@@ -3002,6 +3003,8 @@ public partial class MainWindow : Window
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e) => OpenSettings();
 
+    private void TrashButton_Click(object sender, RoutedEventArgs e) => OpenTrashWindow();
+
     private void HideButton_Click(object sender, RoutedEventArgs e) => HideWindow(auto: false);
 
     private void PinButton_Changed(object sender, RoutedEventArgs e)
@@ -3108,6 +3111,42 @@ public partial class MainWindow : Window
     }
 
     private void StatusUsage_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) => OpenBillingHistory();
+
+    /// <summary>ゴミ箱一覧ウィンドウを開く（タイトルバーのゴミ箱ボタン）。</summary>
+    private void OpenTrashWindow()
+    {
+        if (_trashWindow is null)
+        {
+            // 生成のたびに1回だけ確保する。既に開いている状態でこのメソッドが再度呼ばれても
+            // 多重に加算しない。加算と解除を1:1に保つのが目的。
+            SuppressAutoHide();
+            try
+            {
+                _trashWindow = new TrashWindow(_tabs, _repository) { Owner = this };
+                _trashWindow.Closed += (_, _) =>
+                {
+                    _trashWindow = null;
+                    ReleaseAutoHide();
+                };
+                _trashWindow.Restored += tab => SetTransientStatus($"タブ「{tab.Title}」を復元しました");
+                _trashWindow.Show();
+            }
+            catch
+            {
+                // 生成・表示のどこで失敗しても抑止カウントを積んだままにしない。Show() より前の失敗では
+                // Closed が発火しないため、ここで明示的に解放してから同じ例外を再スローする。
+                _trashWindow = null;
+                ReleaseAutoHide();
+                throw;
+            }
+        }
+        else
+        {
+            // 開き直しは最新の状態を見せたい（Ctrl+Shift+T 等で変わっているかもしれない）。
+            _trashWindow.Activate();
+            _trashWindow.Refresh();
+        }
+    }
 
     private void JumpToHit(CrossTabHit hit)
     {

@@ -270,6 +270,7 @@ internal static class Program
         bool statusBarFormatterPass = StatusBarUsageFormatterValidation.RunSelfTests();
         bool missedCorrectionPass = MissedCorrectionActionValidation.RunSelfTests();
         bool crossTabPreviewPass = CrossTabSearchPreviewValidation.RunSelfTests();
+        bool trashRepositoryPass = TrashRepositoryValidation.RunSelfTests();
         bool atomicFilePass = AtomicFileValidation.RunSelfTests();
         bool modelBenchmarkPass = ModelBenchmarkValidation.RunSelfTests();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
@@ -283,7 +284,7 @@ internal static class Program
                apiLogCompactionPass && trayIconStatePass &&
                fewShotPass && styleGuidePass && promptV3Pass && inlineDiffPass &&
                statusBarFormatterPass && missedCorrectionPass &&
-               crossTabPreviewPass && atomicFilePass && modelBenchmarkPass ? 0 : 1;
+               crossTabPreviewPass && trashRepositoryPass && atomicFilePass && modelBenchmarkPass ? 0 : 1;
     }
 
     private static void PrintHelp()

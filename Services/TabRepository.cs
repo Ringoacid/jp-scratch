@@ -9,9 +9,35 @@ namespace JpScratch.Services;
 /// タブの永続化。メタ情報は SQLite、本文は tabs\{id}.txt（要件 4）。
 /// 本文を DB に入れないのは、アプリが壊れてもメモ帳でサルベージできるようにするため。
 /// </summary>
-internal sealed class TabRepository(Database db)
+internal sealed class TabRepository
 {
     private const string DateFormat = "yyyy-MM-dd HH:mm:ss";
+
+    private readonly Database _db;
+    private readonly string _tabsDir;
+    private readonly string _trashDir;
+
+    internal TabRepository(Database db)
+        : this(db, AppPaths.TabsDir, AppPaths.TrashDir)
+    {
+    }
+
+    /// <summary>
+    /// 検証アプリ用。実 AppPaths（%APPDATA%）に触れずに一時ディレクトリで動かす。
+    /// パス解決とタブ ID の形式検査は <see cref="AppPaths.TabDataFile"/> を引き続き使う。
+    /// </summary>
+    internal TabRepository(Database db, string tabsDir, string trashDir)
+    {
+        _db = db;
+        _tabsDir = tabsDir;
+        _trashDir = trashDir;
+    }
+
+    /// <summary>本文ファイルのパス（GUID 形式の検査つき）。</summary>
+    private string TabFile(string tabId) => AppPaths.TabDataFile(_tabsDir, tabId);
+
+    /// <summary>ゴミ箱の本文ファイルのパス（GUID 形式の検査つき）。</summary>
+    private string TrashFile(string tabId) => AppPaths.TabDataFile(_trashDir, tabId);
 
     /// <summary>ゴミ箱にないタブを表示順で返す。本文はまだ読まない。</summary>
     public List<ScratchTab> LoadActive()
@@ -23,7 +49,7 @@ internal sealed class TabRepository(Database db)
 
     private List<ScratchTab> Load(string where, string orderBy)
     {
-        return db.Read($"""
+        return _db.Read($"""
             SELECT id, title, is_auto_title, sort_order, caret_offset, created_at, updated_at, deleted_at
             FROM tabs WHERE {where} ORDER BY {orderBy};
             """,
@@ -53,7 +79,7 @@ internal sealed class TabRepository(Database db)
     /// 空として扱わず、上書きを防ぐためにタブを開かない等の対処をする。</exception>
     public void LoadBody(ScratchTab tab)
     {
-        var path = tab.DeletedAt is null ? AppPaths.TabFile(tab.Id) : AppPaths.TrashFile(tab.Id);
+        var path = tab.DeletedAt is null ? TabFile(tab.Id) : TrashFile(tab.Id);
         if (!AtomicFile.TryReadAllText(path, out var text))
         {
             // 読めなかった本文を空で扱うと、後の自動保存で元の内容を上書きしてしまう。
@@ -70,7 +96,7 @@ internal sealed class TabRepository(Database db)
 
     public void Upsert(ScratchTab tab)
     {
-        db.Execute("""
+        _db.Execute("""
             INSERT INTO tabs (id, title, is_auto_title, sort_order, is_active, caret_offset,
                               created_at, updated_at, deleted_at)
             VALUES ($id, $title, $auto, $sort, 0, $caret, $created, $updated, $deleted)
@@ -95,13 +121,13 @@ internal sealed class TabRepository(Database db)
     /// <summary>並べ替え結果をまとめて書く。</summary>
     public void SaveOrder(IEnumerable<ScratchTab> tabs)
     {
-        db.InTransaction(_ =>
+        _db.InTransaction(_ =>
         {
             var order = 0;
             foreach (var tab in tabs)
             {
                 tab.SortOrder = order++;
-                db.Execute("UPDATE tabs SET sort_order = $sort WHERE id = $id;",
+                _db.Execute("UPDATE tabs SET sort_order = $sort WHERE id = $id;",
                     ("$sort", tab.SortOrder), ("$id", tab.Id));
             }
         });
@@ -109,16 +135,16 @@ internal sealed class TabRepository(Database db)
 
     public void SaveActive(string? tabId)
     {
-        db.InTransaction(_ =>
+        _db.InTransaction(_ =>
         {
-            db.Execute("UPDATE tabs SET is_active = 0;");
+            _db.Execute("UPDATE tabs SET is_active = 0;");
             if (tabId is not null)
-                db.Execute("UPDATE tabs SET is_active = 1 WHERE id = $id;", ("$id", tabId));
+                _db.Execute("UPDATE tabs SET is_active = 1 WHERE id = $id;", ("$id", tabId));
         });
     }
 
     public string? LoadActiveId()
-        => db.Read("SELECT id FROM tabs WHERE is_active = 1 AND deleted_at IS NULL LIMIT 1;",
+        => _db.Read("SELECT id FROM tabs WHERE is_active = 1 AND deleted_at IS NULL LIMIT 1;",
             reader => reader.Read() ? reader.GetString(0) : null);
 
     /// <summary>
@@ -131,7 +157,7 @@ internal sealed class TabRepository(Database db)
     /// </summary>
     public void SaveBody(ScratchTab tab)
     {
-        var path = tab.DeletedAt is null ? AppPaths.TabFile(tab.Id) : AppPaths.TrashFile(tab.Id);
+        var path = tab.DeletedAt is null ? TabFile(tab.Id) : TrashFile(tab.Id);
         AtomicFile.WriteAllText(path, tab.Document.Text);
     }
 
@@ -143,8 +169,8 @@ internal sealed class TabRepository(Database db)
     /// </summary>
     public void MoveToTrash(ScratchTab tab)
     {
-        var from = AppPaths.TabFile(tab.Id);
-        var to = AppPaths.TrashFile(tab.Id);
+        var from = TabFile(tab.Id);
+        var to = TrashFile(tab.Id);
 
         // 本文ファイルの移動・書き出しを先に済ませる。失敗したら DB・メモリの状態は変えない。
         if (File.Exists(from))
@@ -170,8 +196,8 @@ internal sealed class TabRepository(Database db)
     /// </summary>
     public void RestoreFromTrash(ScratchTab tab, int sortOrder)
     {
-        var from = AppPaths.TrashFile(tab.Id);
-        var to = AppPaths.TabFile(tab.Id);
+        var from = TrashFile(tab.Id);
+        var to = TabFile(tab.Id);
         if (File.Exists(from))
         {
             if (File.Exists(to)) File.Delete(to);
@@ -185,6 +211,43 @@ internal sealed class TabRepository(Database db)
     }
 
     /// <summary>
+    /// ゴミ箱のタブを完全に削除する（ゴミ箱一覧ウィンドウ）。本文ファイルの削除を先に行い、
+    /// 成功した行だけ DB から消す（<see cref="PurgeExpiredTrash"/> と同じ順序・ガード）。
+    /// ファイル削除に失敗したら例外を投げ、DB 行は残す（呼び出し元がユーザーへ伝える）。
+    /// </summary>
+    public void DeletePermanently(ScratchTab tab)
+    {
+        var path = TrashFile(tab.Id);
+        if (File.Exists(path)) File.Delete(path);
+
+        // deleted_at IS NOT NULL のガードで、アクティブなタブの行を誤消去しない。
+        _db.Execute("DELETE FROM tabs WHERE id = $id AND deleted_at IS NOT NULL;", ("$id", tab.Id));
+    }
+
+    /// <summary>
+    /// ゴミ箱を空にする（ゴミ箱一覧ウィンドウ）。1 件ずつ <see cref="DeletePermanently"/> を呼び、
+    /// 壊れた ID・一時的な I/O 失敗は飛ばして続行する（<see cref="PurgeExpiredTrash"/> と同方針）。
+    /// 戻り値は削除できた件数。
+    /// </summary>
+    public int DeleteAllTrash()
+    {
+        var deletedCount = 0;
+        foreach (var tab in LoadTrash())
+        {
+            try
+            {
+                DeletePermanently(tab);
+                deletedCount++;
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            catch (InvalidDataException) { }
+        }
+
+        return deletedCount;
+    }
+
+    /// <summary>
     /// 保持期間を過ぎたゴミ箱を削除する（既定 30 日、要件 3.2.1）。
     /// 起動時に一度だけ呼ぶ。
     /// </summary>
@@ -192,7 +255,7 @@ internal sealed class TabRepository(Database db)
     {
         var threshold = DateTime.Now.AddDays(-retentionDays).ToString(DateFormat, CultureInfo.InvariantCulture);
 
-        var expiredIds = db.Read(
+        var expiredIds = _db.Read(
             "SELECT id FROM tabs WHERE deleted_at IS NOT NULL AND deleted_at < $threshold;",
             reader =>
             {
@@ -207,12 +270,12 @@ internal sealed class TabRepository(Database db)
         {
             try
             {
-                var path = AppPaths.TrashFile(id);
+                var path = TrashFile(id);
                 if (File.Exists(path)) File.Delete(path);
 
                 // 本文ファイルを削除できた（または既に無い）行だけ消す。失敗した行はDBに
                 // 残して、次回起動時に本文ファイルの削除を再試行できるようにする。
-                purgedCount += db.Execute(
+                purgedCount += _db.Execute(
                     "DELETE FROM tabs WHERE id = $id AND deleted_at IS NOT NULL AND deleted_at < $threshold;",
                     ("$id", id), ("$threshold", threshold));
             }

@@ -2,9 +2,11 @@
 
 外部GUIライブラリに依存せず、Win32 APIだけで次を確認する。
 1. メインウィンドウを起動できる
-2. 設定ボタンをクリックして設定ウィンドウを開ける
-3. 設定ウィンドウを閉じられる（閉じる時の保存処理を含む）
-4. テスト専用終了フラグで通常の Application.OnExit まで到達できる
+2. ゴミ箱ボタンをクリックしてゴミ箱ウィンドウを開ける
+3. ゴミ箱ウィンドウを閉じられる
+4. 設定ボタンをクリックして設定ウィンドウを開ける
+5. 設定ウィンドウを閉じられる（閉じる時の保存処理を含む）
+6. テスト専用終了フラグで通常の Application.OnExit まで到達できる
 
 Usage:
     python tools/gui-settings-test.py path\\to\\JpScratch.exe
@@ -129,8 +131,22 @@ def click_settings_button(main_hwnd: int) -> None:
     if not user32.GetWindowRect(main_hwnd, ctypes.byref(rect)):
         raise ctypes.WinError(ctypes.get_last_error())
 
-    # タイトルバー右側は「ピン留め・設定・非表示」の順で、各ボタンは28px。
-    x = rect.right - 44
+    # タイトルバー右側は「ピン留め・ゴミ箱・設定・非表示」の順で、各ボタンは28px。
+    # 設定ボタンの中心は右端から 14 + 28 = 42px。
+    x = rect.right - 42
+    y = rect.top + 16
+    user32.SetCursorPos(x, y)
+    user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+    user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+
+
+def click_trash_button(main_hwnd: int) -> None:
+    rect = wintypes.RECT()
+    if not user32.GetWindowRect(main_hwnd, ctypes.byref(rect)):
+        raise ctypes.WinError(ctypes.get_last_error())
+
+    # ゴミ箱ボタンは設定ボタンの左隣。中心は右端から 14 + 28 + 28 = 70px。
+    x = rect.right - 70
     y = rect.top + 16
     user32.SetCursorPos(x, y)
     user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
@@ -161,6 +177,26 @@ def main() -> int:
         if error_dialogs(process.pid):
             raise RuntimeError("起動時エラーダイアログ: " + " / ".join(error_dialogs(process.pid)))
         print("OK  メインウィンドウが表示されました")
+
+        click_trash_button(main_hwnd)
+        trash_hwnd = wait_until(
+            lambda: find_window(process.pid, "ゴミ箱"),
+            10,
+            "ゴミ箱ウィンドウ",
+        )
+        if error_dialogs(process.pid):
+            raise RuntimeError("ゴミ箱画面のエラーダイアログ: " + " / ".join(error_dialogs(process.pid)))
+        print("OK  ゴミ箱ウィンドウを開けました")
+
+        close_window(trash_hwnd)
+        wait_until(
+            lambda: find_window(process.pid, "ゴミ箱") is None,
+            10,
+            "ゴミ箱ウィンドウの終了",
+        )
+        if error_dialogs(process.pid):
+            raise RuntimeError("ゴミ箱画面のエラーダイアログ: " + " / ".join(error_dialogs(process.pid)))
+        print("OK  ゴミ箱ウィンドウを閉じられました")
 
         click_settings_button(main_hwnd)
         settings_hwnd = wait_until(

@@ -19,7 +19,9 @@
     <SolidColorBrush x:Key="SubtleTextBrush" Color="#6B6B6B" />
     <SolidColorBrush x:Key="AccentBrush" Color="#3A7AE0" />
     <SolidColorBrush x:Key="AccentTextBrush" Color="#FFFFFF" />
-    <SolidColorBrush x:Key="DangerBrush" Color="#C63C3C" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#FF0000" />
+    <SolidColorBrush x:Key="DangerHoverBrush" Color="#FF3838" />
+    <SolidColorBrush x:Key="DangerPressedBrush" Color="#A80000" />
 
     <SolidColorBrush x:Key="TabActiveBackgroundBrush" Color="#FDFDFD" />
     <SolidColorBrush x:Key="TabInactiveBackgroundBrush" Color="#DEDEDE" />

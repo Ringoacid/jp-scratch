@@ -68,6 +68,14 @@
              Link="Services\CrossTabSearchPreview.cs" />
     <Compile Include="..\Services\Database.cs"
              Link="Services\Database.cs" />
+    <Compile Include="..\Models\ScratchTab.cs"
+             Link="Models\ScratchTab.cs" />
+    <Compile Include="..\Services\TabRepository.cs"
+             Link="Services\TabRepository.cs" />
+    <!-- ゴミ箱一覧ウィンドウ本体は WPF の Window なので取り込めない。
+         行数と日時の整形だけを純粋関数として切り出したこのファイルを検証する。 -->
+    <Compile Include="..\Services\TrashListItem.cs"
+             Link="Services\TrashListItem.cs" />
     <Compile Include="..\Services\FxRateService.cs"
              Link="Services\FxRateService.cs" />
     <Compile Include="..\Services\HideSuppressionCounter.cs"

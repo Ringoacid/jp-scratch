@@ -57,6 +57,12 @@
                                   ToolTip="ピン留め（フォーカスが外れても隠さない）"
                                   Checked="PinButton_Changed"
                                   Unchecked="PinButton_Changed" />
+                    <Button x:Name="TrashButton"
+                            Style="{StaticResource ChromeButton}"
+                            FontFamily="Segoe MDL2 Assets"
+                            Content="&#xE74D;"
+                            ToolTip="ゴミ箱（閉じたタブの一覧）"
+                            Click="TrashButton_Click" />
                     <Button x:Name="SettingsButton"
                             Style="{StaticResource ChromeButton}"
                             FontFamily="Segoe MDL2 Assets"
