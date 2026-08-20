@@ -32,6 +32,7 @@ public partial class App : Application
     private Proofreading.ProofreadingClientRouter? _proofreadingClient;
     private TabManager? _tabs;
     private MainWindow? _window;
+    private bool _exitInProgress;
 
     /// <summary>
     /// 既に常駐しているのを見つけて退場するだけのプロセスか。
@@ -229,17 +230,34 @@ public partial class App : Application
         // 終了確認ダイアログの間はタイマー発火による保存を止める。WPF のモーダルは入れ子の
         // メッセージループを回すため、止めないとダイアログ表示中に自動保存・再試行タイマーが
         // 発火して SaveDirty へ再入する（CLAUDE.md の不変条件）。
+        if (_exitInProgress) return;
+
         bool exiting = false;
-        _tabs?.SuspendAutoSave();
+        _exitInProgress = true;
         try
         {
-            exiting = TrySaveBeforeExit();
+            _tabs?.SuspendAutoSave();
+            if (_window?.IsProofreadingOrAlternativeInProgress == true)
+            {
+                MessageBoxResult result = MessageBox.Show(
+                    "校正または別案生成中です。終了すると課金済みの結果を失う可能性があります。\n\n終了しますか？",
+                    "JP Scratch",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No);
+                exiting = result == MessageBoxResult.Yes && TrySaveBeforeExit();
+            }
+            else
+            {
+                exiting = TrySaveBeforeExit();
+            }
         }
         finally
         {
             // アプリへ戻す場合は再試行を必ず戻す。止めたままだと、終了を取りやめた後に
             // 未保存タブが誰にも保存されなくなる。
             if (!exiting) _tabs?.ResumeAutoSave();
+            _exitInProgress = false;
         }
 
         if (!exiting)

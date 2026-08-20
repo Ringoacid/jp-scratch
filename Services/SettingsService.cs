@@ -189,6 +189,10 @@ internal sealed class SettingsService
             s.ProofreadingMinimumIntervalSeconds,
             1,
             600);
+        s.ProofreadingParallelism = Math.Clamp(
+            s.ProofreadingParallelism,
+            1,
+            10);
         MigrateProofreadingModel(s);
         if (!ProofreadingModelCatalog.IsSupported(s.AutoProofreadingModel))
             s.AutoProofreadingModel = ProofreadingModelCatalog.DefaultAutomaticModel;

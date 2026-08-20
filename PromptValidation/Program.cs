@@ -238,6 +238,7 @@ internal static class Program
         Console.WriteLine($"位置解決（複数候補）: {(fallbackPass ? "PASS" : "FAIL")}");
         bool diffPass = DocumentDiffValidation.RunSelfTests();
         bool paragraphPass = ParagraphProofreadingPlannerValidation.RunSelfTests();
+        bool dispatchPlannerPass = ProofreadingDispatchPlannerValidation.RunSelfTests();
         bool credentialPass = CredentialServiceValidation.RunSelfTests();
         bool pricingPass = PricingServiceValidation.RunSelfTests();
         bool apiCallPass = ApiCallRepositoryValidation.RunSelfTests();
@@ -277,7 +278,7 @@ internal static class Program
                credentialPass && pricingPass && apiCallPass && apiCallHistoryPass &&
                apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
                billingHistoryEmptyStatePass && usagePeriodPass && usageLimitPass &&
-               migrationPass && fxRatePass && reactionPass && schedulePass &&
+               migrationPass && fxRatePass && reactionPass && schedulePass && dispatchPlannerPass &&
                geminiClientPass && openAiClientPass && completionGuardPass && modelCatalogPass &&
                appPathsPass && singleInstancePass &&
                billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&

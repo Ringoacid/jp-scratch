@@ -32,6 +32,8 @@
     <Compile Include="..\Proofreading\FewShotSelector.cs" Link="Proofreading\FewShotSelector.cs" />
     <Compile Include="..\Proofreading\ProofreadingClientContracts.cs"
              Link="Proofreading\ProofreadingClientContracts.cs" />
+    <Compile Include="..\Proofreading\ProofreadingDispatchPlanner.cs"
+             Link="Proofreading\ProofreadingDispatchPlanner.cs" />
     <Compile Include="..\Proofreading\ProofreadingClientBase.cs"
              Link="Proofreading\ProofreadingClientBase.cs" />
     <Compile Include="..\Proofreading\AnthropicProofreadingClient.cs"

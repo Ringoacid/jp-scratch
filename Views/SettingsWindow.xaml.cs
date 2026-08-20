@@ -117,6 +117,8 @@ public partial class SettingsWindow : Window
             s.ProofreadingDebounceMs.ToString(CultureInfo.InvariantCulture);
         ProofreadingIntervalBox.Text =
             s.ProofreadingMinimumIntervalSeconds.ToString(CultureInfo.InvariantCulture);
+        ProofreadingParallelismBox.Text =
+            s.ProofreadingParallelism.ToString(CultureInfo.InvariantCulture);
         // 表示は往復不変（表示→パースで値が変わらない）書式にする。"0.##" 等の低精度書式だと、
         // 0.0032 のような細かい上限額が "0" に丸まって表示され、その状態で保存すると
         // 上限0（無制限）へ黙って壊れる（レビュー指摘の再現防止）。SettingsFieldFormattingを参照。
@@ -217,6 +219,10 @@ public partial class SettingsWindow : Window
             (int)ParseNumber(
                 ProofreadingIntervalBox.Text,
                 s.ProofreadingMinimumIntervalSeconds);
+        s.ProofreadingParallelism =
+            (int)ParseNumber(
+                ProofreadingParallelismBox.Text,
+                s.ProofreadingParallelism);
         s.MonthlyLimitUsd = SettingsFieldFormatting.ParseDecimalOrDefault(
             MonthlyLimitBox.Text, s.MonthlyLimitUsd);
         decimal warningPercent = SettingsFieldFormatting.ParseDecimalOrDefault(
@@ -451,8 +457,14 @@ public partial class SettingsWindow : Window
         TimeoutHintText.Text =
             $"推奨: 自動 {auto.RecommendedTimeout.TotalSeconds:0} 秒 / " +
             $"手動 {manual.RecommendedTimeout.TotalSeconds:0} 秒（5〜300 秒）。\n" +
-            "1 回の自動校正は段落ごとに分割して送るため、実行時間の上限は「タイムアウト × 分割数」" +
-            "になります。入力中の自動校正には応答の速いモデルをおすすめします。";
+            "1 回の自動校正は段落ごとに分割し、同時送信数ずつまとめて送ります。実行時間の目安は" +
+            "「タイムアウト × まとめて送る回数（バッチ数）」で、まとめて送る回数は" +
+            "「分割数 ÷ 同時送信数」を切り上げた整数（最低 1 回）です。ただし、2,000 文字を超える" +
+            "段落の複数パートは同一段落内で順番待ちになるため、最大ではまとめて送る回数が" +
+            "分割数と同じになることがあります。さらに、実行開始時には最小送信間隔の待ちが" +
+            "加わる場合があります。レート制限や一時的な通信エラーで 1 回だけ再送したバッチには、" +
+            "タイムアウト 1 回分と 1〜5 秒の待ちが加わります。" +
+            "入力中の自動校正には応答の速いモデルをおすすめします。";
     }
 
     private static string? SelectedModelId(System.Windows.Controls.ComboBox combo)

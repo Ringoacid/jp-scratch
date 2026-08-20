@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -49,6 +50,15 @@ public partial class MainWindow : Window
     }
 
     private sealed record RecordedApiCall(long? Id, ApiUsageCost Cost);
+
+    private sealed record FailedApiCallRecord(
+        ApiUsageCost? Cost,
+        Exception? AccountingError);
+
+    private sealed record ProofreadingSendOutcome(
+        Exception? Error,
+        Exception? AccountingError,
+        TimeSpan Elapsed);
 
     private readonly IdeographicSpaceColorizer _ideographicSpace = new();
     private readonly ProofreadingInlineDiffGenerator _proofreadingInline = new();
@@ -336,6 +346,9 @@ public partial class MainWindow : Window
         if (IsVisible) HideWindow(auto: false);
         else if (!justAutoHid) ShowAndFocus();
     }
+
+    public bool IsProofreadingOrAlternativeInProgress =>
+        _proofreadingRunInProgress || _alternativeInProgress;
 
     public void ShowAndFocus()
     {
@@ -1209,6 +1222,7 @@ public partial class MainWindow : Window
 
         _alternativeInProgress = true;
         ApiUsageCost? failedApiCost = null;
+        Exception? failedAccountingError = null;
         try
         {
             // 進行中フラグを立てた行と try の間には何も置かない（CLAUDE.md の不変条件）。
@@ -1227,10 +1241,12 @@ public partial class MainWindow : Window
             {
                 stopwatch.Stop();
                 _apiErrorSticky = true;
-                failedApiCost = RecordFailedApiCall(
+                FailedApiCallRecord failedRecord = RecordFailedApiCall(
                     ApiCallTrigger.Realternative,
                     ex,
                     stopwatch.Elapsed);
+                failedApiCost = failedRecord.Cost;
+                failedAccountingError = failedRecord.AccountingError;
                 throw;
             }
 
@@ -1238,8 +1254,8 @@ public partial class MainWindow : Window
 
             if (!CanReactTo(proposal))
             {
-                ApiUsageCost? discardedCost = TryRecordAlternativeCall(result, 0, 1);
-                ShowAlternativeCost(result, discardedCost,
+                RecordedApiCall? discardedCall = TryRecordAlternativeCall(result, 0, 1);
+                ShowAlternativeCost(result, discardedCall,
                     "生成中に本文が変更されたため、別案は適用しませんでした。");
                 return;
             }
@@ -1265,10 +1281,13 @@ public partial class MainWindow : Window
             // 学習素材であり、無条件に記録していた従来の挙動へ戻す。
             bool recorded = TryAddReaction(proposal, ProofreadingReaction.RejectWithReason, reason);
 
-            ApiUsageCost? cost = TryRecordAlternativeCall(result, applied ? 1 : 0, applied ? 0 : 1);
+            RecordedApiCall? recordedCall = TryRecordAlternativeCall(
+                result,
+                applied ? 1 : 0,
+                applied ? 0 : 1);
             ShowAlternativeCost(
                 result,
-                cost,
+                recordedCall,
                 applied
                     ? "別案を表示しました。"
                     : "有効な別案へ差し替えられませんでした。" +
@@ -1281,7 +1300,8 @@ public partial class MainWindow : Window
                 : "応答を受け取れなかったため、使用量と料金は確認できませんでした。";
             MessageBox.Show(
                 this,
-                ex.Message + "\n\n" + knownUsage,
+                ex.Message + FormatAccountingErrorNotice(failedAccountingError) +
+                "\n\n" + knownUsage,
                 "別案を生成できませんでした",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -1388,9 +1408,11 @@ public partial class MainWindow : Window
     private void AcceptAllProposals()
     {
         // 校正実行中（_proofreadingRunInProgress）はキーバインドがボタン無効化を素通りするため、
-        // 入口で同じガードを置く。実行中に本文を変えると MarkSent(plan, index) が _lastSentHashes を
-        // スナップショット時点の段落ハッシュで丸ごと置き換えるため、適用した引き継ぎが全て消え、
-        // N段落が次回再送・再課金される（単体許可の fail open「余分に1回」を N 倍にしないため）。
+        // 入口で同じガードを置く。送信済み記録は実行開始時のスナップショット（plan.Paragraphs）から
+        // 計算したパート本文ハッシュを tab.ProofreadingPlanner.MarkSent(plan, unsentParts) が
+        // _lastSentPartHashes に記録する。実行中に本文を一括許可すると古いスナップショットの
+        // ハッシュになり、適用後の本文と一致せず、次回プランで変更ありとして N 段落が再送・再課金される
+        // （単体許可の fail open「余分に1回」を N 倍にしないため）。
         if (_proofreadingRunInProgress ||
             _activeProofreading is not { } session || _tabs.Active is not { } tab)
             return;
@@ -1504,11 +1526,42 @@ public partial class MainWindow : Window
         ReasonProposalButton.IsEnabled = enabled;
     }
 
+    private static Exception? GetAccountingError(RecordedApiCall? recordedCall)
+    {
+        if (recordedCall is null || recordedCall.Id is not null)
+            return null;
+
+        // RecordApiCall が null を返す現在の原因は DB 挿入失敗だけである。
+        // この前提を変更する場合は、この記録失敗判定も見直すこと。
+        return new InvalidOperationException(
+            "課金ログに API 呼び出しを記録できませんでした。");
+    }
+
+    private static string AppendAccountingErrorNotice(
+        string message,
+        Exception? accountingError)
+    {
+        return message + FormatAccountingErrorNotice(accountingError);
+    }
+
+    private static string FormatAccountingErrorNotice(Exception? accountingError)
+    {
+        if (accountingError is null)
+            return "";
+
+        return
+            "\n\n課金ログまたは料金算出の処理に失敗しました。表示額は算出できた範囲のみで、" +
+            "当月累計と課金履歴が実際と一致しない可能性があります。\n詳細: " +
+            accountingError.Message;
+    }
+
     private void ShowAlternativeCost(
         GeminiAlternativeResult result,
-        ApiUsageCost? cost,
+        RecordedApiCall? recordedCall,
         string message)
     {
+        ApiUsageCost? cost = recordedCall?.Cost;
+        message = AppendAccountingErrorNotice(message, GetAccountingError(recordedCall));
         string costText = cost is null ? "確認できませんでした" : FormatCostWithJpy(cost);
         string summary =
             $"{message}\n\n入力 {result.Usage.PromptTokens:N0}、" +
@@ -1529,11 +1582,13 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 別案生成の課金ログを記録する。単価未登録・DB失敗などの記録失敗は握りつぶして
-    /// <c>null</c> を返す（料金は「確認できません」として表示する）。課金済みの別案そのものは
-    /// 呼び出し側で既に適用済みのため、ここが失敗しても結果は失われない。
+    /// 別案生成の課金ログを記録する。料金を算出できない場合（単価未登録など）は握りつぶして
+    /// <c>null</c> を返す（料金は「確認できません」として表示する）。DB書き込みの失敗はここでは
+    /// 例外にならず <c>Id</c> が <c>null</c> の記録として返るため、呼び出し側が
+    /// <see cref="GetAccountingError"/> で判定して通知へ併記する（算出済みの料金は下げない）。
+    /// 課金済みの別案そのものは呼び出し側で既に適用済みのため、ここが失敗しても結果は失われない。
     /// </summary>
-    private ApiUsageCost? TryRecordAlternativeCall(
+    private RecordedApiCall? TryRecordAlternativeCall(
         GeminiAlternativeResult result,
         int suggestionCount,
         int discardedCount)
@@ -1545,7 +1600,7 @@ public partial class MainWindow : Window
                 result.Usage,
                 result.Elapsed,
                 suggestionCount,
-                discardedCount).Cost;
+                discardedCount);
         }
         catch (Exception)
         {
@@ -1785,6 +1840,7 @@ public partial class MainWindow : Window
         // API 呼び出しの間は自動非表示を抑止する。フラグ設定より前に出しておく（フラグと無関係で
         // あり、これより後で例外が出ても finally の ReleaseAutoHide と必ず対になる）。
         SuppressAutoHide();
+        Exception? failedAccountingError = null;
         _styleGuideGenerationInProgress = true;
         try
         {
@@ -1805,15 +1861,21 @@ public partial class MainWindow : Window
                 _apiErrorSticky = true;
                 try
                 {
-                    RecordFailedApiCall(ApiCallTrigger.StyleGuide, ex, stopwatch.Elapsed);
+                    FailedApiCallRecord failedRecord = RecordFailedApiCall(
+                        ApiCallTrigger.StyleGuide,
+                        ex,
+                        stopwatch.Elapsed);
+                    failedAccountingError = failedRecord.AccountingError;
                 }
-                catch (Exception)
+                catch (Exception accountingException)
                 {
-                    // 課金ログの記録失敗は補助情報。API エラー自体の通知（下のダイアログ）は止めない。
+                    // API エラー自体の通知（下のダイアログ）は止めず、記録処理の例外も併記する。
+                    failedAccountingError = accountingException;
                 }
                 MessageBox.Show(
                     this,
-                    "スタイルガイドを生成できませんでした。\n\n" + ex.Message,
+                    "スタイルガイドを生成できませんでした。\n\n" + ex.Message +
+                    FormatAccountingErrorNotice(failedAccountingError),
                     "JP Scratch",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
@@ -1822,22 +1884,25 @@ public partial class MainWindow : Window
             }
 
             _apiErrorSticky = false;
-            // 課金ログの記録失敗（単価未登録・DBエラー等）は補助情報。生成結果そのものの保存を
-            // 妨げないようガードし、料金は「確認できません」として表示する。
-            ApiUsageCost? recordedCost;
+            // 料金を算出できない場合（単価未登録等）は生成結果そのものの保存を妨げないようガードし、
+            // 料金は「確認できません」として表示する。DB書き込みの失敗は例外にならず Id が null の
+            // 記録として返るため、算出済みの料金はそのまま表示したうえで記録失敗を併記する。
+            RecordedApiCall? recordedCall;
             try
             {
-                recordedCost = RecordSuccessfulApiCall(
+                recordedCall = RecordSuccessfulApiCall(
                     ApiCallTrigger.StyleGuide,
                     result.Usage,
                     result.Elapsed,
                     suggestionCount: 1,
-                    discardedCount: 0).Cost;
+                    discardedCount: 0);
             }
             catch (Exception)
             {
-                recordedCost = null;
+                recordedCall = null;
             }
+            ApiUsageCost? recordedCost = recordedCall?.Cost;
+            Exception? successfulAccountingError = GetAccountingError(recordedCall);
             string costText = recordedCost is null
                 ? "料金は確認できませんでした"
                 : FormatCostWithJpy(recordedCost);
@@ -1862,7 +1927,7 @@ public partial class MainWindow : Window
                     this,
                     "スタイルガイドを生成しました。設定画面で内容を確認・編集できます。\n\n" +
                     $"入力 {result.Usage.PromptTokens:N0}、出力・推論 {result.Usage.BillableOutputTokens:N0} tokens\n" +
-                    $"料金 {costText}",
+                    $"料金 {costText}" + FormatAccountingErrorNotice(successfulAccountingError),
                     "スタイルガイドの生成",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
@@ -1874,7 +1939,7 @@ public partial class MainWindow : Window
                     this,
                     "スタイルガイドは生成されましたが、保存に失敗しました。" +
                     "料金は発生済みです。内容を手元に控えてください。\n\n" +
-                    result.Content,
+                    result.Content + FormatAccountingErrorNotice(successfulAccountingError),
                     "スタイルガイドを保存できませんでした",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
@@ -1889,7 +1954,8 @@ public partial class MainWindow : Window
             // 同じ経路に揃える）。
             MessageBox.Show(
                 this,
-                "スタイルガイド生成で予期しないエラーが発生しました。\n\n" + ex.Message,
+                "スタイルガイド生成で予期しないエラーが発生しました。\n\n" + ex.Message +
+                FormatAccountingErrorNotice(failedAccountingError),
                 "JP Scratch",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -2107,6 +2173,86 @@ public partial class MainWindow : Window
         bool editDiscardHappened = false;
         // 校正中に別タブへ切り替わったか（結果は元タブのセッションへ安全に保持できる）。
         bool tabSwitchedDuringRun = false;
+        int completedRequestCount = 0;
+        Exception? representativeApiError = null;
+        Exception? unexpectedError = null;
+        Exception? accountingErrorForRun = null;
+        int runParallelism = ProofreadingDispatchPlanner.ClampParallelism(
+            _settings.Current.ProofreadingParallelism);
+
+        async Task<ProofreadingSendOutcome> SendRequestAsync(
+            ProofreadingRequest request,
+            TextAnchor? anchor)
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            ProofreadingRequest effectiveRequest = request;
+            GeminiProofreadingResult result;
+            try
+            {
+                FewShotSelection fewShotSelection = FewShotSelector.Select(
+                    fewShotCandidates,
+                    request.SourceText);
+                effectiveRequest = request with
+                {
+                    SystemInstructionOverride = ProofreadingPrompt.BuildSystemInstruction(
+                        styleGuideContent,
+                        customInstruction,
+                        fewShotSelection.Examples),
+                };
+                result =
+                    await _proofreadingClient.ProofreadAsync(effectiveRequest);
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                completedRequestCount++;
+                // await の継続は UI ディスパッチャ上で直列化されるため、完了数の更新と表示は
+                // ロックなしで単調増加する。WhenAll 後ではなく、各リクエストの完了時点で表示する。
+                SetProofreadingStatus(
+                    $"校正しています… {completedRequestCount}/{plan.Requests.Count}");
+                return new(ex, null, stopwatch.Elapsed);
+            }
+
+            stopwatch.Stop();
+
+            // 課金済みの成功結果は、このリクエスト自身の await 直後に確定する。
+            // バッチ内の遅いリクエストを WhenAll で待つ間も、送信済み記録と結果を失わない。
+            long apiCallId = -1;
+            Exception? accountingError = null;
+            try
+            {
+                RecordedApiCall recordedApiCall = RecordSuccessfulApiCall(
+                    trigger,
+                    result.Usage,
+                    result.Elapsed,
+                    suggestionCount: result.Diff.Accepted ? result.Diff.Changes.Count : 0,
+                    discardedCount: result.Diff.Accepted ? 0 : 1);
+                responseCosts.Add(recordedApiCall.Cost);
+                if (recordedApiCall.Id is not long id)
+                {
+                    // RecordApiCall が null を返す現在の原因は DB 挿入失敗だけである。
+                    // この前提を変更する場合は、この記録失敗判定も見直すこと。
+                    throw new InvalidOperationException(
+                        "課金ログに API 呼び出しを記録できませんでした。");
+                }
+
+                apiCallId = id;
+                successfulApiCallIds.Add(id);
+            }
+            catch (Exception ex)
+            {
+                // API 応答はすでに成功しているため、記録失敗でも結果は確定する。
+                accountingError = ex;
+                apiCallId = -1;
+            }
+
+            _proofreadingSchedule.MarkSent(DateTimeOffset.Now);
+            completed.Add((effectiveRequest, result, apiCallId, anchor));
+            completedRequestCount++;
+            SetProofreadingStatus(
+                $"校正しています… {completedRequestCount}/{plan.Requests.Count}");
+            return new(null, accountingError, stopwatch.Elapsed);
+        }
 
         try
         {
@@ -2123,12 +2269,16 @@ public partial class MainWindow : Window
             // 変わっていた場合、この座標は失効しておりアンカーを範囲外へ作ると例外になる。
             // その場合は全リクエストを未送信として中止する（編集は OnTabTextChanged がデバウンスを
             // 再始動済みなので、finally の ScheduleAutomaticProofreading が再送する）。
+            Dictionary<(int ParagraphIndex, int PartIndex), TextAnchor?> requestAnchorsByPart = [];
             if (string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
             {
                 requestAnchors = new TextAnchor?[plan.Requests.Count];
                 for (int index = 0; index < plan.Requests.Count; index++)
                 {
                     requestAnchors[index] = CreateAnchor(tab.Document, plan.Requests[index].SourceStart);
+                    requestAnchorsByPart[(
+                        plan.Requests[index].ParagraphIndex,
+                        plan.Requests[index].PartIndex)] = requestAnchors[index];
                 }
             }
             else
@@ -2136,90 +2286,115 @@ public partial class MainWindow : Window
                 editDiscardHappened = true;
             }
 
-            for (int index = 0; index < plan.Requests.Count; index++)
+            TimeSpan intervalDelay =
+                _proofreadingSchedule.GetDelayBeforeSend(DateTimeOffset.Now);
+            if (intervalDelay > TimeSpan.Zero)
             {
-                if (!ReferenceEquals(tab, _tabs.Active))
-                {
-                    tabSwitchedDuringRun = true;
-                    break;
-                }
+                SetProofreadingStatus(
+                    $"次の校正送信まで {Math.Ceiling(intervalDelay.TotalSeconds):0} 秒");
+                await Task.Delay(intervalDelay);
+            }
 
-                TimeSpan intervalDelay =
-                    _proofreadingSchedule.GetDelayBeforeSend(DateTimeOffset.Now);
-                if (intervalDelay > TimeSpan.Zero)
-                {
-                    SetProofreadingStatus(
-                        $"次の校正送信まで {Math.Ceiling(intervalDelay.TotalSeconds):0} 秒");
-                    await Task.Delay(intervalDelay);
-                }
+            SetProofreadingStatus(
+                $"校正しています… 0/{plan.Requests.Count}");
+            IReadOnlyList<IReadOnlyList<ProofreadingRequest>> batches =
+                ProofreadingDispatchPlanner.CreateBatches(plan.Requests, runParallelism);
+            bool stopDispatch = false;
+            foreach (IReadOnlyList<ProofreadingRequest> batch in batches)
+            {
+                if (stopDispatch)
+                    continue;
 
-                if (!ReferenceEquals(tab, _tabs.Active))
+                List<Task<ProofreadingSendOutcome>> sends = [];
+                foreach (ProofreadingRequest request in batch)
                 {
-                    tabSwitchedDuringRun = true;
-                    break;
-                }
+                    if (stopDispatch)
+                        continue;
 
-                // 送信直前に対象範囲（パート）が今も無変更かを確認する。編集されていた場合は、
-                // まだ送信していない残りの API 呼び出しを中止し、編集ブロックは入力停止後の自動
-                // 再校正へ委ねる。選択範囲の手動校正は従来どおり全文一致を要求する。
-                TextAnchor? validatedAnchor = null;
-                if (!selectionRun)
-                {
-                    if (requestAnchors is null ||
-                        requestAnchors[index] is not { } anchor ||
-                        !IsPartIntact(anchor, plan.Requests[index]))
+                    if (!ReferenceEquals(tab, _tabs.Active))
+                    {
+                        tabSwitchedDuringRun = true;
+                        stopDispatch = true;
+                        continue;
+                    }
+
+                    // 送信直前に対象範囲（パート）が今も無変更かを確認する。条件を満たさない
+                    // 新規送信だけを止め、既に飛行中のリクエストはキャンセルせず完了を待つ。
+                    TextAnchor? validatedAnchor = null;
+                    if (!selectionRun)
+                    {
+                        if (!requestAnchorsByPart.TryGetValue(
+                                (request.ParagraphIndex, request.PartIndex),
+                                out TextAnchor? anchor) ||
+                            anchor is null ||
+                            !IsPartIntact(anchor, request))
+                        {
+                            editDiscardHappened = true;
+                            stopDispatch = true;
+                            continue;
+                        }
+                        validatedAnchor = anchor;
+                    }
+                    else if (!string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
                     {
                         editDiscardHappened = true;
-                        break;
+                        stopDispatch = true;
+                        continue;
                     }
-                    validatedAnchor = anchor;
-                }
-                else if (!string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal))
-                {
-                    editDiscardHappened = true;
-                    break;
+
+                    sends.Add(SendRequestAsync(request, validatedAnchor));
                 }
 
-                SetProofreadingStatus(
-                    $"校正しています… {index + 1}/{plan.Requests.Count}");
-                ProofreadingRequest request = plan.Requests[index];
-                FewShotSelection fewShotSelection = FewShotSelector.Select(
-                    fewShotCandidates, request.SourceText);
-                request = request with
-                {
-                    SystemInstructionOverride = ProofreadingPrompt.BuildSystemInstruction(
-                        styleGuideContent, customInstruction, fewShotSelection.Examples),
-                };
-                var stopwatch = Stopwatch.StartNew();
-                GeminiProofreadingResult result;
-                try
-                {
-                    result = await _proofreadingClient.ProofreadAsync(request);
-                }
-                catch (GeminiClientException ex)
-                {
-                    stopwatch.Stop();
-                    _apiErrorSticky = true;
-                    ApiUsageCost? failedCost = RecordFailedApiCall(trigger, ex, stopwatch.Elapsed);
-                    if (failedCost is not null)
-                        responseCosts.Add(failedCost);
-                    throw;
-                }
+                if (sends.Count == 0)
+                    continue;
 
-                _apiErrorSticky = false;
+                // 各送信は SendRequestAsync 内で個別に成否を記録するため、WhenAll が
+                // 最初の例外だけを返して他の飛行中リクエストを隠すことはない。
+                ProofreadingSendOutcome[] outcomes = await Task.WhenAll(sends);
+                foreach (ProofreadingSendOutcome outcome in outcomes)
+                {
+                    if (outcome.AccountingError is { } accountingError)
+                    {
+                        accountingErrorForRun ??= accountingError;
+                        stopDispatch = true;
+                    }
 
-                RecordedApiCall recordedApiCall = RecordSuccessfulApiCall(
-                    trigger,
-                    result.Usage,
-                    result.Elapsed,
-                    suggestionCount: result.Diff.Accepted ? result.Diff.Changes.Count : 0,
-                    discardedCount: result.Diff.Accepted ? 0 : 1);
-                if (recordedApiCall.Id is long id)
-                    successfulApiCallIds.Add(id);
-                responseCosts.Add(recordedApiCall.Cost);
-                _proofreadingSchedule.MarkSent(DateTimeOffset.Now);
-                completed.Add((request, result, recordedApiCall.Id ?? -1, validatedAnchor));
+                    if (outcome.Error is GeminiClientException apiError)
+                    {
+                        FailedApiCallRecord failedRecord = RecordFailedApiCall(
+                            trigger,
+                            apiError,
+                            outcome.Elapsed);
+                        if (failedRecord.Cost is { } failedCost)
+                            responseCosts.Add(failedCost);
+                        if (failedRecord.AccountingError is { } failedAccountingError)
+                        {
+                            accountingErrorForRun ??= failedAccountingError;
+                            stopDispatch = true;
+                        }
+                        representativeApiError ??= apiError;
+                        stopDispatch = true;
+                        continue;
+                    }
+
+                    if (outcome.Error is Exception error)
+                    {
+                        unexpectedError ??= error;
+                        stopDispatch = true;
+                        continue;
+                    }
+
+                }
             }
+
+            // APIエラーの粘着表示は、同一実行の全送信完了後に一度だけ確定する。
+            _apiErrorSticky = representativeApiError is not null;
+            if (representativeApiError is { } representativeError)
+                ExceptionDispatchInfo.Capture(representativeError).Throw();
+            if (unexpectedError is { } unexpected)
+                ExceptionDispatchInfo.Capture(unexpected).Throw();
+            if (accountingErrorForRun is { } accountingFailure)
+                ExceptionDispatchInfo.Capture(accountingFailure).Throw();
 
             if (!TryApplyCompletedResults(out int proposalCount))
             {
@@ -2275,7 +2450,13 @@ public partial class MainWindow : Window
                 : "";
             MessageBox.Show(
                 this,
-                ex.Message + "\n\n" + knownUsage + salvageNote,
+                ex.Message +
+                (accountingErrorForRun is { } accountingFailure
+                    ? "\n\n課金情報の処理に失敗しました。表示額・当月累計・課金履歴が" +
+                      "実際と一致しない可能性があります。\n詳細: " +
+                      accountingFailure.Message
+                    : "") +
+                "\n\n" + knownUsage + salvageNote,
                 "校正できませんでした",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -2288,17 +2469,48 @@ public partial class MainWindow : Window
         {
             // 予期しない内部エラー。以前は throw して fire-and-forget の手動経路では
             // 未観測タスク例外として黙って消えていた（自動経路との可視性の非対称）。
-            // ここで拾ってユーザーへ伝える。本文はこの時点では変更されていない（置換は
-            // ユーザー操作時のみ）ため、データは安全。
+            // API例外と同様、ここまでに成功して課金された結果を先に救済する。救済自体が
+            // 文書・セッション・プランナー由来の例外で失敗しても、下の通知へ必ず到達する。
+            bool salvaged = false;
+            if (!resultsApplied && completed.Count > 0)
+            {
+                try
+                {
+                    salvaged = TryApplyCompletedResults(out _);
+                }
+                catch (Exception)
+                {
+                    salvaged = false;
+                }
+            }
+
             if (!resultsApplied)
                 MarkApiCallsDiscarded(successfulApiCallIds);
+            if (!selectionRun)
+                _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
+            string knownUsage = responseCosts.Count == 0
+                ? "使用量・料金は確認できませんでした。"
+                : BuildUsageText(responseCosts);
+            string salvageNote = salvaged
+                ? "\n\n途中まで完了していた応答は破棄していません。有効なぶんは反映済みで、" +
+                  "送信できなかった箇所だけを次回あらためて校正します。"
+                : "";
             MessageBox.Show(
                 this,
-                "校正処理で予期しないエラーが発生しました。\n\n" + ex.Message,
+                ex.Message +
+                (accountingErrorForRun is { } accountingFailure
+                    ? "\n\n課金情報の処理に失敗しました。表示額・当月累計・課金履歴が" +
+                      "実際と一致しない可能性があります。\n詳細: " +
+                      accountingFailure.Message
+                    : "") +
+                "\n\n" + knownUsage + salvageNote,
                 "校正できませんでした",
                 MessageBoxButton.OK,
-                MessageBoxImage.Error);
-            SetProofreadingStatus("校正処理でエラーが発生しました", force: true);
+                MessageBoxImage.Warning);
+            SetProofreadingStatus(responseCosts.Count == 0
+                ? "校正処理で予期しないエラーが発生しました"
+                : "校正処理でエラーが発生しました " + FormatCostWithJpy(responseCosts),
+                force: true);
         }
         finally
         {
@@ -2319,12 +2531,13 @@ public partial class MainWindow : Window
             // 中止された（送信しなかった）リクエストのパートは未送信として残し、次回の自動プランで
             // 再試行させる。本文編集で中断した場合、その編集は OnTabTextChanged がデバウンスを
             // 再始動済みなので、finally の ScheduleAutomaticProofreading が入力停止後に再送する。
-            // API 失敗の場合も同じで、失敗したリクエスト以降だけが次回の対象になる。
-            for (int index = completed.Count; index < plan.Requests.Count; index++)
-            {
-                unsentParts.Add(
-                    (plan.Requests[index].ParagraphIndex, plan.Requests[index].PartIndex));
-            }
+            // 並列送信では完了順が入力順にならないため、完了件数以降というサフィックス
+            // 前提にせず、成功結果の完了集合に含まれないパートを未送信として残す。
+            HashSet<(int ParagraphIndex, int PartIndex)> completedParts = completed
+                .Select(item => (item.Request.ParagraphIndex, item.Request.PartIndex))
+                .ToHashSet();
+            unsentParts.UnionWith(
+                ProofreadingDispatchPlanner.GetUnsentParts(plan.Requests, completedParts));
 
             // 完了済みリクエストを現在の本文と照合し、編集されていない範囲の結果だけを現在位置へ
             // 対応付けて保持する。編集された範囲の結果は破棄し、既に課金された呼び出しは
@@ -2456,7 +2669,7 @@ public partial class MainWindow : Window
                 $"{trigger}で{ActiveProviderName(purpose)} APIを{requestCount}回呼び出します。料金が発生します。\n\n" +
                 limitWarning +
                 BuildPricingSummary(purpose) + "\n" +
-                "複数回の場合は各送信の間隔を空け、実行後に合計料金を表示します。\n\n" +
+                "複数段落は設定した並列度で送信し、実行後に合計料金を表示します。\n\n" +
                 "実行しますか？",
                 "API料金の確認",
                 MessageBoxButton.YesNo,
@@ -2496,35 +2709,46 @@ public partial class MainWindow : Window
             cost.FxRate)), cost);
     }
 
-    private ApiUsageCost? RecordFailedApiCall(
+    private FailedApiCallRecord RecordFailedApiCall(
         ApiCallTrigger trigger,
         GeminiClientException exception,
         TimeSpan elapsed)
     {
-        // キー未設定はHTTP送信より前の失敗なので、API呼び出しログには含めない。
+        // キー未設定はHTTP送信より前の失敗なので、API呼び出しログには含めない（正しい除外）。
         if (exception.Error == GeminiClientError.MissingApiKey)
-            return null;
+            return new(null, null);
 
         GeminiUsage? usage = exception.Usage;
         int promptTokens = usage?.PromptTokens ?? 0;
         int outputTokens = usage?.BillableOutputTokens ?? 0;
-        ApiUsageCost? cost = null;
+        ApiUsageCost cost;
+        Exception? accountingError = null;
+        string errorMessage = exception.Message;
         if (usage is not null)
         {
             try
             {
                 cost = CreateUsageCost(promptTokens, outputTokens);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return null;
+                accountingError = ex;
+                cost = new ApiUsageCost(
+                    promptTokens,
+                    outputTokens,
+                    0m,
+                    _fxRates.GetCachedRate(),
+                    IsUsageKnown: false);
+                errorMessage += "\n料金算出に失敗しました: " + ex.Message;
             }
         }
+        else
+        {
+            // 応答前失敗はUSD 0で、レートがあっても円額を0として固定する。
+            cost = new ApiUsageCost(0, 0, 0m, _fxRates.GetCachedRate(), IsUsageKnown: false);
+        }
 
-        // 応答前失敗はUSD 0で、レートがあっても円額を0として固定する。
-        cost ??= new ApiUsageCost(0, 0, 0m, _fxRates.GetCachedRate(), IsUsageKnown: false);
-
-        RecordApiCall(new ApiCallLogEntry(
+        long? apiCallId = RecordApiCall(new ApiCallLogEntry(
             trigger,
             _proofreadingClient.Model,
             promptTokens,
@@ -2534,11 +2758,25 @@ public partial class MainWindow : Window
             exception.Error == GeminiClientError.Timeout
                 ? ApiCallStatus.Timeout
                 : ApiCallStatus.Error,
-            exception.Message,
+            errorMessage,
             0,
             0,
             cost.FxRate));
-        return cost;
+        if (apiCallId is null)
+        {
+            // RecordApiCall が null を返す現在の原因は DB 挿入失敗だけである。
+            // この前提を変更する場合は、この記録失敗判定も見直すこと。
+            InvalidOperationException databaseError = new(
+                "課金ログに API 呼び出しを記録できませんでした。");
+            accountingError = accountingError is null
+                ? databaseError
+                : new InvalidOperationException(
+                    "課金ログへの記録にも失敗しました。料金算出エラー: " +
+                    accountingError.Message,
+                    databaseError);
+        }
+
+        return new(cost, accountingError);
     }
 
     private long? RecordApiCall(ApiCallLogEntry entry)

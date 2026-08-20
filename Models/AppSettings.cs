@@ -119,6 +119,8 @@ public sealed class AppSettings
     /// </summary>
     public int ProofreadingDebounceMs { get; set; } = 5000;
     public int ProofreadingMinimumIntervalSeconds { get; set; } = 10;
+    /// <summary>同時に送信する段落数。1〜10、既定3。</summary>
+    public int ProofreadingParallelism { get; set; } = 3;
     /// <summary>課金APIを実行する前に確認ダイアログを表示するか。</summary>
     public bool ConfirmPaidApiCalls { get; set; } = true;
 
