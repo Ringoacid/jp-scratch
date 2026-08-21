@@ -12,7 +12,7 @@
 
 - C# / .NET 10 (LTS)、WPF、AvalonEdit 6.x、SQLite (Microsoft.Data.Sqlite)。
 - WinForms はトレイアイコンのためだけに参照（暗黙 using は外してあり `TrayIconService` のみが明示的に using）。
-- 校正モデルは 4 プロバイダー 11 モデル（Google / OpenAI / Anthropic / Preferred Networks）。**自動用と手動用の 2 枠**を持ち、既定は自動 `gpt-5.6-luna` / 手動 `claude-sonnet-5`。API キーはプロバイダーごとに DPAPI 暗号化で `credentials.dat` に保存。
+- 校正モデルは 4 プロバイダー 12 モデル（Google / OpenAI / Anthropic / Preferred Networks）。**自動用と手動用の 2 枠**を持ち、既定は自動 `gpt-5.6-luna` / 手動 `claude-sonnet-5`。API キーはプロバイダーごとに DPAPI 暗号化で `credentials.dat` に保存。
 
 ## ビルド・テスト
 

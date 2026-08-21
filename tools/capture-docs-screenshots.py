@@ -420,19 +420,27 @@ class AppSession:
         env = dict(os.environ)
         env["JPSCRATCH_DATA_DIR"] = str(self.data_dir)
         self.process = subprocess.Popen([str(self.exe)], env=env)
-        self.hwnd = wait_window(self.process.pid, "JP Scratch", 20)
-        focus(self.hwnd)
-        time.sleep(0.6)
-        return self
+        try:
+            self.hwnd = wait_window(self.process.pid, "JP Scratch", 20)
+            focus(self.hwnd)
+            time.sleep(0.6)
+            return self
+        except Exception:
+            self._stop_owned_process()
+            raise
 
     def __exit__(self, *_exc) -> None:
+        self._stop_owned_process()
+        time.sleep(0.5)
+
+    def _stop_owned_process(self) -> None:
+        """このセッションが起動したプロセスだけを終了する。"""
         if self.process and self.process.poll() is None:
             self.process.terminate()
             try:
                 self.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.process.kill()
-        time.sleep(0.5)
 
     @property
     def pid(self) -> int:
@@ -596,6 +604,17 @@ ALL_SHOTS = ["main", "find", "crosstab", "settings", "contextmenu", "dark", "pro
 DEFAULT_SHOTS = ["main", "find", "crosstab", "settings", "contextmenu", "dark"]
 
 
+def app_is_running() -> bool:
+    """既存の JpScratch.exe があれば、誤入力を避けるため撮影を中止する。"""
+    result = subprocess.run(
+        ["tasklist", "/FI", "IMAGENAME eq JpScratch.exe", "/FO", "CSV", "/NH"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return '"JpScratch.exe"' in result.stdout
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="README 用スクショの一括撮影")
     parser.add_argument("--exe", type=Path, default=Path("publish/fdd/JpScratch.exe"))
@@ -620,9 +639,12 @@ def main() -> int:
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
 
-    # 実データ側のインスタンスが居ると入力先を取り違えるので落としておく
-    subprocess.run(["taskkill", "/IM", "JpScratch.exe", "/F"], capture_output=True)
-    time.sleep(0.8)
+    if app_is_running():
+        print(
+            "JpScratch.exe が起動中です。未保存データを保護するため撮影を中止します。",
+            file=sys.stderr,
+        )
+        return 3
 
     saved_run_value = read_run_value()
     workdir = Path(tempfile.mkdtemp(prefix="jpscratch-shots-"))
@@ -668,7 +690,6 @@ def main() -> int:
 
         return 0
     finally:
-        subprocess.run(["taskkill", "/IM", "JpScratch.exe", "/F"], capture_output=True)
         write_run_value(saved_run_value)
         print(f"スタートアップ登録を復元: {saved_run_value!r}")
         if args.keep_data:

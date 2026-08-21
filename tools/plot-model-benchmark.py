@@ -3,9 +3,11 @@
 
     pip install matplotlib
     python tools/plot-model-benchmark.py
-    python tools/plot-model-benchmark.py --input PromptValidation/results/xxx.json --markdown
+    python tools/plot-model-benchmark.py --input PromptValidation/results/xxx.json --markdown table.md
+    python tools/plot-model-benchmark.py --input base.json --input supplement.json
 
-入力を省略すると PromptValidation/results/model-benchmark-*.json の最新を使う。
+入力を省略すると PromptValidation/results/*benchmark-*.json から、同じ計測名の最新リビジョンを
+すべて読み込む。複数の実行を混ぜる場合は、文章・試行数・タイムアウト・システム指示が同じものに限る。
 出力は docs/images/ へ、ライト用とダーク用を別々に書き出す（GitHub の README から
 <picture> で出し分ける前提。自動反転ではなく、ダーク面に合わせて選んだ色を使う）。
 
@@ -24,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 from pathlib import Path
 
 import matplotlib
@@ -68,11 +71,20 @@ PROVIDER_ORDER = ["OpenAI", "Gemini", "Anthropic", "PLaMo"]
 PROVIDER_LABELS = {"Gemini": "Google", "PLaMo": "Preferred Networks"}
 
 
-def latest_report() -> Path:
-    candidates = sorted(RESULTS_DIR.glob("model-benchmark-*.json"))
+def default_reports() -> list[Path]:
+    """計測名ごとに最新の -rN を選び、日付順に返す。"""
+    candidates = sorted(RESULTS_DIR.glob("*benchmark-*.json"))
     if not candidates:
-        raise SystemExit(f"{RESULTS_DIR} に model-benchmark-*.json がありません。")
-    return candidates[-1]
+        raise SystemExit(f"{RESULTS_DIR} に *benchmark-*.json がありません。")
+    latest_by_run: dict[str, tuple[int, Path]] = {}
+    for candidate in candidates:
+        revision_match = re.search(r"-r(\d+)$", candidate.stem)
+        revision = int(revision_match.group(1)) if revision_match else 0
+        run_name = re.sub(r"-r\d+$", "", candidate.stem)
+        previous = latest_by_run.get(run_name)
+        if previous is None or revision > previous[0]:
+            latest_by_run[run_name] = (revision, candidate)
+    return [entry[1] for entry in latest_by_run.values()]
 
 
 def load(path: Path) -> dict:
@@ -80,7 +92,7 @@ def load(path: Path) -> dict:
         return json.load(handle)
 
 
-def rows(report: dict) -> list[dict]:
+def rows(report: dict, *, supplemental: bool = False) -> list[dict]:
     """図と表で共有する 1 モデル 1 行のデータ。料金が未確認のモデルは cost を None にする。"""
     by_id = {model["id"]: model for model in report["models"]}
     result = []
@@ -91,6 +103,8 @@ def rows(report: dict) -> list[dict]:
             {
                 "id": summary["modelId"],
                 "name": summary["displayName"],
+                "run_date": report["runStartedAt"][:10],
+                "supplemental": supplemental,
                 "provider": summary["provider"],
                 "effort": model["effort"],
                 "input_price": model["inputPricePerMillion"],
@@ -113,6 +127,41 @@ def rows(report: dict) -> list[dict]:
             }
         )
     return result
+
+
+def validate_compatible(reports: list[dict]) -> None:
+    """別実行の値を同じ図に載せても比較条件が崩れないことを確認する。"""
+    first = reports[0]
+    expected = {
+        "purpose": first["purpose"],
+        "trialCount": first["trialCount"],
+        "timeoutSeconds": first["timeoutSeconds"],
+        "systemInstructionSha256": first["systemInstructionSha256"],
+        "texts": [
+            (text["id"], text["length"], text["mustNotChangeCount"])
+            for text in first["texts"]
+        ],
+    }
+    for report in reports[1:]:
+        actual = {
+            "purpose": report["purpose"],
+            "trialCount": report["trialCount"],
+            "timeoutSeconds": report["timeoutSeconds"],
+            "systemInstructionSha256": report["systemInstructionSha256"],
+            "texts": [
+                (text["id"], text["length"], text["mustNotChangeCount"])
+                for text in report["texts"]
+            ],
+        }
+        if actual != expected:
+            raise SystemExit("比較条件が異なるベンチマークJSONは同じ図に統合できません。")
+
+
+def chart_name(row: dict) -> str:
+    if not row["supplemental"]:
+        return row["name"]
+    month_day = row["run_date"][5:].replace("-", "/")
+    return f"{row['name']}（{month_day}追補）"
 
 
 def pareto(points: list[dict]) -> list[dict]:
@@ -228,7 +277,7 @@ def draw_scatter(data: list[dict], theme: dict, meta: str, path: Path) -> None:
                 zorder=2,
             )
         axes.annotate(
-            point["name"],
+            chart_name(point),
             xy=(point["median_s"], point["cost"]),
             xytext=(leader_x * 1.02, 10**log_y),
             color=theme["primary"] if bold else theme["secondary"],
@@ -288,7 +337,7 @@ def draw_bars(data: list[dict], theme: dict, meta: str, path: Path) -> None:
     ordered.reverse()  # barh は下から積むので、表示順を上からにする
 
     positions = list(range(len(ordered)))
-    labels = [row["name"] for row in ordered]
+    labels = [chart_name(row) for row in ordered]
 
     # 所要時間は棒ではなく点＋範囲線。最遅の試行（PLaMo の 118 秒）と最速（Haiku の 1.7 秒）で
     # 70 倍開くので対数軸にする必要があり、対数軸の棒は「長さが値に比例しない」ため使えない。
@@ -427,7 +476,7 @@ def markdown_table(report: dict, data: list[dict]) -> str:
             marks.append("—")
         provider = PROVIDER_LABELS.get(row["provider"], row["provider"])
         lines.append(
-            f"| {row['name']} | {provider} | {price} | {elapsed} | {cost} | "
+            f"| {chart_name(row)} | {provider} | {price} | {elapsed} | {cost} | "
             f"{changes} | {marks[0]} | {marks[1]} |"
         )
     return "\n".join(lines)
@@ -435,7 +484,13 @@ def markdown_table(report: dict, data: list[dict]) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, default=None, help="ベンチマークJSON")
+    parser.add_argument(
+        "--input",
+        type=Path,
+        action="append",
+        default=None,
+        help="ベンチマークJSON。複数指定すると同じ図へ統合（省略時は既定の全計測）",
+    )
     parser.add_argument("--output-dir", type=Path, default=IMAGES_DIR)
     # 表は UTF-8 のファイルへ書く。Windows のコンソールは CP932 なので、
     # ✓ や ✗ を標準出力へ流すと UnicodeEncodeError で落ちる。
@@ -444,18 +499,30 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    path = args.input or latest_report()
-    report = load(path)
-    data = rows(report)
+    paths = args.input or default_reports()
+    reports = sorted((load(path) for path in paths), key=lambda report: report["runStartedAt"])
+    validate_compatible(reports)
 
-    date = report["runStartedAt"][:10]
-    fx = report.get("fxRate")
+    data = []
+    seen_models = set()
+    for index, report in enumerate(reports):
+        report_rows = rows(report, supplemental=index > 0)
+        duplicates = seen_models.intersection(row["id"] for row in report_rows)
+        if duplicates:
+            raise SystemExit(f"同じモデルが複数のJSONにあります: {', '.join(sorted(duplicates))}")
+        seen_models.update(row["id"] for row in report_rows)
+        data.extend(report_rows)
+
+    run_labels = []
+    for index, report in enumerate(reports):
+        date = report["runStartedAt"][:10]
+        suffix = "追補" if index > 0 else "一斉計測"
+        run_labels.append(f"{date} {len(report['summary'])}モデル {suffix}")
     meta = (
-        f"計測 {date} / 手動用 effort / 7 文章 × {report['trialCount']} 試行 / "
-        f"タイムアウト {report['timeoutSeconds']} 秒（全モデル共通）"
+        f"計測 {' ＋ '.join(run_labels)} / 手動用 effort / "
+        f"7 文章 × {reports[0]['trialCount']} 試行 / タイムアウト "
+        f"{reports[0]['timeoutSeconds']} 秒 / 料金は各実行日の固定為替"
     )
-    if fx:
-        meta += f" / USD/JPY {fx['usdJpy']:g}（{fx['rateDate']}）"
 
     for mode, theme in THEMES.items():
         draw_scatter(data, theme, meta, args.output_dir / f"model-benchmark-scatter-{mode}.png")
@@ -465,7 +532,7 @@ def main() -> None:
 
     if args.markdown is not None:
         args.markdown.parent.mkdir(parents=True, exist_ok=True)
-        args.markdown.write_text(markdown_table(report, data) + "\n", encoding="utf-8")
+        args.markdown.write_text(markdown_table(reports[0], data) + "\n", encoding="utf-8")
         print(args.markdown)
 
 

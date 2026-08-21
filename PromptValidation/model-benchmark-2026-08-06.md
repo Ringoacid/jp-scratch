@@ -4,7 +4,11 @@ v4 でプロバイダーを 4 社 11 モデルへ広げたが、どれを選ぶ�
 同じ日本語文章を全モデルへ送り、所要時間・料金・**全提案を承諾した結果の本文**を計測した。
 
 生データ: [`results/model-benchmark-2026-08-06-r3.json`](results/model-benchmark-2026-08-06-r3.json)
-図: [`docs/images/model-benchmark-*.png`](../docs/images/)（生成は `python tools/plot-model-benchmark.py`）
+図: [`docs/images/model-benchmark-*.png`](../docs/images/)（Gemini 3.7 Flash追補を統合。生成は `python tools/plot-model-benchmark.py`）
+
+> この計測後に追加された Gemini 3.7 Flash は、同じ文章・プロンプト・試行数で 2026-08-21 に
+> 単独計測した。図には「8/21追補」と明示して統合している。結果は
+> [`gemini-3.7-flash-benchmark-2026-08-21.md`](gemini-3.7-flash-benchmark-2026-08-21.md) を参照。
 
 ## 実行条件
 
