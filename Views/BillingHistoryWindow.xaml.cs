@@ -376,6 +376,10 @@ public partial class BillingHistoryWindow : Window
             $"入力 {summary.PromptTokens:N0} / 出力 {summary.OutputTokens:N0} tokens　" +
             $"${usd} ({jpy})　提案 {summary.SuggestionCount:N0} / 破棄 {summary.DiscardedCount:N0}";
 
+        string unconfirmed = UsageFormatting.FormatUnconfirmedCost(summary);
+        if (unconfirmed.Length > 0)
+            text += $"　{unconfirmed}";
+
         if (page is { Truncated: true })
             text += $"　※ {page.TotalCount:N0}件中 {page.Rows.Count:N0}件を表示";
 
@@ -395,8 +399,8 @@ public partial class BillingHistoryWindow : Window
         row.Model,
         row.PromptTokens.ToString("N0", CultureInfo.InvariantCulture),
         row.OutputTokens.ToString("N0", CultureInfo.InvariantCulture),
-        "$" + UsageFormatting.FormatUsd(row.UsdCost),
-        row.JpyCost is decimal jpy ? UsageFormatting.FormatJpy(jpy) : "—",
+        UsageFormatting.FormatUsd(row),
+        UsageFormatting.FormatJpy(row),
         UsageFormatting.FormatRateDate(row.RateDate),
         row.DurationMilliseconds.ToString("N0", CultureInfo.InvariantCulture) + " ms",
         UsageFormatting.FormatStatus(row.Status),

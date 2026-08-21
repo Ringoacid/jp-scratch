@@ -104,6 +104,8 @@
              Link="Services\TrayIconStateResolver.cs" />
     <Compile Include="..\Services\UsageFormatting.cs"
              Link="Services\UsageFormatting.cs" />
+    <Compile Include="..\Services\ApiUsageDisplayFormatter.cs"
+             Link="Services\ApiUsageDisplayFormatter.cs" />
     <Compile Include="..\Services\StatusBarUsageFormatter.cs"
              Link="Services\StatusBarUsageFormatter.cs" />
     <Compile Include="..\Services\UsageLimitService.cs"

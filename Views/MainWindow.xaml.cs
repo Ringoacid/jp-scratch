@@ -44,9 +44,22 @@ public partial class MainWindow : Window
         int OutputTokens,
         decimal UsdCost,
         FxRate? FxRate,
+        string? OriginalCurrency,
+        decimal? OriginalCost,
+        bool IsCostConfirmed,
         bool IsUsageKnown)
     {
-        internal decimal? JpyCost => FxRate is null ? null : UsdCost * FxRate.UsdJpy;
+        internal decimal? JpyCost => !IsCostConfirmed &&
+            (OriginalCurrency != PricingCurrency.Jpy || OriginalCost is null)
+                ? null
+                : OriginalCurrency == PricingCurrency.Jpy
+                    ? OriginalCost
+                    : FxRate is null ? null : UsdCost * FxRate.UsdJpy;
+
+        internal ApiUsageDisplayCost ToDisplay()
+            => new(
+                PromptTokens, OutputTokens, UsdCost, JpyCost, FxRate,
+                OriginalCurrency, OriginalCost, IsCostConfirmed, IsUsageKnown);
     }
 
     private sealed record RecordedApiCall(long? Id, ApiUsageCost Cost);
@@ -1295,9 +1308,9 @@ public partial class MainWindow : Window
         }
         catch (GeminiClientException ex)
         {
-            string knownUsage = ex.Usage is not null && failedApiCost is not null
-                ? BuildUsageText([failedApiCost])
-                : "応答を受け取れなかったため、使用量と料金は確認できませんでした。";
+            ApiUsageDisplayCost? failureCost = failedApiCost?.ToDisplay();
+            string knownUsage =
+                ApiUsageDisplayFormatter.BuildFailureUsageText(failureCost);
             MessageBox.Show(
                 this,
                 ex.Message + FormatAccountingErrorNotice(failedAccountingError) +
@@ -1305,10 +1318,11 @@ public partial class MainWindow : Window
                 "別案を生成できませんでした",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-            SetProofreadingStatus(ex.Usage is null
-                ? "別案生成に失敗しました（使用量・料金は未確認）"
-                : "別案生成に失敗しました " +
-                  (failedApiCost is null ? "（料金未確認）" : FormatCostWithJpy(failedApiCost)),
+            SetProofreadingStatus(
+                ApiUsageDisplayFormatter.BuildFailureStatusText(
+                    "別案生成に失敗しました",
+                    failureCost,
+                    failedAccountingError?.Message),
                 force: true);
         }
         catch (Exception ex)
@@ -1545,15 +1559,7 @@ public partial class MainWindow : Window
     }
 
     private static string FormatAccountingErrorNotice(Exception? accountingError)
-    {
-        if (accountingError is null)
-            return "";
-
-        return
-            "\n\n課金ログまたは料金算出の処理に失敗しました。表示額は算出できた範囲のみで、" +
-            "当月累計と課金履歴が実際と一致しない可能性があります。\n詳細: " +
-            accountingError.Message;
-    }
+        => ApiUsageDisplayFormatter.FormatAccountingErrorNotice(accountingError?.Message);
 
     private void ShowAlternativeCost(
         GeminiAlternativeResult result,
@@ -1561,7 +1567,8 @@ public partial class MainWindow : Window
         string message)
     {
         ApiUsageCost? cost = recordedCall?.Cost;
-        message = AppendAccountingErrorNotice(message, GetAccountingError(recordedCall));
+        Exception? accountingError = GetAccountingError(recordedCall);
+        message = AppendAccountingErrorNotice(message, accountingError);
         string costText = cost is null ? "確認できませんでした" : FormatCostWithJpy(cost);
         string summary =
             $"{message}\n\n入力 {result.Usage.PromptTokens:N0}、" +
@@ -1577,7 +1584,8 @@ public partial class MainWindow : Window
         SetProofreadingStatus(
             $"別案 ↑{result.Usage.PromptTokens:N0} " +
             $"↓{result.Usage.BillableOutputTokens:N0} tok  " +
-            (cost is null ? "料金未確認" : FormatCostWithJpy(cost)),
+            (cost is null ? "料金未確認" : FormatCostWithJpy(cost)) +
+            FormatAccountingErrorNotice(accountingError),
             force: true);
     }
 
@@ -1879,7 +1887,10 @@ public partial class MainWindow : Window
                     "JP Scratch",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
-                SetProofreadingStatus("スタイルガイド生成に失敗しました", force: true);
+                SetProofreadingStatus(
+                    "スタイルガイド生成に失敗しました" +
+                    FormatAccountingErrorNotice(failedAccountingError),
+                    force: true);
                 return;
             }
 
@@ -1931,7 +1942,10 @@ public partial class MainWindow : Window
                     "スタイルガイドの生成",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
-                SetProofreadingStatus("スタイルガイドを生成しました " + costText, force: true);
+                SetProofreadingStatus(
+                    "スタイルガイドを生成しました " + costText +
+                    FormatAccountingErrorNotice(successfulAccountingError),
+                    force: true);
             }
             else
             {
@@ -1944,7 +1958,9 @@ public partial class MainWindow : Window
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 SetProofreadingStatus(
-                    "スタイルガイドの保存に失敗しました " + costText, force: true);
+                    "スタイルガイドの保存に失敗しました " + costText +
+                    FormatAccountingErrorNotice(successfulAccountingError),
+                    force: true);
             }
         }
         catch (Exception ex)
@@ -1959,7 +1975,10 @@ public partial class MainWindow : Window
                 "JP Scratch",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
-            SetProofreadingStatus("スタイルガイド生成でエラーが発生しました", force: true);
+            SetProofreadingStatus(
+                "スタイルガイド生成でエラーが発生しました" +
+                FormatAccountingErrorNotice(failedAccountingError),
+                force: true);
         }
         finally
         {
@@ -2440,7 +2459,7 @@ public partial class MainWindow : Window
             if (!selectionRun)
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
             string knownUsage = responseCosts.Count == 0
-                ? "使用量・料金は確認できませんでした。"
+                ? ApiUsageDisplayFormatter.BuildFailureUsageText(null)
                 : BuildUsageText(responseCosts);
             // 件数は書かない。アンカー照合で一部が破棄されることがあり、completed.Count は
             // 「反映できた件数」より多くなりうる（金額に関わる話で盛って伝えない）。
@@ -2460,9 +2479,12 @@ public partial class MainWindow : Window
                 "校正できませんでした",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-            SetProofreadingStatus(responseCosts.Count == 0
-                ? "校正に失敗しました（使用量・料金は未確認）"
-                : "校正に失敗しました " + FormatCostWithJpy(responseCosts),
+            SetProofreadingStatus((responseCosts.Count == 0
+                ? "校正に失敗しました（応答前のため、使用量と料金は確認できませんでした）"
+                : "校正に失敗しました " +
+                  ApiUsageDisplayFormatter.FormatCostText(
+                      responseCosts.Select(cost => cost.ToDisplay()).ToArray())) +
+                FormatAccountingErrorNotice(accountingErrorForRun),
                 force: true);
         }
         catch (Exception ex)
@@ -2489,7 +2511,7 @@ public partial class MainWindow : Window
             if (!selectionRun)
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
             string knownUsage = responseCosts.Count == 0
-                ? "使用量・料金は確認できませんでした。"
+                ? ApiUsageDisplayFormatter.BuildFailureUsageText(null)
                 : BuildUsageText(responseCosts);
             string salvageNote = salvaged
                 ? "\n\n途中まで完了していた応答は破棄していません。有効なぶんは反映済みで、" +
@@ -2507,9 +2529,12 @@ public partial class MainWindow : Window
                 "校正できませんでした",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-            SetProofreadingStatus(responseCosts.Count == 0
+            SetProofreadingStatus((responseCosts.Count == 0
                 ? "校正処理で予期しないエラーが発生しました"
-                : "校正処理でエラーが発生しました " + FormatCostWithJpy(responseCosts),
+                : "校正処理でエラーが発生しました " +
+                  ApiUsageDisplayFormatter.FormatCostText(
+                      responseCosts.Select(cost => cost.ToDisplay()).ToArray())) +
+                FormatAccountingErrorNotice(accountingErrorForRun),
                 force: true);
         }
         finally
@@ -2706,7 +2731,10 @@ public partial class MainWindow : Window
             null,
             suggestionCount,
             discardedCount,
-            cost.FxRate)), cost);
+            cost.FxRate,
+            cost.OriginalCurrency,
+            cost.OriginalCost,
+            cost.IsCostConfirmed)), cost);
     }
 
     private FailedApiCallRecord RecordFailedApiCall(
@@ -2738,14 +2766,22 @@ public partial class MainWindow : Window
                     outputTokens,
                     0m,
                     _fxRates.GetCachedRate(),
-                    IsUsageKnown: false);
+                    OriginalCurrency: null,
+                    OriginalCost: null,
+                    IsCostConfirmed: false,
+                    IsUsageKnown: true);
                 errorMessage += "\n料金算出に失敗しました: " + ex.Message;
             }
         }
         else
         {
             // 応答前失敗はUSD 0で、レートがあっても円額を0として固定する。
-            cost = new ApiUsageCost(0, 0, 0m, _fxRates.GetCachedRate(), IsUsageKnown: false);
+            cost = new ApiUsageCost(
+                0, 0, 0m, _fxRates.GetCachedRate(),
+                OriginalCurrency: PricingCurrency.Usd,
+                OriginalCost: 0m,
+                IsCostConfirmed: true,
+                IsUsageKnown: false);
         }
 
         long? apiCallId = RecordApiCall(new ApiCallLogEntry(
@@ -2761,7 +2797,10 @@ public partial class MainWindow : Window
             errorMessage,
             0,
             0,
-            cost.FxRate));
+            cost.FxRate,
+            cost.OriginalCurrency,
+            cost.OriginalCost,
+            cost.IsCostConfirmed));
         if (apiCallId is null)
         {
             // RecordApiCall が null を返す現在の原因は DB 挿入失敗だけである。
@@ -2821,9 +2860,10 @@ public partial class MainWindow : Window
     private void ShowProofreadingUsage(int proposals, IReadOnlyList<ApiUsageCost> costs)
     {
         string usage = BuildUsageText(costs);
-        string compactUsage = usage == "使用量・料金は未確認"
+        int dollarIndex = usage.LastIndexOf('$');
+        string compactUsage = usage.Contains("使用量未確認", StringComparison.Ordinal)
             ? usage
-            : usage[(usage.LastIndexOf('$'))..];
+            : dollarIndex >= 0 ? usage[dollarIndex..] : usage;
         SetProofreadingStatus(
             $"提案 {proposals}件  " +
             compactUsage,
@@ -2831,18 +2871,8 @@ public partial class MainWindow : Window
     }
 
     private static string BuildUsageText(IReadOnlyList<ApiUsageCost> costs)
-    {
-        IReadOnlyList<ApiUsageCost> known = costs.Where(cost => cost.IsUsageKnown).ToArray();
-        if (known.Count == 0)
-            return "使用量・料金は未確認";
-
-        int promptTokens = known.Sum(cost => cost.PromptTokens);
-        int outputTokens = known.Sum(cost => cost.OutputTokens);
-        string label = known.Count == costs.Count ? "" : "（既知分）";
-        string unknown = known.Count == costs.Count ? "" : "（一部料金未確認）";
-        return $"入力 {promptTokens:N0}、出力・推論 {outputTokens:N0} tokens{label} / " +
-               $"料金 {FormatCostWithJpy(known)}{unknown}";
-    }
+        => ApiUsageDisplayFormatter.BuildUsageText(
+            costs.Select(cost => cost.ToDisplay()).ToArray());
 
     private ApiUsageCost CreateUsageCost(int promptTokens, int outputTokens)
     {
@@ -2858,9 +2888,17 @@ public partial class MainWindow : Window
         // 「料金未確認」として残す（要件 3.5.2）。
         decimal? usdCost = quote.ToUsd(fxRate?.UsdJpy);
         if (usdCost is null)
-            return new ApiUsageCost(promptTokens, outputTokens, 0m, fxRate, IsUsageKnown: false);
+            return new ApiUsageCost(
+                promptTokens, outputTokens, 0m, fxRate,
+                quote.Currency, quote.Cost,
+                IsCostConfirmed: false,
+                IsUsageKnown: true);
 
-        return new ApiUsageCost(promptTokens, outputTokens, usdCost.Value, fxRate, IsUsageKnown: true);
+        return new ApiUsageCost(
+            promptTokens, outputTokens, usdCost.Value, fxRate,
+            quote.Currency, quote.Cost,
+            IsCostConfirmed: true,
+            IsUsageKnown: true);
     }
 
     private string BuildPricingSummary(ProofreadingPurpose? purpose = null)
@@ -2893,47 +2931,7 @@ public partial class MainWindow : Window
     }
 
     private static string FormatCostWithJpy(ApiUsageCost cost)
-        => !cost.IsUsageKnown
-            ? "使用量・料金は未確認"
-            : cost.JpyCost is decimal jpyCost
-            ? $"${UsageFormatting.FormatUsd(cost.UsdCost)} ({UsageFormatting.FormatJpy(jpyCost)})" +
-              UsageFormatting.FormatRateReference(cost.FxRate)
-            : $"${UsageFormatting.FormatUsd(cost.UsdCost)} (¥—)";
-
-    private static string FormatCostWithJpy(IReadOnlyList<ApiUsageCost> costs)
-    {
-        IReadOnlyList<ApiUsageCost> known = costs.Where(cost => cost.IsUsageKnown).ToArray();
-        if (known.Count == 0)
-            return "使用量・料金は未確認";
-
-        decimal usdCost = known.Sum(cost => cost.UsdCost);
-        if (known.Any(cost => cost.UsdCost != 0m && cost.JpyCost is null))
-            return $"${UsageFormatting.FormatUsd(usdCost)} (¥—)" +
-                   (known.Count == costs.Count ? "" : "（一部料金未確認）");
-
-        decimal jpyCost = known.Sum(cost => cost.JpyCost ?? 0m);
-        return $"${UsageFormatting.FormatUsd(usdCost)} ({UsageFormatting.FormatJpy(jpyCost)})" +
-               FormatRateReferences(known) +
-               (known.Count == costs.Count ? "" : "（一部料金未確認）");
-    }
-
-    private static string FormatRateReferences(IReadOnlyList<ApiUsageCost> costs)
-    {
-        (decimal Rate, DateOnly Date)[] rates = costs
-            .Where(cost => cost.JpyCost is not null && cost.FxRate is not null)
-            .Select(cost => (cost.FxRate!.UsdJpy, cost.FxRate.RateDate))
-            .Distinct()
-            .OrderBy(value => value.RateDate)
-            .ToArray();
-        if (rates.Length == 1)
-            return UsageFormatting.FormatRateReference(new FxRate(rates[0].Date, rates[0].Rate, default));
-        if (rates.Length > 1)
-        {
-            return $" (ログ固定レート合計 / {rates[0].Date:MM-dd}〜" +
-                   $"{rates[^1].Date:MM-dd}・{rates.Length}レート)";
-        }
-        return "";
-    }
+        => ApiUsageDisplayFormatter.FormatCostText(cost.ToDisplay());
 
     /// <summary>
     /// 永続ログから常設の利用状況を更新する。DB読み取りや表示更新が失敗した場合は、
@@ -3201,7 +3199,7 @@ public partial class MainWindow : Window
             ? $"{label}: 記録なし"
             : $"{label}: 1回（{UsageFormatting.FormatStatusCounts(entry.Status)}）  " +
               $"入力 {entry.PromptTokens:N0} / 出力 {entry.OutputTokens:N0} tokens  " +
-              $"${UsageFormatting.FormatUsd(entry.UsdCost)} ({UsageFormatting.FormatJpy(entry)})" +
+              $"{UsageFormatting.FormatUsd(entry)} ({UsageFormatting.FormatJpy(entry)})" +
               UsageFormatting.FormatRateReference(entry.UsdJpyRate is decimal rate && entry.RateDate is DateOnly date
                   ? new FxRate(date, rate, default) : null) +
               $"  提案 {entry.SuggestionCount:N0} / 破棄 {entry.DiscardedCount:N0}";

@@ -57,6 +57,24 @@ internal static class StatusBarUsageFormatterValidation
         SingleUsdJpyRate: null, SingleRateDate: null,
         FirstRateDate: null, LastRateDate: null, DistinctRateCount: 0);
 
+    private static readonly ApiCallUsageSummary UnconfirmedSummary = new(
+        TotalCalls: 3, OkCalls: 3, ErrorCalls: 0, TimeoutCalls: 0,
+        PromptTokens: 300, OutputTokens: 150, UsdCost: 0.0090m,
+        SuggestionCount: 2, DiscardedCount: 0,
+        JpyCost: 0.80m, IsJpyComplete: true,
+        SingleUsdJpyRate: 155.00m, SingleRateDate: RateDate,
+        FirstRateDate: RateDate, LastRateDate: RateDate, DistinctRateCount: 1,
+        UnconfirmedCostCalls: 2, UnconfirmedJpyCost: 0.60m, UnconfirmedJpyAmountCalls: 1);
+
+    private static readonly ApiCallUsageSummary MultipleRateUnconfirmedSummary = new(
+        TotalCalls: 4, OkCalls: 4, ErrorCalls: 0, TimeoutCalls: 0,
+        PromptTokens: 400, OutputTokens: 200, UsdCost: 0.0120m,
+        SuggestionCount: 2, DiscardedCount: 0,
+        JpyCost: 2.00m, IsJpyComplete: true,
+        SingleUsdJpyRate: null, SingleRateDate: null,
+        FirstRateDate: new DateOnly(2026, 7, 30), LastRateDate: RateDate, DistinctRateCount: 2,
+        UnconfirmedCostCalls: 1, UnconfirmedJpyCost: 0.50m, UnconfirmedJpyAmountCalls: 1);
+
     private static readonly ApiCallLog Latest = new(
         Id: 1,
         CalledAt: new DateTimeOffset(2026, 7, 31, 10, 0, 0, TimeSpan.FromHours(9)),
@@ -81,6 +99,9 @@ internal static class StatusBarUsageFormatterValidation
             ("通貨切替（ドル）", TestUsdOnly),
             ("通貨切替（両方）", TestBoth),
             ("円欠損は安全な欠損表示", TestJpyMissing),
+            ("未確認件数を合計へ併記", TestUnconfirmedCount),
+            ("単一レートの未確認注記を連結", TestSingleRateWithUnconfirmed),
+            ("複数レートの未確認注記を連結", TestMultipleRatesWithUnconfirmed),
             ("為替なしは「為替 —」", TestNoFxRate),
         ];
 
@@ -181,5 +202,27 @@ internal static class StatusBarUsageFormatterValidation
         string text = Format(
             Options(month: true, fx: true), MonthSummary, TodaySummary, SessionSummary, null, null);
         return text == "今月 ¥4.80  為替 —";
+    }
+
+    private static bool TestUnconfirmedCount()
+    {
+        string text = Format(
+            Options(month: true, fx: false), UnconfirmedSummary, TodaySummary, SessionSummary, null, CachedRate);
+        return text == "今月 ¥0.80（未確認 2件 / 判明分 1件 / 元通貨計 ¥0.60 / 元通貨額不明 1件）";
+    }
+
+    private static bool TestSingleRateWithUnconfirmed()
+    {
+        string text = UsageFormatting.FormatSummaryRateReference(UnconfirmedSummary);
+        return text.Contains("1USD=¥155 / 07-31時点（ログ固定）", StringComparison.Ordinal) &&
+               text.Contains("未確認 2件 / 判明分 1件 / 元通貨計 ¥0.60 / 元通貨額不明 1件",
+                   StringComparison.Ordinal);
+    }
+
+    private static bool TestMultipleRatesWithUnconfirmed()
+    {
+        string text = UsageFormatting.FormatSummaryRateReference(MultipleRateUnconfirmedSummary);
+        return text.Contains("ログ固定レート合計 / 07-30〜07-31・2レート", StringComparison.Ordinal) &&
+               text.Contains("未確認 1件 / 判明分 1件 / 元通貨計 ¥0.50", StringComparison.Ordinal);
     }
 }

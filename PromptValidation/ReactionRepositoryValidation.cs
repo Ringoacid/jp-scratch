@@ -54,8 +54,8 @@ internal static class ReactionRepositoryValidation
                 "SELECT count(*) FROM reactions;",
                 reader => reader.Read() ? reader.GetInt32(0) : 0);
             bool passed =
-                // 最新のスキーマ版。api_call_daily（明細圧縮）を足した v4。
-                version == 4 &&
+                // 最新のスキーマ版。api_call_daily（明細圧縮）はv4、料金未確認の列はv5で追加された。
+                version == 5 &&
                 count == 4 &&
                 applied &&
                 document.Text == "文章ア" &&

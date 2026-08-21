@@ -38,11 +38,11 @@ internal static class BillingCsvExporterValidation
         // 0件でもヘッダだけは出す（空ファイルだと失敗と区別できない）。
         string csv = BillingCsvExporter.BuildCsv([]);
         const string expected =
-            "日時,種別,モデル,入力トークン,出力トークン,USD,USD/JPYレート,レート基準日,JPY,所要ms," +
-            "成否,提案件数,破棄件数,エラー\r\n";
+            "日時,種別,モデル,入力トークン,出力トークン,USD,料金状態,元通貨,元通貨額," +
+            "USD/JPYレート,レート基準日,JPY,所要ms,成否,提案件数,破棄件数,エラー\r\n";
 
-        bool passed = csv == expected && BillingCsvExporter.Headers.Length == 14;
-        Console.WriteLine("  ヘッダのみ（0件・14列・CRLF）: " + (passed ? "PASS" : "FAIL"));
+        bool passed = csv == expected && BillingCsvExporter.Headers.Length == 17;
+        Console.WriteLine("  ヘッダのみ（0件・17列・CRLF）: " + (passed ? "PASS" : "FAIL"));
         return passed;
     }
 
@@ -98,12 +98,13 @@ internal static class BillingCsvExporterValidation
                 ApiCallTrigger.Auto, "gemini-3.5-flash-lite", 307, 6,
                 0.0001071m, 155.1234m, new DateOnly(2026, 7, 29), 0.01661m,
                 907, ApiCallStatus.Ok, null, 1, 0),
-            // 円・レート未記録（旧ログ、または為替取得に失敗した行）。
+            // 円建て・レート未取得で料金未確認。元通貨額はCSVへ残す。
             new(2,
                 new DateTimeOffset(2026, 7, 30, 20, 0, 0, TimeSpan.FromHours(9)),
                 ApiCallTrigger.Manual, "gemini-3.5-flash-lite", 100, 20,
-                0.00008m, null, null, null,
-                1200, ApiCallStatus.Timeout, "15秒でタイムアウトしました", 0, 0),
+                0m, null, null, null,
+                1200, ApiCallStatus.Timeout, "15秒でタイムアウトしました", 0, 0,
+                "JPY", 12.5m, false),
             // エラー文にカンマ・引用符・改行・数式の先頭文字をすべて含む最悪ケース。
             new(3,
                 new DateTimeOffset(2026, 7, 30, 21, 0, 0, TimeSpan.FromHours(9)),
@@ -135,15 +136,18 @@ internal static class BillingCsvExporterValidation
                 fields[3] == row.PromptTokens.ToString(CultureInfo.InvariantCulture) &&
                 fields[4] == row.OutputTokens.ToString(CultureInfo.InvariantCulture) &&
                 decimal.Parse(fields[5], CultureInfo.InvariantCulture) == row.UsdCost &&
-                ParseNullableDecimal(fields[6]) == row.UsdJpyRate &&
-                fields[7] == (row.RateDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "") &&
-                ParseNullableDecimal(fields[8]) == row.JpyCost &&
-                fields[9] == row.DurationMilliseconds.ToString(CultureInfo.InvariantCulture) &&
-                fields[10] == UsageFormatting.FormatStatus(row.Status) &&
-                fields[11] == row.SuggestionCount.ToString(CultureInfo.InvariantCulture) &&
-                fields[12] == row.DiscardedCount.ToString(CultureInfo.InvariantCulture) &&
+                fields[6] == (row.IsUsdCostConfirmed ? "確定" : "未確認") &&
+                fields[7] == (row.OriginalCurrency ?? "") &&
+                ParseNullableDecimal(fields[8]) == row.OriginalCost &&
+                ParseNullableDecimal(fields[9]) == row.UsdJpyRate &&
+                fields[10] == (row.RateDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "") &&
+                ParseNullableDecimal(fields[11]) == row.JpyCost &&
+                fields[12] == row.DurationMilliseconds.ToString(CultureInfo.InvariantCulture) &&
+                fields[13] == UsageFormatting.FormatStatus(row.Status) &&
+                fields[14] == row.SuggestionCount.ToString(CultureInfo.InvariantCulture) &&
+                fields[15] == row.DiscardedCount.ToString(CultureInfo.InvariantCulture) &&
                 // エラー文だけは数式ガードの ' が付くため、それを剥がしてから比較する。
-                StripFormulaGuard(fields[13]) == (row.ErrorMessage ?? "");
+                StripFormulaGuard(fields[16]) == (row.ErrorMessage ?? "");
         }
 
         bool passed = shapePassed && headerPassed && valuesPassed;
@@ -165,7 +169,7 @@ internal static class BillingCsvExporterValidation
 
         string[] fields = ParseCsv(BillingCsvExporter.BuildCsv([row]))[1];
         bool exact = fields[5] == "0.000000123456789";
-        bool noCurrencySymbol = !fields[5].Contains('$') && !fields[8].Contains('¥');
+        bool noCurrencySymbol = !fields[5].Contains('$') && !fields[11].Contains('¥');
         bool differsFromDisplay = fields[5] != UsageFormatting.FormatUsd(highPrecisionUsd);
 
         bool passed = exact && noCurrencySymbol && differsFromDisplay;

@@ -244,6 +244,7 @@ internal static class Program
         bool apiCallPass = ApiCallRepositoryValidation.RunSelfTests();
         bool apiCallHistoryPass = ApiCallRepositoryValidation.RunHistorySelfTests();
         bool apiCallUsageTriggerPass = ApiCallRepositoryValidation.RunUsageSummaryTriggerFilterSelfTests();
+        bool apiCallUnconfirmedPass = ApiCallRepositoryValidation.RunUnconfirmedCostSelfTests();
         bool hideSuppressionPass = HideSuppressionCounterValidation.RunSelfTests();
         bool customDateRangePass = CustomDateRangeParserValidation.RunSelfTests();
         bool billingHistoryEmptyStatePass = BillingHistoryEmptyStateValidation.RunSelfTests();
@@ -269,6 +270,7 @@ internal static class Program
         bool promptV3Pass = ProofreadingPromptV3Validation.RunSelfTests();
         bool inlineDiffPass = ProofreadingInlineDiffLayoutValidation.RunSelfTests();
         bool statusBarFormatterPass = StatusBarUsageFormatterValidation.RunSelfTests();
+        bool apiUsageDisplayPass = ApiUsageDisplayFormatterValidation.RunSelfTests();
         bool missedCorrectionPass = MissedCorrectionActionValidation.RunSelfTests();
         bool crossTabPreviewPass = CrossTabSearchPreviewValidation.RunSelfTests();
         bool trashRepositoryPass = TrashRepositoryValidation.RunSelfTests();
@@ -276,7 +278,7 @@ internal static class Program
         bool modelBenchmarkPass = ModelBenchmarkValidation.RunSelfTests();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
                credentialPass && pricingPass && apiCallPass && apiCallHistoryPass &&
-               apiCallUsageTriggerPass && hideSuppressionPass && customDateRangePass &&
+               apiCallUsageTriggerPass && apiCallUnconfirmedPass && hideSuppressionPass && customDateRangePass &&
                billingHistoryEmptyStatePass && usagePeriodPass && usageLimitPass &&
                migrationPass && fxRatePass && reactionPass && schedulePass && dispatchPlannerPass &&
                geminiClientPass && openAiClientPass && completionGuardPass && modelCatalogPass &&
@@ -284,7 +286,7 @@ internal static class Program
                billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&
                apiLogCompactionPass && trayIconStatePass &&
                fewShotPass && styleGuidePass && promptV3Pass && inlineDiffPass &&
-               statusBarFormatterPass && missedCorrectionPass &&
+               statusBarFormatterPass && apiUsageDisplayPass && missedCorrectionPass &&
                crossTabPreviewPass && trashRepositoryPass && atomicFilePass && modelBenchmarkPass ? 0 : 1;
     }
 

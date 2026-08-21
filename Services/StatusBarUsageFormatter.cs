@@ -57,7 +57,12 @@ internal static class StatusBarUsageFormatter
             return "直近 —";
 
         string tokens = $"↑{latest.PromptTokens:N0}↓{latest.OutputTokens:N0}";
-        return $"直近 {tokens} {FormatCost(latest.UsdCost, latest.JpyCost, currency)}";
+        string cost = latest.IsUsdCostConfirmed
+            ? FormatCost(latest.UsdCost, latest.JpyCost, currency)
+            : latest.OriginalCurrency == PricingCurrency.Jpy && latest.OriginalCost is decimal
+                ? $"料金未確認 ({UsageFormatting.FormatJpy(latest)})"
+                : "料金未確認";
+        return $"直近 {tokens} {cost}";
     }
 
     /// <summary>期間集計。USD/JPYは <see cref="ApiCallUsageSummary"/> の完全フラグに従う。</summary>
@@ -66,7 +71,9 @@ internal static class StatusBarUsageFormatter
         StatusBarCurrencyFormat currency)
     {
         decimal? jpy = summary.IsJpyComplete ? summary.JpyCost : null;
-        return FormatCost(summary.UsdCost, jpy, currency);
+        string cost = FormatCost(summary.UsdCost, jpy, currency);
+        string unconfirmed = UsageFormatting.FormatUnconfirmedCost(summary);
+        return unconfirmed.Length > 0 ? $"{cost}（{unconfirmed}）" : cost;
     }
 
     /// <summary>

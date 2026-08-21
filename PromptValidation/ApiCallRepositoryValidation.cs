@@ -476,6 +476,110 @@ internal static class ApiCallRepositoryValidation
         }
     }
 
+    /// <summary>料金未確認の記録・読み出し・集計が確定行と混ざらないことの自己テスト。</summary>
+    internal static bool RunUnconfirmedCostSelfTests()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(), "JpScratchApiCallUnconfirmedValidation", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        string databaseFile = Path.Combine(directory, "test.db");
+
+        try
+        {
+            using var database = new Database(databaseFile);
+            DateTimeOffset clock = At(2026, 8, 21, 12, 0);
+            var repository = new ApiCallRepository(database, () => clock);
+            using var httpClient = new HttpClient();
+            using var fxRates = new FxRateService(database, httpClient, () => clock);
+            var pricing = new PricingService(Path.Combine(directory, "pricing.json"));
+            PricingQuote quote = pricing.Calculate("plamo-3.0-prime", 100, 20);
+            FxRate? cachedRate = fxRates.GetCachedRate();
+            decimal? convertedUsd = quote.ToUsd(cachedRate?.UsdJpy);
+            bool emptyFxCacheReproduced = cachedRate is null && convertedUsd is null;
+            FxRate knownRate = new(
+                new DateOnly(2026, 8, 20), 150m, new DateTimeOffset(2026, 8, 20, 9, 0, 0, TimeSpan.FromHours(9)));
+            decimal confirmedJpyUsd = quote.ToUsd(knownRate.UsdJpy) ??
+                throw new InvalidOperationException("円建て料金をテスト用USDへ換算できませんでした。");
+
+            long unconfirmedJpy = repository.Add(new ApiCallLogEntry(
+                ApiCallTrigger.Manual, "plamo-3.0-prime", 100, 20,
+                convertedUsd ?? 0m, 400, ApiCallStatus.Ok, null, 1, 0,
+                FxRate: cachedRate, OriginalCurrency: quote.Currency, OriginalCost: quote.Cost,
+                IsUsdCostConfirmed: false));
+            long unconfirmedWithoutAmount = repository.Add(new ApiCallLogEntry(
+                ApiCallTrigger.Auto, "plamo-3.0-prime", 50, 10,
+                0m, 300, ApiCallStatus.Error, "料金算出に失敗しました。", 0, 0,
+                FxRate: knownRate, OriginalCurrency: null, OriginalCost: null,
+                IsUsdCostConfirmed: false));
+            long confirmed = repository.Add(new ApiCallLogEntry(
+                ApiCallTrigger.Manual, "gpt-5.6-luna", 10, 5,
+                0.01m, 100, ApiCallStatus.Ok, null, 0, 0,
+                FxRate: knownRate, OriginalCurrency: "USD", OriginalCost: 0.01m,
+                IsUsdCostConfirmed: true));
+            long confirmedJpy = repository.Add(new ApiCallLogEntry(
+                ApiCallTrigger.Manual, "plamo-3.0-prime", 80, 15,
+                confirmedJpyUsd, 120, ApiCallStatus.Ok, null, 0, 0,
+                FxRate: knownRate, OriginalCurrency: "JPY", OriginalCost: quote.Cost,
+                IsUsdCostConfirmed: true));
+
+            (string? Currency, string? Cost, int Confirmed)? raw = database.Read<(string?, string?, int)?>(
+                "SELECT original_currency, original_cost, usd_cost_confirmed FROM api_calls WHERE id = $id;",
+                reader => reader.Read()
+                    ? (reader.IsDBNull(0) ? null : reader.GetString(0),
+                       reader.IsDBNull(1) ? null : reader.GetString(1),
+                       reader.GetInt32(2))
+                    : null,
+                ("$id", unconfirmedJpy));
+            decimal? missingJpyCost = database.Read<decimal?>(
+                "SELECT jpy_cost FROM api_calls WHERE id = $id;",
+                reader => reader.Read() && !reader.IsDBNull(0)
+                    ? decimal.Parse(reader.GetString(0), CultureInfo.InvariantCulture)
+                    : (decimal?)null,
+                ("$id", unconfirmedWithoutAmount));
+            decimal? confirmedJpyCost = database.Read<decimal?>(
+                "SELECT jpy_cost FROM api_calls WHERE id = $id;",
+                reader => reader.Read() && !reader.IsDBNull(0)
+                    ? decimal.Parse(reader.GetString(0), CultureInfo.InvariantCulture)
+                    : (decimal?)null,
+                ("$id", confirmedJpy));
+
+            ApiCallHistoryPage history = repository.GetHistory(limit: int.MaxValue);
+            ApiCallHistoryRow? jpyRow = history.Rows.SingleOrDefault(row => row.Id == unconfirmedJpy);
+            ApiCallHistoryRow? missingRow = history.Rows.SingleOrDefault(row => row.Id == unconfirmedWithoutAmount);
+            ApiCallHistoryRow? confirmedRow = history.Rows.SingleOrDefault(row => row.Id == confirmed);
+            ApiCallHistoryRow? confirmedJpyRow = history.Rows.SingleOrDefault(row => row.Id == confirmedJpy);
+            ApiCallUsageSummary summary = repository.GetUsageSummary();
+
+            bool passed =
+                emptyFxCacheReproduced &&
+                raw == (quote.Currency, quote.Cost.ToString(CultureInfo.InvariantCulture), 0) &&
+                jpyRow is not null && !jpyRow.IsUsdCostConfirmed &&
+                jpyRow.OriginalCurrency == quote.Currency && jpyRow.OriginalCost == quote.Cost &&
+                missingRow is not null && !missingRow.IsUsdCostConfirmed &&
+                missingRow.OriginalCurrency is null && missingRow.OriginalCost is null &&
+                missingJpyCost is null &&
+                confirmedRow is not null && confirmedRow.IsUsdCostConfirmed &&
+                confirmedJpyRow is not null && confirmedJpyRow.IsUsdCostConfirmed &&
+                confirmedJpyCost == quote.Cost &&
+                summary.TotalCalls == 4 && summary.UsdCost == 0.01m + confirmedJpyUsd &&
+                summary.JpyCost == 1.50m + quote.Cost && summary.IsJpyComplete &&
+                summary.DistinctRateCount == 1 &&
+                summary.UnconfirmedCostCalls == 2 &&
+                summary.UnconfirmedJpyCost == quote.Cost &&
+                summary.UnconfirmedJpyAmountCalls == 1;
+
+            Console.WriteLine("料金未確認（元通貨額・金額なし・確定行の記録/読出し/集計）: " +
+                (passed ? "PASS" : "FAIL"));
+            return passed;
+        }
+        finally
+        {
+            try { Directory.Delete(directory, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
     private static bool Throws<TException>(Action action) where TException : Exception
     {
         try

@@ -20,7 +20,7 @@ internal static class BillingCsvExporter
     internal static readonly string[] Headers =
     [
         "日時", "種別", "モデル", "入力トークン", "出力トークン",
-        "USD", "USD/JPYレート", "レート基準日", "JPY", "所要ms",
+        "USD", "料金状態", "元通貨", "元通貨額", "USD/JPYレート", "レート基準日", "JPY", "所要ms",
         "成否", "提案件数", "破棄件数", "エラー",
     ];
 
@@ -55,6 +55,9 @@ internal static class BillingCsvExporter
         yield return EscapeField(row.PromptTokens.ToString(CultureInfo.InvariantCulture));
         yield return EscapeField(row.OutputTokens.ToString(CultureInfo.InvariantCulture));
         yield return EscapeField(row.UsdCost.ToString(CultureInfo.InvariantCulture));
+        yield return EscapeField(row.IsUsdCostConfirmed ? "確定" : "未確認");
+        yield return EscapeField(row.OriginalCurrency);
+        yield return EscapeField(FormatNullableDecimal(row.OriginalCost));
         yield return EscapeField(FormatNullableDecimal(row.UsdJpyRate));
         yield return EscapeField(
             row.RateDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "");

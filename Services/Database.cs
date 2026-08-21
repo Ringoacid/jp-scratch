@@ -173,6 +173,22 @@ internal sealed class Database : IDisposable
                 """);
             ExecuteInternal("PRAGMA user_version=4;");
         }
+
+        if (version < 5)
+        {
+            // USD換算の確定状態と、後から補完できる元通貨額を api_calls に保持する。
+            // SQLiteには ALTER TABLE ADD COLUMN IF NOT EXISTS がないため、DDL実行後に
+            // user_version の更新前で中断しても再開できるよう、列の存在を確認してから追加する。
+            if (!HasColumnInternal("api_calls", "original_currency"))
+                ExecuteInternal("ALTER TABLE api_calls ADD COLUMN original_currency TEXT;");
+            if (!HasColumnInternal("api_calls", "original_cost"))
+                ExecuteInternal("ALTER TABLE api_calls ADD COLUMN original_cost TEXT;");
+            if (!HasColumnInternal("api_calls", "usd_cost_confirmed"))
+                ExecuteInternal(
+                    "ALTER TABLE api_calls ADD COLUMN usd_cost_confirmed INTEGER NOT NULL DEFAULT 1;");
+
+            ExecuteInternal("PRAGMA user_version=5;");
+        }
     }
 
     public SqliteCommand CreateCommand(string sql)
@@ -243,6 +259,16 @@ internal sealed class Database : IDisposable
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = sql;
         return cmd.ExecuteScalar();
+    }
+
+    private bool HasColumnInternal(string tableName, string columnName)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText =
+            "SELECT 1 FROM pragma_table_info($table_name) WHERE name = $column_name LIMIT 1;";
+        cmd.Parameters.AddWithValue("$table_name", tableName);
+        cmd.Parameters.AddWithValue("$column_name", columnName);
+        return cmd.ExecuteScalar() is not null;
     }
 
     public void Dispose()

@@ -30,7 +30,10 @@ internal sealed record ApiCallLogEntry(
     string? ErrorMessage,
     int SuggestionCount,
     int DiscardedCount,
-    FxRate? FxRate = null);
+    FxRate? FxRate = null,
+    string? OriginalCurrency = null,
+    decimal? OriginalCost = null,
+    bool IsUsdCostConfirmed = true);
 
 /// <summary>期間内のAPI呼び出しログを、料金精度を失わずに集計した値。</summary>
 internal sealed record ApiCallUsageSummary(
@@ -50,7 +53,10 @@ internal sealed record ApiCallUsageSummary(
     DateOnly? FirstRateDate,
     DateOnly? LastRateDate,
     int DistinctRateCount,
-    long CompactedCalls = 0)
+    long CompactedCalls = 0,
+    long UnconfirmedCostCalls = 0,
+    decimal UnconfirmedJpyCost = 0m,
+    long UnconfirmedJpyAmountCalls = 0)
 {
     internal static ApiCallUsageSummary Empty { get; } = new(
         0, 0, 0, 0, 0, 0, 0m, 0, 0, 0m, true,
@@ -82,7 +88,10 @@ internal sealed record ApiCallLog(
     decimal? JpyCost,
     ApiCallStatus Status,
     int SuggestionCount,
-    int DiscardedCount);
+    int DiscardedCount,
+    string? OriginalCurrency = null,
+    decimal? OriginalCost = null,
+    bool IsUsdCostConfirmed = true);
 
 /// <summary>課金履歴画面の明細1行。</summary>
 internal sealed record ApiCallHistoryRow(
@@ -100,7 +109,10 @@ internal sealed record ApiCallHistoryRow(
     ApiCallStatus Status,
     string? ErrorMessage,
     int SuggestionCount,
-    int DiscardedCount);
+    int DiscardedCount,
+    string? OriginalCurrency = null,
+    decimal? OriginalCost = null,
+    bool IsUsdCostConfirmed = true);
 
 /// <summary>
 /// <see cref="ApiCallRepository.GetHistory"/> の結果。<paramref name="TotalCount"/> は
@@ -133,21 +145,37 @@ internal sealed class ApiCallRepository
         ArgumentOutOfRangeException.ThrowIfNegative(entry.DurationMilliseconds);
         ArgumentOutOfRangeException.ThrowIfNegative(entry.SuggestionCount);
         ArgumentOutOfRangeException.ThrowIfNegative(entry.DiscardedCount);
+        if (entry.OriginalCost is < 0m)
+            throw new ArgumentOutOfRangeException(nameof(entry), "元通貨の料金は負数にできません。");
+        if (entry.OriginalCost is not null && string.IsNullOrWhiteSpace(entry.OriginalCurrency))
+            throw new ArgumentException("元通貨額には元通貨が必要です。", nameof(entry));
+        if (entry.OriginalCurrency is not null && string.IsNullOrWhiteSpace(entry.OriginalCurrency))
+            throw new ArgumentException("元通貨が空です。", nameof(entry));
         if (entry.FxRate is { UsdJpy: <= 0m })
             throw new ArgumentOutOfRangeException(nameof(entry), "為替レートは正数である必要があります。");
 
         FxRate? fxRate = entry.FxRate;
-        decimal? jpyCost = fxRate is null ? null : entry.UsdCost * fxRate.UsdJpy;
+        decimal? jpyCost = !entry.IsUsdCostConfirmed
+            ? string.Equals(entry.OriginalCurrency, "JPY", StringComparison.OrdinalIgnoreCase) &&
+              entry.OriginalCost is decimal unconfirmedJpy
+                ? unconfirmedJpy
+                : null
+            : string.Equals(entry.OriginalCurrency, "JPY", StringComparison.OrdinalIgnoreCase) &&
+              entry.OriginalCost is decimal confirmedJpy
+                ? confirmedJpy
+                : fxRate is null ? null : entry.UsdCost * fxRate.UsdJpy;
         return _database.Read(
             """
             INSERT INTO api_calls (
                 called_at, trigger_type, model, prompt_tokens, output_tokens,
                 usd_cost, usd_jpy_rate, rate_date, jpy_cost, duration_ms,
-                status, error_message, suggestion_cnt, discarded_cnt)
+                status, error_message, suggestion_cnt, discarded_cnt,
+                original_currency, original_cost, usd_cost_confirmed)
             VALUES (
                 $called_at, $trigger_type, $model, $prompt_tokens, $output_tokens,
                 $usd_cost, $usd_jpy_rate, $rate_date, $jpy_cost, $duration_ms,
-                $status, $error_message, $suggestion_cnt, $discarded_cnt)
+                $status, $error_message, $suggestion_cnt, $discarded_cnt,
+                $original_currency, $original_cost, $usd_cost_confirmed)
             RETURNING id;
             """,
             reader => reader.Read()
@@ -166,7 +194,11 @@ internal sealed class ApiCallRepository
             ("$status", ToStorageValue(entry.Status)),
             ("$error_message", entry.ErrorMessage),
             ("$suggestion_cnt", entry.SuggestionCount),
-            ("$discarded_cnt", entry.DiscardedCount));
+            ("$discarded_cnt", entry.DiscardedCount),
+            ("$original_currency", string.IsNullOrWhiteSpace(entry.OriginalCurrency)
+                ? null : entry.OriginalCurrency.Trim().ToUpperInvariant()),
+            ("$original_cost", entry.OriginalCost?.ToString(CultureInfo.InvariantCulture)),
+            ("$usd_cost_confirmed", entry.IsUsdCostConfirmed ? 1 : 0));
     }
 
     /// <summary>本文またはタブが変わり、応答全体を表示できなかったログを破棄済みに更新する。</summary>
@@ -214,7 +246,8 @@ internal sealed class ApiCallRepository
             db.Read(
                 """
                 SELECT called_at, status, prompt_tokens, output_tokens, usd_cost, jpy_cost,
-                       usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type
+                       usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type,
+                       usd_cost_confirmed
                 FROM api_calls
                 WHERE ($from IS NULL OR called_at >= $from)
                   AND ($to   IS NULL OR called_at <  $to);
@@ -262,6 +295,7 @@ internal sealed class ApiCallRepository
                             rateDate: TryReadDateOnly(reader, 7, out DateOnly rowRateDate) ? rowRateDate : null,
                             suggestionCount: reader.GetInt32(8),
                             discardedCount: reader.GetInt32(9),
+                            usdCostConfirmed: reader.GetInt32(11) != 0,
                             compacted: false);
                     }
 
@@ -275,7 +309,8 @@ internal sealed class ApiCallRepository
             db.Read(
                 """
                 SELECT day, status, prompt_tokens, output_tokens, usd_cost, jpy_cost,
-                       usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type, call_cnt
+                       usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type, call_cnt,
+                       1 AS usd_cost_confirmed
                 FROM api_call_daily
                 WHERE ($from IS NULL OR day >= $from)
                   AND ($to   IS NULL OR day <= $to);
@@ -327,6 +362,7 @@ internal sealed class ApiCallRepository
                             rateDate: TryReadDateOnly(reader, 7, out DateOnly rowRateDate) ? rowRateDate : null,
                             suggestionCount: reader.GetInt64(8),
                             discardedCount: reader.GetInt64(9),
+                            usdCostConfirmed: true,
                             compacted: true);
                     }
 
@@ -361,6 +397,8 @@ internal sealed class ApiCallRepository
         private long _suggestionCount;
         private long _discardedCount;
         private long _compactedCalls;
+        private decimal _unconfirmedJpyCost;
+        private long _unconfirmedJpyAmountCalls;
 
         internal void Add(
             string statusText,
@@ -373,6 +411,7 @@ internal sealed class ApiCallRepository
             DateOnly? rateDate,
             long suggestionCount,
             long discardedCount,
+            bool usdCostConfirmed,
             bool compacted)
         {
             switch (statusText)
@@ -388,8 +427,16 @@ internal sealed class ApiCallRepository
             _promptTokens += promptTokens;
             _outputTokens += outputTokens;
             _usdCost += usdCost;
-
-            if (jpyCost is decimal jpy)
+            if (!usdCostConfirmed)
+            {
+                _unconfirmedCostCalls += calls;
+                if (jpyCost is decimal unconfirmedJpy)
+                {
+                    _unconfirmedJpyCost += unconfirmedJpy;
+                    _unconfirmedJpyAmountCalls += calls;
+                }
+            }
+            else if (jpyCost is decimal jpy)
             {
                 _jpyCost += jpy;
                 if (rate is decimal rateValue && rateDate is DateOnly date)
@@ -420,8 +467,11 @@ internal sealed class ApiCallRepository
                 _promptTokens, _outputTokens, _usdCost,
                 _suggestionCount, _discardedCount, _jpyCost, _isJpyComplete,
                 singleRate?.Rate, singleRate?.Date, firstRateDate, lastRateDate,
-                _distinctRates.Count, _compactedCalls);
+                _distinctRates.Count, _compactedCalls, _unconfirmedCostCalls,
+                _unconfirmedJpyCost, _unconfirmedJpyAmountCalls);
         }
+
+        private long _unconfirmedCostCalls;
     }
 
     /// <summary>
@@ -449,7 +499,8 @@ internal sealed class ApiCallRepository
             """
             SELECT id, called_at, trigger_type, model, prompt_tokens, output_tokens,
                    usd_cost, usd_jpy_rate, rate_date, jpy_cost, duration_ms,
-                   status, error_message, suggestion_cnt, discarded_cnt
+                   status, error_message, suggestion_cnt, discarded_cnt,
+                   original_currency, original_cost, usd_cost_confirmed
             FROM api_calls;
             """,
             reader =>
@@ -503,7 +554,10 @@ internal sealed class ApiCallRepository
                     status,
                     reader.IsDBNull(12) ? null : reader.GetString(12),
                     reader.GetInt32(13),
-                    reader.GetInt32(14)));
+                    reader.GetInt32(14),
+                    reader.IsDBNull(15) ? null : reader.GetString(15),
+                    TryReadDecimal(reader, 16, out decimal originalCost) ? originalCost : null,
+                    reader.GetInt32(17) != 0));
             }
 
             matched.Sort((left, right) =>
@@ -527,7 +581,8 @@ internal sealed class ApiCallRepository
         => _database.Read(
             """
             SELECT id, called_at, prompt_tokens, output_tokens, usd_cost,
-                   usd_jpy_rate, rate_date, jpy_cost, status, suggestion_cnt, discarded_cnt
+                   usd_jpy_rate, rate_date, jpy_cost, status, suggestion_cnt, discarded_cnt,
+                   original_currency, original_cost, usd_cost_confirmed
             FROM api_calls
             ORDER BY id DESC;
             """,
@@ -556,7 +611,10 @@ internal sealed class ApiCallRepository
                         TryReadDecimal(reader, 5, out decimal rate) ? rate : null,
                         TryReadDateOnly(reader, 6, out DateOnly rateDate) ? rateDate : null,
                         TryReadDecimal(reader, 7, out decimal jpyCost) ? jpyCost : null,
-                        status, reader.GetInt32(9), reader.GetInt32(10));
+                        status, reader.GetInt32(9), reader.GetInt32(10),
+                        reader.IsDBNull(11) ? null : reader.GetString(11),
+                        TryReadDecimal(reader, 12, out decimal originalCost) ? originalCost : null,
+                        reader.GetInt32(13) != 0);
                 }
 
                 return null;
@@ -595,7 +653,8 @@ internal sealed class ApiCallRepository
             db.Read(
                 """
                 SELECT id, called_at, trigger_type, model, status, prompt_tokens, output_tokens,
-                       usd_cost, usd_jpy_rate, rate_date, jpy_cost, suggestion_cnt, discarded_cnt
+                       usd_cost, usd_jpy_rate, rate_date, jpy_cost, suggestion_cnt, discarded_cnt,
+                       usd_cost_confirmed
                 FROM api_calls
                 WHERE called_at < $cutoff_upper;
                 """,
@@ -612,6 +671,14 @@ internal sealed class ApiCallRepository
                         {
                             continue;
                         }
+
+                        // 未確認行は、元通貨額の有無にかかわらず**すべて**明細のまま保持する。
+                        // 元通貨額を持つ行は後からレートで補完できるようにするため、元通貨額を持たない行
+                        // （料金算出そのものが失敗した行）は未確認であった事実を失わないため。
+                        // api_call_daily には未確認を表す列がないので、圧縮するとどちらも「$0 の確定行」として
+                        // 合流し、未確認だったことが消える。それはこの機能がなくそうとしている状態そのもの。
+                        if (reader.GetInt32(13) == 0)
+                            continue;
 
                         if (!TryFromStorageTrigger(reader.GetString(2), out ApiCallTrigger trigger) ||
                             !TryFromStorageStatus(reader.GetString(4), out ApiCallStatus status) ||

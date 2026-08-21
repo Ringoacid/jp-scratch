@@ -113,6 +113,17 @@ internal static class ApiLogCompactionValidation
             AddAt(At(2026, 7, 10, 0, 0), new ApiCallLogEntry(
                 ApiCallTrigger.Manual, "gemini-3.5-flash-lite", 13, 2,
                 0.0000089m, 300, ApiCallStatus.Ok, null, 0, 0, june));
+            // 保持期限を過ぎても、料金未確認行は後追い補完のため明細に残す。
+            long unconfirmedOld = AddAt(At(2025, 2, 1, 0, 0), new ApiCallLogEntry(
+                ApiCallTrigger.Manual, "plamo-3.0-prime", 8, 2,
+                0m, 500, ApiCallStatus.Ok, null, 0, 0,
+                FxRate: null, OriginalCurrency: "JPY", OriginalCost: 8m,
+                IsUsdCostConfirmed: false));
+            long unconfirmedWithoutAmountOld = AddAt(At(2025, 2, 2, 0, 0), new ApiCallLogEntry(
+                ApiCallTrigger.Manual, "plamo-3.0-prime", 4, 1,
+                0m, 450, ApiCallStatus.Error, "料金算出に失敗しました。", 0, 0,
+                FxRate: null, OriginalCurrency: null, OriginalCost: null,
+                IsUsdCostConfirmed: false));
 
             // 圧縮対象の明細を参照するリアクション。学習データなので消してはならない。
             database.Execute(
@@ -171,9 +182,16 @@ internal static class ApiLogCompactionValidation
 
             // 明細は消え、保持期限以降の2件だけが残る。
             bool detailsRemoved =
-                detailCountBefore == 7 &&
-                historyAfter.TotalCount == 2 &&
-                historyAfter.Rows.All(row => row.CalledAt >= cutoff);
+                detailCountBefore == 9 &&
+                historyAfter.TotalCount == 4 &&
+                historyAfter.Rows.Any(row => row.Id == unconfirmedOld && !row.IsUsdCostConfirmed) &&
+                historyAfter.Rows.Any(row => row.Id == unconfirmedWithoutAmountOld && !row.IsUsdCostConfirmed) &&
+                historyAfter.Rows
+                    .Where(row => row.Id != unconfirmedOld && row.Id != unconfirmedWithoutAmountOld)
+                    .All(row => row.CalledAt >= cutoff);
+
+            bool unconfirmedKept = allAfter.UnconfirmedCostCalls == 2 &&
+                CountUnconfirmedRows(database) == 2;
 
             // 圧縮されているか（同日・同条件の2件が1行に畳まれている）。
             long dailyRows = CountDailyRows(database);
@@ -212,10 +230,11 @@ internal static class ApiLogCompactionValidation
                 CountDailyRows(database) == 4;
 
             bool passed = totalsUnchanged && compactedCountsReported && detailsRemoved &&
+                unconfirmedKept &&
                 actuallyCompressed && jpyIncompletenessKept && ratesKept && reactionKept &&
                 brokenRowKept && idempotent && mergesIntoExistingDay;
 
-            Console.WriteLine("  圧縮（合計不変・件数報告・明細削除・レート保持・冪等・既存日への合流）: " +
+            Console.WriteLine("  圧縮（未確認明細を保持・合計不変・件数報告・レート保持・冪等・既存日への合流）: " +
                 (passed ? "PASS" : "FAIL"));
             return passed;
         }
@@ -248,6 +267,11 @@ internal static class ApiLogCompactionValidation
     private static long CountBrokenRows(Database database)
         => database.Read(
             "SELECT COUNT(*) FROM api_calls WHERE called_at = '壊れた日時';",
+            reader => reader.Read() ? reader.GetInt64(0) : -1);
+
+    private static long CountUnconfirmedRows(Database database)
+        => database.Read(
+            "SELECT COUNT(*) FROM api_calls WHERE usd_cost_confirmed = 0;",
             reader => reader.Read() ? reader.GetInt64(0) : -1);
 
     private static DateTimeOffset At(int year, int month, int day, int hour, int minute)

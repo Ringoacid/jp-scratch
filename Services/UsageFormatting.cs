@@ -28,12 +28,51 @@ internal static class UsageFormatting
     }
 
     internal static string FormatJpy(ApiCallLog entry)
-        => entry.JpyCost is decimal cost
+        => !entry.IsUsdCostConfirmed
+            ? entry.OriginalCurrency == PricingCurrency.Jpy && entry.OriginalCost is decimal original
+                ? FormatJpy(original)
+                : "¥—"
+            : entry.JpyCost is decimal cost
             ? FormatJpy(cost)
             : entry.UsdCost == 0m ? FormatJpy(0m) : "¥—";
 
+    internal static string FormatJpy(ApiCallHistoryRow entry)
+        => !entry.IsUsdCostConfirmed
+            ? entry.OriginalCurrency == PricingCurrency.Jpy && entry.OriginalCost is decimal original
+                ? FormatJpy(original)
+                : "—"
+            : entry.JpyCost is decimal cost
+                ? FormatJpy(cost)
+                : entry.UsdCost == 0m ? FormatJpy(0m) : "—";
+
+    internal static string FormatUsd(ApiCallLog entry)
+        => entry.IsUsdCostConfirmed ? "$" + FormatUsd(entry.UsdCost) : "未確認";
+
+    internal static string FormatUsd(ApiCallHistoryRow entry)
+        => entry.IsUsdCostConfirmed ? "$" + FormatUsd(entry.UsdCost) : "未確認";
+
     internal static string FormatJpy(ApiCallUsageSummary summary)
         => summary.IsJpyComplete ? FormatJpy(summary.JpyCost) : "¥—";
+
+    /// <summary>
+    /// 期間合計に含めていない料金未確認分を、確定分と母集団を混ぜずに表示する。
+    /// 元円額が無い料金算出エラーも件数として隠さず示す。
+    /// </summary>
+    internal static string FormatUnconfirmedCost(ApiCallUsageSummary summary)
+    {
+        if (summary.UnconfirmedCostCalls == 0)
+            return "";
+
+        long amountCalls = Math.Clamp(
+            summary.UnconfirmedJpyAmountCalls, 0, summary.UnconfirmedCostCalls);
+        long unknownCalls = summary.UnconfirmedCostCalls - amountCalls;
+        List<string> details = [];
+        if (amountCalls > 0)
+            details.Add($"判明分 {amountCalls:N0}件 / 元通貨計 {FormatJpy(summary.UnconfirmedJpyCost)}");
+        if (unknownCalls > 0)
+            details.Add($"元通貨額不明 {unknownCalls:N0}件");
+        return $"未確認 {summary.UnconfirmedCostCalls:N0}件 / {string.Join(" / ", details)}";
+    }
 
     /// <summary>単一ログの直近表示に付ける「@07-25」のようなレート基準日サフィックス。</summary>
     internal static string FormatRateDateSuffix(ApiCallLog entry)
@@ -54,21 +93,32 @@ internal static class UsageFormatting
     /// <summary>期間集計向け。単一レートなら基準日つき、複数レートなら範囲と件数を示す。</summary>
     internal static string FormatSummaryRateReference(ApiCallUsageSummary summary)
     {
+        string rateText;
         if (!summary.IsJpyComplete)
-            return "JPY換算に未記録ログあり";
-        if (summary.DistinctRateCount == 1 &&
+            rateText = "JPY換算に未記録ログあり";
+        else if (summary.DistinctRateCount == 1 &&
             summary.SingleUsdJpyRate is decimal rate && summary.SingleRateDate is DateOnly date)
         {
-            return $"1USD=¥{rate.ToString("0.####", CultureInfo.InvariantCulture)} / " +
+            rateText = $"1USD=¥{rate.ToString("0.####", CultureInfo.InvariantCulture)} / " +
                    $"{date:MM-dd}時点（ログ固定）";
         }
-        if (summary.DistinctRateCount > 1 &&
+        else if (summary.DistinctRateCount > 1 &&
             summary.FirstRateDate is DateOnly first && summary.LastRateDate is DateOnly last)
         {
-            return $"ログ固定レート合計 / {first:MM-dd}〜{last:MM-dd}・" +
+            rateText = $"ログ固定レート合計 / {first:MM-dd}〜{last:MM-dd}・" +
                    $"{summary.DistinctRateCount}レート";
         }
-        return summary.UsdCost == 0m ? "JPY 0円（レート不要）" : "ログ固定レート情報なし";
+        else
+        {
+            rateText = summary.UnconfirmedCostCalls > 0 && summary.UsdCost == 0m
+                ? ""
+                : summary.UsdCost == 0m ? "JPY 0円（レート不要）" : "ログ固定レート情報なし";
+        }
+
+        string unconfirmedText = FormatUnconfirmedCost(summary);
+        return unconfirmedText.Length == 0
+            ? rateText
+            : rateText.Length == 0 ? unconfirmedText : $"{rateText} / {unconfirmedText}";
     }
 
     internal static string FormatStatusCounts(ApiCallStatus status)
