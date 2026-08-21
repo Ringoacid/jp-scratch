@@ -54,7 +54,7 @@
                                   Style="{StaticResource ChromeToggle}"
                                   FontFamily="Segoe MDL2 Assets"
                                   Content="&#xE718;"
-                                  ToolTip="ピン留め（フォーカスが外れても隠さない）"
+                                  ToolTip="常に手前に表示する（設定と同期）"
                                   Checked="PinButton_Changed"
                                   Unchecked="PinButton_Changed" />
                     <Button x:Name="TrashButton"

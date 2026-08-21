@@ -119,6 +119,12 @@ public partial class MainWindow : Window
     private DateTime _statusMessageUntil = DateTime.MinValue;
     private DateOnly _usageDisplayDate = DateOnly.MinValue;
 
+    /// <summary>
+    /// <see cref="PinButton"/> の表示を設定から反映するとき、ボタンの Checked/Unchecked
+    /// イベントから設定を書き戻さないためのガード。
+    /// </summary>
+    private bool _syncingPinButton;
+
     private ScratchTab? _dragTab;
     private Point _dragOrigin;
 
@@ -196,6 +202,7 @@ public partial class MainWindow : Window
         Width = settings.Current.WindowWidth;
         Height = settings.Current.WindowHeight;
         Topmost = settings.Current.Topmost;
+        SetPinButtonState(settings.Current.Topmost);
 
         TabStrip.ItemsSource = _tabs.Tabs;
         _tabs.ActiveChanged += OnActiveTabChanged;
@@ -441,7 +448,6 @@ public partial class MainWindow : Window
         base.OnDeactivated(e);
 
         if (!_settings.Current.HideOnFocusLost) return;
-        if (PinButton.IsChecked == true) return;          // ピン留め中は隠さない
         if (_hideSuppression.IsSuppressed) return;         // 設定ダイアログなどを開いている
 
         // 変換中に消えると入力そのものが失われる（要件 3.1.3 / R-5）
@@ -487,6 +493,7 @@ public partial class MainWindow : Window
     private void OnSettingsChanged(AppSettings settings)
     {
         Topmost = settings.Topmost;
+        SetPinButtonState(settings.Topmost);
         _theme.Apply(settings.Theme);
         ApplyEditorSettings();
         _tabs.ReloadAutoSaveInterval();
@@ -3298,9 +3305,31 @@ public partial class MainWindow : Window
     private void HideButton_Click(object sender, RoutedEventArgs e) => HideWindow(auto: false);
 
     private void PinButton_Changed(object sender, RoutedEventArgs e)
-        => PinButton.ToolTip = PinButton.IsChecked == true
-            ? "ピン留め中（フォーカスが外れても隠れません）"
-            : "ピン留め（フォーカスが外れても隠さない）";
+    {
+        bool topmost = PinButton.IsChecked == true;
+        PinButton.ToolTip = topmost
+            ? "常に手前に表示中（設定と同期）"
+            : "常に手前に表示する（設定と同期）";
+
+        if (_syncingPinButton || _settings.Current.Topmost == topmost) return;
+
+        var updated = _settings.Current.Clone();
+        updated.Topmost = topmost;
+        _settings.Replace(updated);
+    }
+
+    private void SetPinButtonState(bool topmost)
+    {
+        _syncingPinButton = true;
+        try
+        {
+            PinButton.IsChecked = topmost;
+        }
+        finally
+        {
+            _syncingPinButton = false;
+        }
+    }
 
     public void OpenSettings()
     {

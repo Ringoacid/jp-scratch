@@ -876,15 +876,15 @@
     "semantic_hash": ""
   },
   "Views/MainWindow.xaml": {
-    "mtime": 1786683445.1770453,
-    "seen": 1787289838.1457374,
-    "ast_hash": "431ee6158f3baa7cf650aa58c4880251",
-    "semantic_hash": "431ee6158f3baa7cf650aa58c4880251"
+    "mtime": 1787331003.8933647,
+    "seen": 1787331202.4649327,
+    "ast_hash": "5f0cc98a66dd31ab5776fce4eea03758",
+    "semantic_hash": ""
   },
   "Views/MainWindow.xaml.cs": {
-    "mtime": 1787310096.4447792,
-    "seen": 1787312134.1963172,
-    "ast_hash": "b5a137168ca17a7c5ddb50089aee9e63",
+    "mtime": 1787331046.48323,
+    "seen": 1787331202.4649332,
+    "ast_hash": "4590d341c5756380f8f8c613db392ace",
     "semantic_hash": ""
   },
   "Views/MissedCorrectionDialog.xaml": {
@@ -1305,6 +1305,42 @@
     "mtime": 1787316670.7394812,
     "seen": 1787319405.9926574,
     "ast_hash": "778df373d405f695749268ff034414d3",
+    "semantic_hash": ""
+  },
+  "PromptValidation/artifacts/build-check/JpScratch.PromptValidation.deps.json": {
+    "mtime": 1787331134.8514123,
+    "seen": 1787331202.4648721,
+    "ast_hash": "434204e79fa9251792118d9660712772",
+    "semantic_hash": ""
+  },
+  "PromptValidation/artifacts/build-check/JpScratch.PromptValidation.runtimeconfig.json": {
+    "mtime": 1787331134.8822005,
+    "seen": 1787331202.4648743,
+    "ast_hash": "b451096fec6028f9acbd24badac69055",
+    "semantic_hash": ""
+  },
+  "PromptValidation/artifacts/build-check/benchmark-texts.json": {
+    "mtime": 1786020790.2199967,
+    "seen": 1787331202.4648755,
+    "ast_hash": "b4334c1556129ff00242f1628df0b9df",
+    "semantic_hash": ""
+  },
+  "PromptValidation/artifacts/build-check/cases.json": {
+    "mtime": 1785325900.215164,
+    "seen": 1787331202.4648762,
+    "ast_hash": "a334338a27cc56253ddc384494a70ba5",
+    "semantic_hash": ""
+  },
+  "artifacts/build-check/JpScratch.deps.json": {
+    "mtime": 1787331135.1383,
+    "seen": 1787331202.4649417,
+    "ast_hash": "4053194e24eedf4db295d7245bd3d24e",
+    "semantic_hash": ""
+  },
+  "artifacts/build-check/JpScratch.runtimeconfig.json": {
+    "mtime": 1787331135.1905015,
+    "seen": 1787331202.4649427,
+    "ast_hash": "44f5a150d44bc365c8cdff15f4a480e5",
     "semantic_hash": ""
   }
 }
