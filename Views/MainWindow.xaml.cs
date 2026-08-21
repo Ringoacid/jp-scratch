@@ -2949,6 +2949,41 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// 未確認の円建て課金がある起動時だけ、呼出日ごとに後追い取得を1回試みる。
+    /// 日次レート取得の抑止キーには触れず、失敗も為替補助情報の既存方針どおりUIへ出さない。
+    /// </summary>
+    internal async Task CompleteUnconfirmedFxRatesAsync()
+    {
+        try
+        {
+            IReadOnlyList<UnconfirmedFxDateSummary> summaries =
+                await Task.Run(() => _apiCalls.GetUnconfirmedFxDateSummaries());
+            var rates = new Dictionary<DateOnly, FxRate>();
+            foreach (UnconfirmedFxDateSummary summary in summaries)
+            {
+                if (summary.CompletableCount == 0) continue;
+                FxRate? rate = await _fxRates.FetchForDateAsync(summary.CalledDate);
+                if (rate is not null)
+                    rates[summary.CalledDate] = rate;
+            }
+
+            if (rates.Count == 0) return;
+
+            FxRateCompletionResult result =
+                await Task.Run(() => _apiCalls.ApplyFxRates(rates));
+            if (result.CompletedCount > 0)
+            {
+                RefreshUsageDisplay();
+                _billingHistory?.Refresh();
+            }
+        }
+        catch (Exception)
+        {
+            // 起動を止めず、失敗分は次回起動または課金履歴画面から補完する。
+        }
+    }
+
     private static string FormatCostWithJpy(ApiUsageCost cost)
         => ApiUsageDisplayFormatter.FormatCostText(cost.ToDisplay());
 
@@ -3343,7 +3378,8 @@ public partial class MainWindow : Window
                 // DBロック・破損・XAMLリソース解決失敗などで例外が飛びうる。生成・表示のどこで
                 // 失敗しても抑止カウントを積んだままにしない（Show() より前の失敗では Closed が
                 // 発火しないため、ここで明示的に解放してから同じ例外を再スローする）。
-                _billingHistory = new BillingHistoryWindow(_apiCalls) { Owner = this };
+                _billingHistory = new BillingHistoryWindow(_apiCalls, _fxRates) { Owner = this };
+                _billingHistory.CompletionApplied += (_, _) => RefreshUsageDisplay();
                 _billingHistory.Closed += (_, _) =>
                 {
                     _billingHistory = null;

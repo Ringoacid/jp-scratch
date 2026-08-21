@@ -60,7 +60,9 @@ internal sealed class FxRateService : IDisposable
                     while (reader.Read())
                     {
                         if (TryReadRate(reader, out FxRate? candidate) && candidate is { } value &&
-                            (latest is null || value.FetchedAt > latest.FetchedAt))
+                            (latest is null ||
+                             value.RateDate > latest.RateDate ||
+                             (value.RateDate == latest.RateDate && value.FetchedAt > latest.FetchedAt)))
                         {
                             latest = value;
                         }
@@ -105,7 +107,7 @@ internal sealed class FxRateService : IDisposable
 
             // 成否にかかわらず、HTTP開始前に当日の試行を永続化して日中の再試行を抑止する。
             MarkAttempted(today);
-            FxRate? fetched = await FetchAsync(cancellationToken);
+            FxRate? fetched = await FetchAsync(null, cancellationToken);
             if (fetched is null || !TrySave(fetched))
                 return cached;
 
@@ -133,6 +135,55 @@ internal sealed class FxRateService : IDisposable
         }
     }
 
+    /// <summary>
+    /// 指定した呼出日を対象に Frankfurter の日付指定 API を呼ぶ、日次取得とは別経路。
+    /// <c>fx_last_attempt_local_date</c> は読み書きせず、404 や応答不正は null として扱う。
+    /// 後追い取得のレートは通常の日次キャッシュへ保存せず、呼出行へだけ記録する。
+    /// これにより、後追い取得が当日の通常取得を抑止することはない。
+    /// </summary>
+    internal async Task<FxRate?> FetchForDateAsync(
+        DateOnly requestedDate,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _fetchGate.WaitAsync(cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+
+        try
+        {
+            FxRate? fetched = await FetchAsync(requestedDate, cancellationToken);
+            if (fetched is null || fetched.RateDate > requestedDate)
+                return null;
+
+            return fetched;
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+        finally
+        {
+            _fetchGate.Release();
+        }
+    }
+
     public void Dispose()
     {
         _fetchGate.Dispose();
@@ -140,12 +191,16 @@ internal sealed class FxRateService : IDisposable
             _httpClient.Dispose();
     }
 
-    private async Task<FxRate?> FetchAsync(CancellationToken cancellationToken)
+    private async Task<FxRate?> FetchAsync(
+        DateOnly? requestedDate,
+        CancellationToken cancellationToken)
     {
         using var timeout = new CancellationTokenSource(_requestTimeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken, timeout.Token);
-        using var request = new HttpRequestMessage(HttpMethod.Get, Endpoint);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            requestedDate is DateOnly date ? BuildEndpoint(date) : Endpoint);
         using HttpResponseMessage response = await _httpClient.SendAsync(
             request, HttpCompletionOption.ResponseContentRead, linked.Token);
         if (!response.IsSuccessStatusCode)
@@ -167,6 +222,9 @@ internal sealed class FxRateService : IDisposable
         {
             throw new InvalidDataException("Frankfurter の USD/JPY レスポンスが不正です。");
         }
+
+        if (requestedDate is DateOnly requested && rateDate > requested)
+            return null;
 
         return new FxRate(rateDate, rate, _now());
     }
@@ -259,14 +317,14 @@ internal sealed class FxRateService : IDisposable
         return true;
     }
 
-    private static bool WasFetchedToday(FxRate? rate, DateOnly today)
-        => rate is not null && LocalDate(rate.FetchedAt) == today;
-
     private static DateOnly LocalDate(DateTimeOffset value)
     {
         DateTime local = value.LocalDateTime;
         return new DateOnly(local.Year, local.Month, local.Day);
     }
+
+    private static bool WasFetchedToday(FxRate? rate, DateOnly today)
+        => rate is not null && LocalDate(rate.FetchedAt) == today;
 
     private static bool TryGetString(JsonElement element, string property, out string? value)
     {
@@ -278,4 +336,9 @@ internal sealed class FxRateService : IDisposable
 
     private static HttpClient CreateHttpClient()
         => new() { Timeout = Timeout.InfiniteTimeSpan };
+
+    private static Uri BuildEndpoint(DateOnly requestedDate)
+        => new(
+            $"https://api.frankfurter.dev/v2/rate/USD/JPY?date=" +
+            $"{requestedDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}&providers=ECB");
 }

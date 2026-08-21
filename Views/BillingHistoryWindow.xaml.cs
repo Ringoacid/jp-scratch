@@ -42,11 +42,12 @@ public partial class BillingHistoryWindow : Window
     }
 
     private readonly ApiCallRepository _apiCalls;
+    private readonly FxRateService _fxRates;
 
     // コンストラクタ中の初期値設定でフィルタ再読込を連鎖させないためのガード。
     private bool _initializing;
 
-    internal BillingHistoryWindow(ApiCallRepository apiCalls)
+    internal BillingHistoryWindow(ApiCallRepository apiCalls, FxRateService fxRates)
     {
         // InitializeComponent() より前に立てる。種別チェックボックスは XAML で IsChecked="True" と
         // 書いてあるため、BAML読み込み中（InitializeComponent() の実行中）に Checked イベントが
@@ -56,6 +57,7 @@ public partial class BillingHistoryWindow : Window
         // null 参照で落ちる（実機で確認済みのクラッシュ）。
         _initializing = true;
         _apiCalls = apiCalls ?? throw new ArgumentNullException(nameof(apiCalls));
+        _fxRates = fxRates ?? throw new ArgumentNullException(nameof(fxRates));
         InitializeComponent();
 
         PeriodCombo.ItemsSource = new[] { "当日", "当週", "当月", "全期間", "カスタム" };
@@ -75,6 +77,8 @@ public partial class BillingHistoryWindow : Window
 
     /// <summary>既に開いている画面を再アクティブ化したときの再取得。呼び出し元は MainWindow。</summary>
     public void Refresh() => LoadHistory();
+
+    internal event EventHandler? CompletionApplied;
 
     private void PeriodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -165,6 +169,15 @@ public partial class BillingHistoryWindow : Window
     }
 
     private void RefreshButton_Click(object sender, RoutedEventArgs e) => LoadHistory();
+
+    private void CompleteFxButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new FxRateCompletionDialog(_apiCalls, _fxRates) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+
+        LoadHistory();
+        CompletionApplied?.Invoke(this, EventArgs.Empty);
+    }
 
     /// <summary>
     /// 現在のフィルタに合致する明細をCSVへ書き出す（要件 3.6.2）。

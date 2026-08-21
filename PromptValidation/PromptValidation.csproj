@@ -80,6 +80,8 @@
              Link="Services\TrashListItem.cs" />
     <Compile Include="..\Services\FxRateService.cs"
              Link="Services\FxRateService.cs" />
+    <Compile Include="..\Services\UsdCostConversion.cs"
+             Link="Services\UsdCostConversion.cs" />
     <Compile Include="..\Services\HideSuppressionCounter.cs"
              Link="Services\HideSuppressionCounter.cs" />
     <Compile Include="..\Services\MissedCorrectionAction.cs"

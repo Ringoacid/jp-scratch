@@ -123,6 +123,17 @@ internal sealed record ApiCallHistoryPage(
     long TotalCount,
     bool Truncated);
 
+/// <summary>未確認料金を保存されたオフセットの日付ごとにまとめた補完画面用の値。</summary>
+internal sealed record UnconfirmedFxDateSummary(
+    DateOnly CalledDate,
+    int CompletableCount,
+    int UncompletableCount);
+
+/// <summary>為替レート補完で更新した件数と、レートでは直せない件数。</summary>
+internal sealed record FxRateCompletionResult(
+    int CompletedCount,
+    int UncompletableCount);
+
 /// <summary>Gemini API呼び出しの課金・結果ログを永続化する。</summary>
 internal sealed class ApiCallRepository
 {
@@ -618,6 +629,165 @@ internal sealed class ApiCallRepository
                 }
 
                 return null;
+            });
+
+    /// <summary>
+    /// 未確認料金を、呼び出し時刻に保存されたオフセットの日付ごとに集計する。
+    /// SQLの日付関数は使わず、<c>called_at</c> を C# の DateTimeOffset として解釈する。
+    /// </summary>
+    internal IReadOnlyList<UnconfirmedFxDateSummary> GetUnconfirmedFxDateSummaries()
+        => _database.Read(
+            """
+            SELECT called_at, original_currency, original_cost
+            FROM api_calls
+            WHERE usd_cost_confirmed = 0;
+            """,
+            reader =>
+            {
+                var values = new Dictionary<DateOnly, (int Completable, int Uncompletable)>();
+                while (reader.Read())
+                {
+                    if (!DateTimeOffset.TryParse(
+                            reader.GetString(0),
+                            CultureInfo.InvariantCulture,
+                            DateTimeStyles.RoundtripKind,
+                            out DateTimeOffset calledAt))
+                    {
+                        continue;
+                    }
+
+                    // このリポジトリは期間フィルタ・一覧・CSV を「現在のローカル」へ変換する慣例だが、
+                    // 補完のレート選択だけは保存されたオフセットの日付（呼び出した瞬間の壁時計日付）を使う。
+                    // 端末のタイムゾーンが変わった後に補完すると、別の日のレートで恒久的に確定してしまうため。
+                    // 集計・表示側の慣例（Compact の日次サマリを含む）は変えていない。
+                    DateOnly day = DateOnly.FromDateTime(calledAt.Date);
+                    bool completable = !reader.IsDBNull(1) &&
+                        string.Equals(reader.GetString(1), "JPY", StringComparison.OrdinalIgnoreCase) &&
+                        TryReadDecimal(reader, 2, out _);
+                    if (!values.TryGetValue(day, out (int Completable, int Uncompletable) counts))
+                        counts = default;
+
+                    values[day] = completable
+                        ? (counts.Completable + 1, counts.Uncompletable)
+                        : (counts.Completable, counts.Uncompletable + 1);
+                }
+
+                return (IReadOnlyList<UnconfirmedFxDateSummary>)values
+                    .OrderBy(pair => pair.Key)
+                    .Select(pair => new UnconfirmedFxDateSummary(
+                        pair.Key, pair.Value.Completable, pair.Value.Uncompletable))
+                    .ToArray();
+            });
+
+    /// <summary>
+    /// 呼び出し日のレートで未確認の円建て行だけを補完する。
+    /// 対象行を読み出し、C# の decimal で計算し、id指定のUPDATEを同一トランザクションで行う。
+    /// <c>jpy_cost</c> は一次情報なので、UPDATE対象に含めない。
+    /// </summary>
+    internal FxRateCompletionResult ApplyFxRates(
+        IReadOnlyDictionary<DateOnly, FxRate> ratesByCalledDate)
+    {
+        ArgumentNullException.ThrowIfNull(ratesByCalledDate);
+        if (ratesByCalledDate.Count == 0)
+            return new FxRateCompletionResult(0, CountUncompletableUnconfirmedRows());
+
+        var updates = new List<(long Id, decimal UsdCost, FxRate Rate)>();
+        int uncompletableCount = 0;
+        int completedCount = 0;
+
+        _database.InTransaction(db =>
+        {
+            db.Read(
+                """
+                SELECT id, called_at, original_currency, original_cost
+                FROM api_calls
+                WHERE usd_cost_confirmed = 0;
+                """,
+                reader =>
+                {
+                    while (reader.Read())
+                    {
+                        if (!DateTimeOffset.TryParse(
+                                reader.GetString(1),
+                                CultureInfo.InvariantCulture,
+                                DateTimeStyles.RoundtripKind,
+                                out DateTimeOffset calledAt) ||
+                            !string.Equals(
+                                reader.IsDBNull(2) ? null : reader.GetString(2),
+                                "JPY",
+                                StringComparison.OrdinalIgnoreCase) ||
+                            !TryReadDecimal(reader, 3, out decimal originalCost))
+                        {
+                            uncompletableCount++;
+                            continue;
+                        }
+
+                        // このリポジトリは期間フィルタ・一覧・CSV を「現在のローカル」へ変換する慣例だが、
+                        // 補完のレート選択だけは保存されたオフセットの日付（呼び出した瞬間の壁時計日付）を使う。
+                        // 端末のタイムゾーンが変わった後に補完すると、別の日のレートで恒久的に確定してしまうため。
+                        // 集計・表示側の慣例（Compact の日次サマリを含む）は変えていない。
+                        DateOnly calledDate = DateOnly.FromDateTime(calledAt.Date);
+                        if (!ratesByCalledDate.TryGetValue(calledDate, out FxRate? rate) ||
+                            rate.UsdJpy <= 0m)
+                        {
+                            continue;
+                        }
+
+                        // USD は保存時も文字列で保持し、SQLiteのREAL演算へ落とさない。
+                        updates.Add((
+                            reader.GetInt64(0),
+                            UsdCostConversion.ConvertJpyToUsd(originalCost, rate.UsdJpy),
+                            rate));
+                    }
+
+                    return 0;
+                });
+
+            foreach ((long id, decimal usdCost, FxRate rate) in updates)
+            {
+                completedCount += db.Execute(
+                    """
+                    UPDATE api_calls
+                    SET usd_cost = $usd_cost,
+                        usd_jpy_rate = $usd_jpy_rate,
+                        rate_date = $rate_date,
+                        usd_cost_confirmed = 1
+                    WHERE id = $id
+                      AND usd_cost_confirmed = 0;
+                    """,
+                    ("$usd_cost", usdCost.ToString(CultureInfo.InvariantCulture)),
+                    ("$usd_jpy_rate", rate.UsdJpy.ToString(CultureInfo.InvariantCulture)),
+                    ("$rate_date", rate.RateDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                    ("$id", id));
+            }
+        });
+
+        return new FxRateCompletionResult(completedCount, uncompletableCount);
+    }
+
+    private int CountUncompletableUnconfirmedRows()
+        => _database.Read(
+            """
+            SELECT original_currency, original_cost
+            FROM api_calls
+            WHERE usd_cost_confirmed = 0;
+            """,
+            reader =>
+            {
+                int count = 0;
+                while (reader.Read())
+                {
+                    if (!string.Equals(
+                            reader.IsDBNull(0) ? null : reader.GetString(0),
+                            "JPY",
+                            StringComparison.OrdinalIgnoreCase) ||
+                        !TryReadDecimal(reader, 1, out _))
+                    {
+                        count++;
+                    }
+                }
+
+                return count;
             });
 
     /// <summary>

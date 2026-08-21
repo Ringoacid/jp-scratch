@@ -209,6 +209,7 @@ public partial class App : Application
 
         // 為替は補助情報なので、初期表示や校正操作をネットワーク待ちにしない。
         _ = _window.RefreshFxRateAsync();
+        _ = _window.CompleteUnconfirmedFxRatesAsync();
 
         // 保持期限を過ぎた課金明細の圧縮（要件 3.6.2）。ウィンドウを出した後に別スレッドで走らせる。
         // 起動経路の同期処理に足すとコールドスタートの実測値（0.63秒）を落としかねない。

@@ -62,6 +62,13 @@
                             Style="{StaticResource AppButton}"
                             Content="更新"
                             Click="RefreshButton_Click" />
+                    <Button x:Name="CompleteFxButton"
+                            DockPanel.Dock="Right"
+                            Margin="0,0,8,0"
+                            Style="{StaticResource AppButton}"
+                            Content="未確認料金を補完"
+                            ToolTip="過去の為替レートを取得または入力して、未確認料金を確定する"
+                            Click="CompleteFxButton_Click" />
                     <Button x:Name="ExportCsvButton"
                             DockPanel.Dock="Right"
                             Margin="0,0,8,0"

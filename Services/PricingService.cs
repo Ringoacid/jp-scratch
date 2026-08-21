@@ -107,7 +107,7 @@ internal sealed record PricingQuote(
     /// </summary>
     internal decimal? ToUsd(decimal? usdJpyRate)
         => IsUsd ? Cost
-            : usdJpyRate is > 0m ? Cost / usdJpyRate.Value
+            : usdJpyRate is > 0m ? UsdCostConversion.ConvertJpyToUsd(Cost, usdJpyRate.Value)
                 : null;
 }
 

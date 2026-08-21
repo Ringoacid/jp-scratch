@@ -241,6 +241,7 @@ internal static class Program
         bool dispatchPlannerPass = ProofreadingDispatchPlannerValidation.RunSelfTests();
         bool credentialPass = CredentialServiceValidation.RunSelfTests();
         bool pricingPass = PricingServiceValidation.RunSelfTests();
+        bool currencyConversionPass = CurrencyConversionValidation.RunSelfTests();
         bool apiCallPass = ApiCallRepositoryValidation.RunSelfTests();
         bool apiCallHistoryPass = ApiCallRepositoryValidation.RunHistorySelfTests();
         bool apiCallUsageTriggerPass = ApiCallRepositoryValidation.RunUsageSummaryTriggerFilterSelfTests();
@@ -252,6 +253,7 @@ internal static class Program
         bool usageLimitPass = UsageLimitServiceValidation.RunSelfTests();
         bool migrationPass = DatabaseMigrationValidation.RunSelfTests();
         bool fxRatePass = await FxRateServiceValidation.RunSelfTestsAsync();
+        bool fxRateCompletionPass = await FxRateCompletionValidation.RunSelfTestsAsync();
         bool reactionPass = ReactionRepositoryValidation.RunSelfTests();
         bool schedulePass = ProofreadingScheduleValidation.RunSelfTests();
         bool geminiClientPass = await GeminiProofreadingClientValidation.RunSelfTestsAsync();
@@ -277,10 +279,10 @@ internal static class Program
         bool atomicFilePass = AtomicFileValidation.RunSelfTests();
         bool modelBenchmarkPass = ModelBenchmarkValidation.RunSelfTests();
         return exactPass && fallbackPass && diffPass && paragraphPass &&
-               credentialPass && pricingPass && apiCallPass && apiCallHistoryPass &&
+               credentialPass && pricingPass && currencyConversionPass && apiCallPass && apiCallHistoryPass &&
                apiCallUsageTriggerPass && apiCallUnconfirmedPass && hideSuppressionPass && customDateRangePass &&
                billingHistoryEmptyStatePass && usagePeriodPass && usageLimitPass &&
-               migrationPass && fxRatePass && reactionPass && schedulePass && dispatchPlannerPass &&
+               migrationPass && fxRatePass && fxRateCompletionPass && reactionPass && schedulePass && dispatchPlannerPass &&
                geminiClientPass && openAiClientPass && completionGuardPass && modelCatalogPass &&
                appPathsPass && singleInstancePass &&
                billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&
