@@ -1,16 +1,16 @@
 # Graph Report - jp-scratch  (2026-08-21)
 
 ## Corpus Check
-- 198 files · ~193,099 words
+- 202 files · ~199,479 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2688 nodes · 6091 edges · 148 communities (121 shown, 27 thin omitted)
-- Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 457 edges (avg confidence: 0.81)
+- 2713 nodes · 6122 edges · 145 communities (118 shown, 27 thin omitted)
+- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 457 edges (avg confidence: 0.81)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `48c4718c`
+- Built from commit: `f8a2585f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -19,16 +19,16 @@
 - PricingService
 - FxRateService
 - FindReplacePanel
-- .RunSelfTestAsync
+- .Main
 - Window
 - NativeMethods
 - Window
 - ProofreadingInlineDiffGenerator
 - capture-docs-screenshots.py
 - GeminiProofreadingClientValidation
-- CrossTabSearchWindow
+- BillingCsvExporterValidation
 - MissedCorrectionDialog
-- .Add
+- .BuildRows
 - DocumentDiff
 - ApiCallRepository
 - MainWindow
@@ -37,60 +37,60 @@
 - ResourceDictionary
 - ProofreadingClientBase
 - state_manager.py
-- TabRepository
+- StatusBarUsageFormatterValidation
 - ProofreadingClientRouter
-- RoutedEventArgs
-- .OnStartup
+- ApiUsageDisplayCost
+- .RefreshUsageDisplay
 - SettingsWindow
 - PricingHistoryChart
-- ProofreadingProposal
+- .ConfirmCredentialSourceIfNeeded
 - ProofreadingModelCatalog
-- .StartOfMonth
+- ProofreadingProposal
 - .GetCachedRate
 - .RunBenchmarkAsync
 - .Select
 - UsageLimitServiceValidation
-- BillingCsvExporterValidation
+- .FormatUsd
 - ProviderCompletionGuardValidation
 - Window
 - TrashWindow
-- FxRateCompletionValidation
+- .Read
 - Window
-- JpScratch.PromptValidation
+- JpScratch.Services
 - Database
-- ScratchTab
+- TabManager
 - screenshot-main.py
-- .FormatUsd
+- JpScratch.Models
 - .RunProofreadingAsync
 - SettingsFieldFormattingValidation
 - App
-- .TestDeleteAllTrash
+- TabRepository
 - ComboBox
-- .EnsureTodayAsync
+- .StartOfMonth
 - SingleInstance
 - AppSettings
 - TrayIconService
-- .Create
-- .CollectHits
+- RoutedEventArgs
+- Japanese Commit Message
 - build-tray-icons.py
 - plot-model-benchmark.py
-- .SetTransientStatus
+- Q: model-benchmark-barsなども更新してください。
 - Window
 - JpScratch.Editor
-- .RunSelfTests
+- .RunSelfTestAsync
 - .RunCompactionSelfTests
 - .ProofreadAsync
 - ProofreadingSchedule
-- StatusBarUsageFormatterValidation
+- FewShotExample
 - Window
-- ClipboardHelper.cs
-- ApiUsageDisplayCost
+- JpScratch.Infrastructure
+- ScratchTab
 - .FormatInclusive
 - ReactionRepository
 - AnthropicProofreadingClient
 - PlamoProofreadingClient
 - gui-settings-test.py
-- ThemeService
+- .HotkeyBox_LostFocus
 - BillingHistoryWindow
 - Window
 - state_manager.ps1
@@ -100,22 +100,19 @@
 - CLAUDE.md
 - TrayIconStateValidation
 - AppPaths
-- JpScratch.Services
-- Editor
-- HotkeyService
+- JpScratch.Views
+- TabRoot
+- TrashListItem
 - settings.json
 - graphify query
 - FontResolver
-- Window
-- TabRoot
-- GeminiUsage
+- CrossTabSearchWindow
 - UsageAccumulator
 - 3.5.1 校正 API の共通契約
 - 要件定義書 — 常駐型 日本語スクラッチパッド（仮称: JP Scratch）
 - InverseBooleanToVisibilityConverter
 - RelayCommand
 - PromptValidation
-- HotkeySpec
 - HideSuppressionCounter
 - PricingHistoryEditDialog
 - jp-scratch
@@ -126,22 +123,19 @@
 - VisualTreeHelpers
 - JP Scratch Settings
 - smoke-test.ps1
-- StubHandler
-- CrossTabSearchPreviewValidation
+- .BuildIdInClause
 - 3.3 校正機能
-- Model Benchmark (2026-08-06)
+- Gemini 3.7 Flash 追補ベンチマーク（2026-08-21）
 - 5. マイルストーン
 - codex
 - graphify skill
 - graphify reference: add-watch
 - Model Performance Metrics
-- CurrencyConversionValidation
-- SingleInstanceValidation
 - sync-config.sh script
 - graphify reference: exports
 - Cross-Tab Search UI
 - Main Editor UI (Dark Mode)
-- 3.1 常駐とウィンドウ制御
+- 3. 機能要件
 - 3.2 エディタ
 - Dark.xaml
 - Light.xaml
@@ -154,13 +148,16 @@
 - PromptValidation
 - 3.4 学習機能（文体の適応）
 - 3.5 API 連携
-- 3. 機能要件
+- .CustomRange_TextChanged
 - graphify reference: commit hook and native CLAUDE.md integration
 - graphify reference: incremental update and cluster-only
-- BillingHistoryEmptyStateValidation.cs
-- 1. 背景と目的
+- .LoadHistory
+- ThemeService
 - graphify reference: GitHub clone and cross-repo merge
 - graphify reference: transcribe video and audio
+- .TriggerCheck_Changed
+- .RunAsync
+- .PeriodCombo_SelectionChanged
 
 ## God Nodes (most connected - your core abstractions)
 1. `MainWindow` - 175 edges
@@ -198,151 +195,147 @@
 - **Settings UI Tabs** — docs_images_settings_general, docs_images_settings_editor, docs_images_settings_learning, docs_images_settings_billing [EXTRACTED 1.00]
 - **Proofreading Subsystem** — proofreading_proofreadingclientbase, proofreading_proofreadingmodelcatalog, proofreading_proofreadingprompt [INFERRED 0.85]
 
-## Communities (148 total, 27 thin omitted)
+## Communities (145 total, 27 thin omitted)
 
 ### Community 0 - ".CreateAutomaticPlan"
 Cohesion: 0.06
-Nodes (31): CurrentPartStart, ParagraphProofreadingPlannerValidation, ProofreadingDispatchPlannerValidation, End, HashSet, int, IReadOnlyList, IReadOnlySet (+23 more)
+Nodes (26): ParagraphProofreadingPlannerValidation, ProofreadingDispatchPlannerValidation, End, HashSet, int, IReadOnlyList, IReadOnlySet, List (+18 more)
 
 ### Community 1 - "PricingService"
 Cohesion: 0.07
 Nodes (28): AtomicFile, FileReadFailure, AtomicFileValidation, Action, Dictionary, PricingServiceValidation, ReadOnlySpan, DateOnly (+20 more)
 
 ### Community 2 - "FxRateService"
-Cohesion: 0.10
-Nodes (19): SemaphoreSlim, bool, CancellationToken, DateOnly, DateTimeOffset, Func, HttpClient, JsonElement (+11 more)
+Cohesion: 0.06
+Nodes (41): Clock, CancellationToken, DateOnly, DateTimeOffset, Func, HttpRequestMessage, HttpResponseMessage, List (+33 more)
 
 ### Community 3 - "FindReplacePanel"
 Cohesion: 0.05
 Nodes (42): CloseButton, CrossTabButton, InSelectionCheck, MatchCaseToggle, MatchCountText, NextButton, PrevButton, RegexToggle (+34 more)
 
-### Community 4 - ".RunSelfTestAsync"
-Cohesion: 0.05
-Nodes (35): Options, IReadOnlyList, IReadOnlyList, List, Evaluator, CancellationToken, decimal, HttpClient (+27 more)
+### Community 4 - ".Main"
+Cohesion: 0.06
+Nodes (34): Options, IReadOnlyList, List, Evaluator, CancellationToken, decimal, HttpClient, HttpResponseMessage (+26 more)
 
 ### Community 5 - "Window"
 Cohesion: 0.06
-Nodes (56): EffectiveFromText, InputDeltaText, InputText, OutputDeltaText, OutputText, SourceText, StatusText, ApiLogRetentionBox (+48 more)
+Nodes (57): EffectiveFromText, InputDeltaText, InputText, OutputDeltaText, OutputText, SourceText, StatusText, ApiLogRetentionBox (+49 more)
 
 ### Community 6 - "NativeMethods"
-Cohesion: 0.11
-Nodes (20): APPBARDATA, DllImport, int, IntPtr, APPBARDATA, MONITORINFO, NativeMethods, POINT (+12 more)
+Cohesion: 0.07
+Nodes (27): APPBARDATA, DllImport, HwndSource, int, IntPtr, APPBARDATA, MONITORINFO, NativeMethods (+19 more)
 
 ### Community 7 - "Window"
 Cohesion: 0.06
-Nodes (36): BoolToCollapsed, BoolToVisible, IsActive, IsEditing, Title, AcceptAllProposalsButton, AcceptProposalButton, ActiveMarker (+28 more)
+Nodes (34): BoolToCollapsed, BoolToVisible, IsActive, IsEditing, Title, AcceptAllProposalsButton, AcceptProposalButton, FindPanel (+26 more)
 
 ### Community 8 - "ProofreadingInlineDiffGenerator"
 Cohesion: 0.06
 Nodes (33): CultureSpecificCharacterBufferRange, bool, Brush, double, DrawingContext, IReadOnlyList, Point, TextAlignment (+25 more)
 
 ### Community 9 - "capture-docs-screenshots.py"
-Cohesion: 0.09
-Nodes (43): activate_first_tab(), AppSession, BITMAPINFO, BITMAPINFOHEADER, build_tabs(), _capture(), capture_window(), click() (+35 more)
+Cohesion: 0.08
+Nodes (46): activate_first_tab(), app_is_running(), AppSession, BITMAPINFO, BITMAPINFOHEADER, build_tabs(), _capture(), capture_window() (+38 more)
 
 ### Community 10 - "GeminiProofreadingClientValidation"
 Cohesion: 0.22
 Nodes (10): CancellationToken, Func, HttpClient, HttpRequestMessage, HttpResponseMessage, string, Task, GeminiProofreadingClientValidation (+2 more)
 
-### Community 11 - "CrossTabSearchWindow"
-Cohesion: 0.16
-Nodes (11): JumpButton, ResultsList, SearchButton, TermBox, KeyEventArgs, MouseButtonEventArgs, RoutedEventArgs, CrossTabSearchWindow (+3 more)
+### Community 11 - "BillingCsvExporterValidation"
+Cohesion: 0.15
+Nodes (8): Encoding, List, BillingCsvExporterValidation, DateTimeOffset, IEnumerable, IReadOnlyList, string, BillingCsvExporter
 
 ### Community 12 - "MissedCorrectionDialog"
 Cohesion: 0.08
 Nodes (20): MissedCorrectionActionValidation, int, MissedCorrectionAction, MissedCorrectionKind, MissedCorrectionPreview, TextDecorationCollection, CorrectedBox, ExecuteButton (+12 more)
 
-### Community 13 - ".Add"
-Cohesion: 0.14
+### Community 13 - ".BuildRows"
+Cohesion: 0.15
 Nodes (12): Day1, Day2, MidDay, OldDay, DateOnly, DateTimeOffset, IReadOnlyList, BillingSeedCommand (+4 more)
 
 ### Community 14 - "DocumentDiff"
-Cohesion: 0.14
-Nodes (16): DiffKind, DiffOperation, Dictionary, double, IEnumerable, int, IReadOnlyDictionary, IReadOnlyList (+8 more)
+Cohesion: 0.08
+Nodes (26): CurrentPartStart, DiffKind, DiffOperation, IReadOnlyList, JsonSerializerOptions, DocumentDiffValidation, Dictionary, double (+18 more)
 
 ### Community 15 - "ApiCallRepository"
-Cohesion: 0.10
-Nodes (26): DailyKey, DailyTotals, InClause, IReadOnlyCollection, Name, Parameters, SeedRow, DateOnly (+18 more)
+Cohesion: 0.14
+Nodes (21): DailyKey, DailyTotals, IReadOnlyCollection, SeedRow, DateOnly, DateTimeOffset, Dictionary, Func (+13 more)
 
 ### Community 16 - "MainWindow"
-Cohesion: 0.08
-Nodes (14): DataObjectSettingDataEventArgs, bool, Brush, DateOnly, DateTime, DateTimeOffset, decimal, DispatcherTimer (+6 more)
+Cohesion: 0.07
+Nodes (15): DataObjectSettingDataEventArgs, EventArgs, bool, Brush, CancelEventArgs, DateTime, decimal, DispatcherTimer (+7 more)
 
 ### Community 17 - "ApiProvider"
 Cohesion: 0.14
-Nodes (12): Action, byte, ApiKeySource, ApiProvider, CredentialServiceValidation, Func, int, string (+4 more)
+Nodes (11): byte, ApiKeySource, ApiProvider, CredentialServiceValidation, Func, int, string, CredentialService (+3 more)
 
 ### Community 18 - "StyleGuideRepository"
 Cohesion: 0.10
-Nodes (13): DateTimeOffset, Func, IReadOnlyList, SqliteDataReader, string, StyleGuide, StyleGuideRepository, StyleGuideActivateButton (+5 more)
+Nodes (14): StyleGuideRepositoryValidation, DateTimeOffset, Func, IReadOnlyList, SqliteDataReader, string, StyleGuide, StyleGuideRepository (+6 more)
 
 ### Community 19 - "ResourceDictionary"
 Cohesion: 0.07
 Nodes (32): IsDropDownOpen, View.Columns, Arrow, Bd, Box, Check, Checked, CheckStates (+24 more)
 
 ### Community 20 - "ProofreadingClientBase"
-Cohesion: 0.13
-Nodes (15): bool, CancellationToken, Func, HttpClient, HttpRequestMessage, HttpResponseMessage, HttpStatusCode, IReadOnlyList (+7 more)
+Cohesion: 0.14
+Nodes (14): bool, CancellationToken, Func, HttpClient, HttpRequestMessage, HttpResponseMessage, HttpStatusCode, JsonElement (+6 more)
 
 ### Community 21 - "state_manager.py"
 Cohesion: 0.28
 Nodes (31): Any, ArgumentParser, atomic_write_state(), build_parser(), cmd_add_approval(), cmd_add_plan(), cmd_add_report(), cmd_add_review() (+23 more)
 
-### Community 22 - "TabRepository"
-Cohesion: 0.28
-Nodes (3): IEnumerable, string, TabRepository
-
 ### Community 23 - "ProofreadingClientRouter"
-Cohesion: 0.16
-Nodes (10): CancellationToken, IReadOnlyList, Task, CancellationToken, Dictionary, IReadOnlyList, string, Task (+2 more)
+Cohesion: 0.12
+Nodes (21): Exception, CancellationToken, HttpStatusCode, IReadOnlyList, Task, TimeSpan, GeminiAlternativeResult, GeminiClientError (+13 more)
 
-### Community 24 - "RoutedEventArgs"
-Cohesion: 0.13
-Nodes (13): PricingHistoryRow, CancelButton, DeleteStoredKeyButton, OpenFolderButton, PricingAddButton, PricingDeleteButton, PricingEditButton, PricingRestoreButton (+5 more)
+### Community 24 - "ApiUsageDisplayCost"
+Cohesion: 0.40
+Nodes (4): ApiUsageDisplayFormatterValidation, IReadOnlyList, ApiUsageDisplayCost, ApiUsageDisplayFormatter
 
-### Community 25 - ".OnStartup"
-Cohesion: 0.10
-Nodes (6): EventArgs, string, StartupRegistration, StartupEventArgs, CancelEventArgs, KeyEventArgs
+### Community 25 - ".RefreshUsageDisplay"
+Cohesion: 0.09
+Nodes (10): IReadOnlyList, string, StartupRegistration, IReadOnlyList, TabSaveFailure, UsageLimitState, StartupEventArgs, DateOnly (+2 more)
 
 ### Community 26 - "SettingsWindow"
-Cohesion: 0.08
-Nodes (16): ComboBox, TextBlock, TextBox, CopyHideHotkeyBox, OkButton, PricingModelCombo, ToggleHotkeyBox, bool (+8 more)
+Cohesion: 0.09
+Nodes (17): ComboBox, PricingHistoryRow, TextBlock, PricingAddButton, PricingEditButton, PricingModelCombo, PricingRestoreButton, bool (+9 more)
 
 ### Community 27 - "PricingHistoryChart"
-Cohesion: 0.12
+Cohesion: 0.13
 Nodes (17): Brush, DateOnly, double, DrawingContext, Func, IEnumerable, IReadOnlyList, Point (+9 more)
 
-### Community 28 - "ProofreadingProposal"
-Cohesion: 0.13
-Nodes (10): DocumentChangeEventArgs, TextAnchor, ProofreadingProposal, ProposalState, bool, IReadOnlyList, List, TextDocument (+2 more)
+### Community 28 - ".ConfirmCredentialSourceIfNeeded"
+Cohesion: 0.31
+Nodes (4): Action, ApiKeySource, ApiProvider, IEnumerable
 
 ### Community 29 - "ProofreadingModelCatalog"
-Cohesion: 0.13
-Nodes (8): Automatic, Manual, Dictionary, string, TimeSpan, ProofreadingModelCatalog, ApiKeyBox, PasswordBox
+Cohesion: 0.16
+Nodes (8): Automatic, Manual, Dictionary, IReadOnlyList, string, TimeSpan, ProofreadingModelCatalog, ProofreadingModelCatalogValidation
 
-### Community 30 - ".StartOfMonth"
-Cohesion: 0.27
-Nodes (4): DateTimeOffset, UsagePeriodValidation, DateTimeOffset, UsagePeriod
+### Community 30 - "ProofreadingProposal"
+Cohesion: 0.12
+Nodes (10): DocumentChangeEventArgs, TextAnchor, ProofreadingProposal, ProposalState, bool, IReadOnlyList, List, TextDocument (+2 more)
 
 ### Community 31 - ".GetCachedRate"
 Cohesion: 0.12
 Nodes (10): ApiUsageCost, FailedApiCallRecord, RecordedApiCall, Exception, IReadOnlyList, TimeSpan, ApiUsageCost, FailedApiCallRecord (+2 more)
 
 ### Community 32 - ".RunBenchmarkAsync"
-Cohesion: 0.05
-Nodes (39): BenchmarkOptions, CostUsd, Known, DateOnly, IReadOnlyList, CatalogPricingHistoryEntry, EffectiveModelPricing, ModelDescriptor (+31 more)
+Cohesion: 0.06
+Nodes (37): BenchmarkOptions, CostUsd, Known, DateOnly, CatalogPricingHistoryEntry, EffectiveModelPricing, ModelDescriptor, PromotionalModelPricing (+29 more)
 
 ### Community 33 - ".Select"
-Cohesion: 0.08
-Nodes (20): FewShotSelectorValidation, IReadOnlyList, string, Task, OpenAiCacheProbeCommand, ProofreadingPromptV3Validation, DateTimeOffset, HashSet (+12 more)
+Cohesion: 0.17
+Nodes (10): FewShotSelectorValidation, DateTimeOffset, HashSet, int, IReadOnlyList, FewShotCandidate, FewShotSelection, FewShotSelector (+2 more)
 
 ### Community 34 - "UsageLimitServiceValidation"
-Cohesion: 0.15
-Nodes (7): DateTimeOffset, UsageLimitServiceValidation, DateTimeOffset, string, UsageLimitNotificationTracker, UsageLimitService, UsageLimitState
+Cohesion: 0.18
+Nodes (6): DateTimeOffset, UsageLimitServiceValidation, DateTimeOffset, string, UsageLimitNotificationTracker, UsageLimitService
 
-### Community 35 - "BillingCsvExporterValidation"
-Cohesion: 0.14
-Nodes (8): Encoding, List, BillingCsvExporterValidation, DateTimeOffset, IEnumerable, IReadOnlyList, string, BillingCsvExporter
+### Community 35 - ".FormatUsd"
+Cohesion: 0.15
+Nodes (10): StatusBarCurrencyFormat, DateTimeOffset, BillingHistoryEmptyStateValidation, ApiCallLog, ApiCallUsageSummary, StatusBarDisplayOptions, StatusBarUsageFormatter, DateOnly (+2 more)
 
 ### Community 36 - "ProviderCompletionGuardValidation"
 Cohesion: 0.13
@@ -356,89 +349,85 @@ Nodes (18): CalledDateText, CompletableCountText, RateText, UncompletableCountTe
 Cohesion: 0.16
 Nodes (8): ResultsList, KeyEventArgs, MouseButtonEventArgs, ObservableCollection, RoutedEventArgs, SelectionChangedEventArgs, TrashWindow, ListView
 
-### Community 39 - "FxRateCompletionValidation"
-Cohesion: 0.24
-Nodes (6): Clock, DateOnly, DateTimeOffset, Task, Clock, FxRateCompletionValidation
+### Community 39 - ".Read"
+Cohesion: 0.22
+Nodes (5): int, DatabaseMigrationValidation, Func, SqliteDataReader, SqliteCommand
 
 ### Community 40 - "Window"
-Cohesion: 0.07
-Nodes (35): CalledAt, DiscardedCount, Duration, ErrorMessage, Jpy, Model, OutputTokens, PromptTokens (+27 more)
-
-### Community 41 - "JpScratch.PromptValidation"
-Cohesion: 0.09
-Nodes (6): JpScratch.PromptValidation, JpScratch.Proofreading, ApiUsageDisplayFormatterValidation, HideSuppressionCounterValidation, ProofreadingModelCatalogValidation, StyleGuideRepositoryValidation
+Cohesion: 0.10
+Nodes (20): CalledAt, DiscardedCount, Duration, ErrorMessage, Jpy, Model, OutputTokens, PromptTokens (+12 more)
 
 ### Community 42 - "Database"
-Cohesion: 0.10
-Nodes (15): IDisposable, Lock, int, DatabaseMigrationValidation, string, TestStore, string, TestStore (+7 more)
+Cohesion: 0.18
+Nodes (10): IDisposable, Lock, string, TestStore, string, TestStore, bool, Database (+2 more)
 
-### Community 43 - "ScratchTab"
-Cohesion: 0.10
-Nodes (13): INotifyPropertyChanged, bool, DateTime, string, TextDocument, ScratchTab, bool, DispatcherTimer (+5 more)
+### Community 43 - "TabManager"
+Cohesion: 0.13
+Nodes (8): INotifyPropertyChanged, bool, DispatcherTimer, int, List, ObservableCollection, TimeSpan, TabManager
 
 ### Community 44 - "screenshot-main.py"
 Cohesion: 0.15
 Nodes (19): BITMAPINFO, BITMAPINFOHEADER, capture_bitblt(), capture_print_window(), capture_window(), find_window(), is_blank(), main() (+11 more)
 
-### Community 45 - ".FormatUsd"
-Cohesion: 0.16
-Nodes (8): StatusBarCurrencyFormat, ApiCallLog, ApiCallUsageSummary, StatusBarDisplayOptions, StatusBarUsageFormatter, DateOnly, UsageFormatting, BillingHistoryDisplayRow
-
 ### Community 48 - "App"
-Cohesion: 0.14
-Nodes (11): Application, ApiKeySource, ApiProvider, bool, IEnumerable, IReadOnlyList, App, DispatcherUnhandledExceptionEventArgs (+3 more)
+Cohesion: 0.19
+Nodes (8): Application, bool, Exception, IReadOnlyList, App, DispatcherUnhandledExceptionEventArgs, ProofreadingClientRouter, UnhandledExceptionEventArgs
 
-### Community 49 - ".TestDeleteAllTrash"
-Cohesion: 0.22
-Nodes (5): TrashRepositoryValidation, DateTime, List, DateTime, TrashListItem
+### Community 49 - "TabRepository"
+Cohesion: 0.26
+Nodes (5): TrashRepositoryValidation, DateTime, List, string, TabRepository
 
 ### Community 50 - "ComboBox"
 Cohesion: 0.15
 Nodes (12): AutoProofreadingModelCombo, CredentialSourceCombo, FontCombo, ManualProofreadingModelCombo, PositionCombo, PricingHistoryList, StatusBarCurrencyCombo, StyleGuideHistoryCombo (+4 more)
 
-### Community 51 - ".EnsureTodayAsync"
-Cohesion: 0.27
-Nodes (9): CancellationToken, DateOnly, DateTimeOffset, Func, HttpRequestMessage, HttpResponseMessage, Task, FxRateServiceValidation (+1 more)
+### Community 51 - ".StartOfMonth"
+Cohesion: 0.31
+Nodes (4): DateTimeOffset, UsagePeriodValidation, DateTimeOffset, UsagePeriod
 
 ### Community 52 - "SingleInstance"
-Cohesion: 0.17
-Nodes (8): ActivateEventName, EventWaitHandle, Action, string, SingleInstance, Mutex, MutexName, RegisteredWaitHandle
+Cohesion: 0.12
+Nodes (11): ActivateEventName, EventWaitHandle, Action, string, SingleInstance, Mutex, MutexName, int (+3 more)
 
 ### Community 53 - "AppSettings"
-Cohesion: 0.24
-Nodes (6): decimal, IReadOnlyList, AppSettings, DispatcherTimer, JsonSerializerOptions, SettingsService
+Cohesion: 0.15
+Nodes (7): decimal, IReadOnlyList, AppSettings, WindowPositionMode, DispatcherTimer, JsonSerializerOptions, SettingsService
 
 ### Community 54 - "TrayIconService"
 Cohesion: 0.23
 Nodes (7): Icon, NotifyIcon, Dictionary, string, TrayIconService, TrayIconState, TrayIconStateResolver
 
-### Community 55 - ".Create"
-Cohesion: 0.25
-Nodes (4): JsonSerializerOptions, DocumentDiffValidation, DocumentChange, DocumentDiffResult
+### Community 55 - "RoutedEventArgs"
+Cohesion: 0.15
+Nodes (9): ApiKeyBox, CancelButton, DeleteStoredKeyButton, OkButton, OpenFolderButton, PricingDeleteButton, RoutedEventArgs, Button (+1 more)
 
-### Community 56 - ".CollectHits"
-Cohesion: 0.18
-Nodes (8): LineNumber, End, int, Start, CrossTabSearchPreview, List, Regex, CrossTabHit
+### Community 56 - "Japanese Commit Message"
+Cohesion: 0.33
+Nodes (5): Determine the scope, Japanese Commit Message, Propose and confirm, Safety boundaries, Stage, verify, and commit
 
 ### Community 57 - "build-tray-icons.py"
 Cohesion: 0.17
 Nodes (12): badge_triangle(), build(), draw_bar(), encode_dib(), main(), Image, 32bpp の DIB エントリ（BITMAPINFOHEADER + BGRA + AND マスク）を作る。 Pillow の ICO…, サイズ構成と「256px だけ PNG」を確認する。ここが崩れると NotifyIcon が絵を出せない。 (+4 more)
 
 ### Community 58 - "plot-model-benchmark.py"
-Cohesion: 0.25
-Nodes (15): draw_bars(), draw_scatter(), latest_report(), load(), main(), markdown_table(), pareto(), Path (+7 more)
+Cohesion: 0.20
+Nodes (19): chart_name(), default_reports(), draw_bars(), draw_scatter(), load(), main(), markdown_table(), pareto() (+11 more)
+
+### Community 59 - "Q: model-benchmark-barsなども更新してください。"
+Cohesion: 0.40
+Nodes (4): Answer, Outcome, Q: model-benchmark-barsなども更新してください。, Source Nodes
 
 ### Community 60 - "Window"
 Cohesion: 0.15
 Nodes (12): CostNoticeText, DescriptionText, ReasonBox, ReasonSuggestionBox, Window, RoutedEventArgs, SelectionChangedEventArgs, ProofreadingReasonDialog (+4 more)
 
 ### Community 61 - "JpScratch.Editor"
-Cohesion: 0.18
-Nodes (6): char, JpScratch.Editor, DocumentColorizingTransformer, DocumentLine, Brush, IdeographicSpaceColorizer
+Cohesion: 0.14
+Nodes (7): char, JpScratch.Editor, JpScratch.Controls, DocumentColorizingTransformer, DocumentLine, Brush, IdeographicSpaceColorizer
 
-### Community 62 - ".RunSelfTests"
-Cohesion: 0.24
-Nodes (4): Action, DateTimeOffset, ApiCallRepositoryValidation, StoredApiCall
+### Community 62 - ".RunSelfTestAsync"
+Cohesion: 0.18
+Nodes (6): Action, DateTimeOffset, ApiCallRepositoryValidation, StoredApiCall, decimal, CurrencyConversionValidation
 
 ### Community 63 - ".RunCompactionSelfTests"
 Cohesion: 0.23
@@ -449,23 +438,27 @@ Cohesion: 0.28
 Nodes (8): CancellationToken, Func, HttpRequestMessage, HttpResponseMessage, string, Task, OpenAiProofreadingClientValidation, StubHandler
 
 ### Community 65 - "ProofreadingSchedule"
-Cohesion: 0.24
+Cohesion: 0.27
 Nodes (5): ProofreadingScheduleValidation, DateTimeOffset, Dictionary, TimeSpan, ProofreadingSchedule
+
+### Community 66 - "FewShotExample"
+Cohesion: 0.17
+Nodes (7): ProofreadingPromptV3Validation, FewShotExample, IReadOnlyList, IReadOnlyList, Regex, string, ProofreadingPrompt
 
 ### Community 67 - "Window"
 Cohesion: 0.18
 Nodes (14): DescriptionText, EffectiveDatePicker, InputPriceBox, InputPriceRow, InputUnitText, OutputPriceBox, OutputPriceRow, OutputUnitText (+6 more)
 
-### Community 69 - "ApiUsageDisplayCost"
-Cohesion: 0.45
-Nodes (3): IReadOnlyList, ApiUsageDisplayCost, ApiUsageDisplayFormatter
+### Community 69 - "ScratchTab"
+Cohesion: 0.15
+Nodes (6): bool, DateTime, string, TextDocument, ScratchTab, IEnumerable
 
 ### Community 70 - ".FormatInclusive"
-Cohesion: 0.21
+Cohesion: 0.23
 Nodes (7): DateTimeOffset, CustomDateRangeParserValidation, DateTimeOffset, From, To, CustomDateRangeParser, Result
 
 ### Community 71 - "ReactionRepository"
-Cohesion: 0.23
+Cohesion: 0.25
 Nodes (6): FewShotCandidate, ReactionRepositoryValidation, IReadOnlyList, ProofreadingReaction, ReactionRepository, RejectionRateBucket
 
 ### Community 72 - "AnthropicProofreadingClient"
@@ -480,13 +473,13 @@ Nodes (8): Func, HttpClient, HttpRequestMessage, int, JsonElement, string, Uri, 
 Cohesion: 0.27
 Nodes (12): class_name(), click_settings_button(), click_trash_button(), close_window(), dialog_details(), error_dialogs(), find_window(), main() (+4 more)
 
-### Community 75 - "ThemeService"
-Cohesion: 0.24
-Nodes (6): AppTheme, WindowPositionMode, ResourceDictionary, string, ThemeService, IntPtr
+### Community 75 - ".HotkeyBox_LostFocus"
+Cohesion: 0.38
+Nodes (4): TextBox, CopyHideHotkeyBox, ToggleHotkeyBox, KeyEventArgs
 
 ### Community 76 - "BillingHistoryWindow"
-Cohesion: 0.16
-Nodes (9): bool, DateTimeOffset, From, List, RoutedEventArgs, SelectionChangedEventArgs, To, BillingHistoryWindow (+1 more)
+Cohesion: 0.30
+Nodes (6): bool, DateTimeOffset, From, To, BillingHistoryWindow, PeriodOption
 
 ### Community 77 - "Window"
 Cohesion: 0.18
@@ -497,11 +490,11 @@ Cohesion: 0.22
 Nodes (6): Add-OrSetProperty(), Assert-State(), Ensure-ArrayProperty(), Get-IsoNow(), Read-State(), Write-State()
 
 ### Community 79 - "GeminiProofreadingClient"
-Cohesion: 0.18
+Cohesion: 0.16
 Nodes (8): Func, HttpClient, HttpRequestMessage, int, JsonElement, string, Uri, GeminiProofreadingClient
 
 ### Community 80 - "OpenAiProofreadingClient"
-Cohesion: 0.15
+Cohesion: 0.16
 Nodes (8): Func, HttpClient, HttpRequestMessage, int, JsonElement, string, Uri, OpenAiProofreadingClient
 
 ### Community 81 - "Window"
@@ -513,24 +506,16 @@ Cohesion: 0.17
 Nodes (4): App.xaml.cs, Graphify Integration, PromptValidation, ProofreadingModelCatalog
 
 ### Community 83 - "TrayIconStateValidation"
-Cohesion: 0.26
+Cohesion: 0.29
 Nodes (4): IsPng, IEnumerable, Size, TrayIconStateValidation
 
 ### Community 84 - "AppPaths"
-Cohesion: 0.24
+Cohesion: 0.27
 Nodes (3): string, AppPaths, AppPathsValidation
 
-### Community 85 - "JpScratch.Services"
-Cohesion: 0.14
-Nodes (5): JpScratch.Views, JpScratch.Models, JpScratch.Services, JpScratch, JpScratch.Infrastructure
-
-### Community 86 - "Editor"
-Cohesion: 0.20
-Nodes (6): ContextMenuEventArgs, MouseWheelEventArgs, Editor, TabScroller, ScrollViewer, TextEditor
-
-### Community 87 - "HotkeyService"
-Cohesion: 0.26
-Nodes (6): HwndSource, int, IntPtr, IReadOnlyList, List, HotkeyService
+### Community 86 - "TabRoot"
+Cohesion: 0.10
+Nodes (13): ContextMenuEventArgs, MouseEventArgs, MouseWheelEventArgs, ActiveMarker, Editor, ProofreadingPanel, TabRoot, TabScroller (+5 more)
 
 ### Community 88 - "settings.json"
 Cohesion: 0.22
@@ -544,20 +529,12 @@ Nodes (9): BFS Traversal Mode, DFS Traversal Mode, graphify explain, graphify pa
 Cohesion: 0.33
 Nodes (5): HashSet, IEnumerable, IReadOnlyList, FontResolver, FontFamily
 
-### Community 91 - "Window"
-Cohesion: 0.22
-Nodes (10): LineNumber, Preview, TabTitle, IncludeTrashCheck, MatchCaseCheck, RegexCheck, SummaryText, Window (+2 more)
-
-### Community 92 - "TabRoot"
-Cohesion: 0.24
-Nodes (4): MouseEventArgs, TabRoot, FrameworkElement, MouseButtonEventArgs
-
-### Community 93 - "GeminiUsage"
-Cohesion: 0.36
-Nodes (10): Exception, HttpStatusCode, TimeSpan, GeminiAlternativeResult, GeminiClientError, GeminiClientException, GeminiProofreadingResult, GeminiRawTextResult (+2 more)
+### Community 91 - "CrossTabSearchWindow"
+Cohesion: 0.06
+Nodes (30): LineNumber, Preview, TabTitle, LineNumber, CrossTabSearchPreviewValidation, End, int, Start (+22 more)
 
 ### Community 94 - "UsageAccumulator"
-Cohesion: 0.38
+Cohesion: 0.32
 Nodes (6): long, bool, decimal, HashSet, DailyTotals, UsageAccumulator
 
 ### Community 95 - "3.5.1 校正 API の共通契約"
@@ -565,8 +542,8 @@ Cohesion: 0.20
 Nodes (10): 3.5.1 校正 API の共通契約, Anthropic Messages API, Gemini API, OpenAI Responses API, Preferred Networks PLaMo API（OpenAI 互換）, タイムアウトと再試行, 完了判定（データ保全上の必須要件）, 思考・推論の設定 (+2 more)
 
 ### Community 96 - "要件定義書 — 常駐型 日本語スクラッチパッド（仮称: JP Scratch）"
-Cohesion: 0.22
-Nodes (8): 2.1 非機能要件, 2. 技術スタック, 4.1 SQLite スキーマ, 4. データモデル, 6. 想定外・非対象（v3 まで）, 7. リスクと対策, 8. 決定事項の一覧（本書の根拠）, 要件定義書 — 常駐型 日本語スクラッチパッド（仮称: JP Scratch）
+Cohesion: 0.17
+Nodes (12): 1.1 解決したい問題, 1.2 目的, 1.3 設計原則, 1. 背景と目的, 2.1 非機能要件, 2. 技術スタック, 4.1 SQLite スキーマ, 4. データモデル (+4 more)
 
 ### Community 97 - "InverseBooleanToVisibilityConverter"
 Cohesion: 0.38
@@ -580,9 +557,9 @@ Nodes (4): ICommand, Action, Func, RelayCommand
 Cohesion: 0.33
 Nodes (6): PromptValidation, net10.0-windows, AvalonEdit (6.3.1.120), Microsoft.Data.Sqlite (10.0.10), SQLitePCLRaw.bundle_e_sqlite3 (2.1.12), Microsoft.NET.Sdk
 
-### Community 100 - "HotkeySpec"
-Cohesion: 0.47
-Nodes (3): Key, HotkeySpec, ModifierKeys
+### Community 101 - "HideSuppressionCounter"
+Cohesion: 0.29
+Nodes (3): HideSuppressionCounterValidation, int, HideSuppressionCounter
 
 ### Community 102 - "PricingHistoryEditDialog"
 Cohesion: 0.38
@@ -596,10 +573,6 @@ Nodes (6): net10.0-windows, jp-scratch, AvalonEdit (6.3.1.120), Microsoft.Data.S
 Cohesion: 0.33
 Nodes (6): Algorithm Validation (2026-07-29), DocumentDiff Algorithm, full-rewrite-safe Prompt, Prompt Validation App README, Initial Prompt Validation, Prompt Comparison Round 2
 
-### Community 105 - ".OnExit"
-Cohesion: 0.25
-Nodes (3): Exception, ExitEventArgs, UnhandledExceptionEventArgs
-
 ### Community 106 - "sync-config.ps1"
 Cohesion: 0.60
 Nodes (3): Ensure-ObjectProp(), Get-Prop(), Set-Prop()
@@ -612,17 +585,17 @@ Nodes (5): Codex Loop, Gemini 3.5 Flash-Lite, GPT-5.6 Luna, JP Scratch, Proofrea
 Cohesion: 0.40
 Nodes (5): Settings UI - API & Billing, Settings UI - Editor, Settings UI - General, Settings UI - Learning, JP Scratch Settings
 
-### Community 111 - "StubHandler"
-Cohesion: 0.29
-Nodes (7): CancellationToken, Func, HttpRequestMessage, HttpResponseMessage, List, Uri, StubHandler
+### Community 111 - ".BuildIdInClause"
+Cohesion: 0.33
+Nodes (5): InClause, Name, Parameters, IReadOnlyList, Value
 
 ### Community 113 - "3.3 校正機能"
 Cohesion: 0.29
 Nodes (7): 3.3.1 実行トリガー, 3.3.2 送信範囲, 3.3.3 校正対象, 3.3.4 提案の表示, 3.3.5 提案位置の解決（重要な設計上の論点）, 3.3.6 リアクション, 3.3 校正機能
 
-### Community 114 - "Model Benchmark (2026-08-06)"
-Cohesion: 0.50
-Nodes (4): Billing History UI, Model Benchmark Scatter Plot (Dark), Proofreading Settings UI, Model Benchmark (2026-08-06)
+### Community 114 - "Gemini 3.7 Flash 追補ベンチマーク（2026-08-21）"
+Cohesion: 0.18
+Nodes (9): Billing History UI, Model Benchmark Scatter Plot (Dark), Proofreading Settings UI, 2026-08-06計測との位置関係, Gemini 3.7 Flash 追補ベンチマーク（2026-08-21）, 実行条件, 文章別, 結果 (+1 more)
 
 ### Community 115 - "5. マイルストーン"
 Cohesion: 0.29
@@ -640,13 +613,9 @@ Nodes (3): graphify reference: add-watch, graphify.ingest.ingest, graphify.watch
 Cohesion: 0.67
 Nodes (3): Model Benchmark Bar Chart (Dark), Model Benchmark Scatter Plot, Model Performance Metrics
 
-### Community 121 - "SingleInstanceValidation"
-Cohesion: 0.40
-Nodes (3): int, string, SingleInstanceValidation
-
-### Community 126 - "3.1 常駐とウィンドウ制御"
-Cohesion: 0.40
-Nodes (5): 3.1.1 タスクトレイ, 3.1.2 表示位置とサイズ, 3.1.3 自動非表示と、隠すときの挙動, 3.1.4 グローバルホットキー, 3.1 常駐とウィンドウ制御
+### Community 126 - "3. 機能要件"
+Cohesion: 0.20
+Nodes (10): 3.1.1 タスクトレイ, 3.1.2 表示位置とサイズ, 3.1.3 自動非表示と、隠すときの挙動, 3.1.4 グローバルホットキー, 3.1 常駐とウィンドウ制御, 3.6.1 表示箇所, 3.6.2 課金履歴画面（実装済み。実機確認済み）, 3.6.3 課金ガード（実装済み。実機確認済み） (+2 more)
 
 ### Community 127 - "3.2 エディタ"
 Cohesion: 0.40
@@ -660,9 +629,9 @@ Nodes (5): 3.4.1 リアクション履歴の few-shot 同梱, 3.4.2 スタイル
 Cohesion: 0.40
 Nodes (5): 3.5.2 トークン数と料金, 3.5.3 為替レート（Frankfurter API）, 3.5.4 モデルの確認状況, 3.5.5 API キーの管理, 3.5 API 連携
 
-### Community 141 - "3. 機能要件"
-Cohesion: 0.40
-Nodes (5): 3.6.1 表示箇所, 3.6.2 課金履歴画面（実装済み。実機確認済み）, 3.6.3 課金ガード（実装済み。実機確認済み）, 3.6 コスト表示, 3. 機能要件
+### Community 141 - ".CustomRange_TextChanged"
+Cohesion: 0.50
+Nodes (4): CustomFromBox, CustomToBox, TextChangedEventArgs, TextBox
 
 ### Community 142 - "graphify reference: commit hook and native CLAUDE.md integration"
 Cohesion: 0.50
@@ -672,29 +641,45 @@ Nodes (3): For git commit hook, For native CLAUDE.md integration, graphify refer
 Cohesion: 0.50
 Nodes (3): For --cluster-only, For --update (incremental re-extraction), graphify reference: incremental update and cluster-only
 
-### Community 145 - "1. 背景と目的"
-Cohesion: 0.50
-Nodes (4): 1.1 解決したい問題, 1.2 目的, 1.3 設計原則, 1. 背景と目的
+### Community 144 - ".LoadHistory"
+Cohesion: 0.20
+Nodes (6): CompleteFxButton, ExportCsvButton, RefreshButton, List, RoutedEventArgs, Button
+
+### Community 145 - "ThemeService"
+Cohesion: 0.42
+Nodes (4): AppTheme, ResourceDictionary, string, ThemeService
+
+### Community 150 - ".TriggerCheck_Changed"
+Cohesion: 0.53
+Nodes (5): TriggerAutoCheck, TriggerManualCheck, TriggerRealternativeCheck, TriggerStyleGuideCheck, CheckBox
+
+### Community 151 - ".RunAsync"
+Cohesion: 0.40
+Nodes (4): IReadOnlyList, string, Task, OpenAiCacheProbeCommand
+
+### Community 152 - ".PeriodCombo_SelectionChanged"
+Cohesion: 0.40
+Nodes (3): PeriodCombo, SelectionChangedEventArgs, ComboBox
 
 ## Knowledge Gaps
-- **193 isolated node(s):** `sync-config.sh script`, `$schema`, `model`, `advisorModel`, `mcp__codex__*` (+188 more)
+- **203 isolated node(s):** `sync-config.sh script`, `$schema`, `model`, `advisorModel`, `mcp__codex__*` (+198 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **27 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `MainWindow` connect `MainWindow` to `PricingService`, `FxRateService`, `NativeMethods`, `Window`, `ProofreadingInlineDiffGenerator`, `CrossTabSearchWindow`, `ApiCallRepository`, `ApiProvider`, `StyleGuideRepository`, `TabRepository`, `.OnStartup`, `ProofreadingProposal`, `.GetCachedRate`, `.RunBenchmarkAsync`, `UsageLimitServiceValidation`, `TrashWindow`, `FxRateCompletionValidation`, `ScratchTab`, `.FormatUsd`, `.RunProofreadingAsync`, `App`, `AppSettings`, `TrayIconService`, `.SetTransientStatus`, `Window`, `JpScratch.Editor`, `ProofreadingSchedule`, `ReactionRepository`, `ThemeService`, `BillingHistoryWindow`, `JpScratch.Services`, `Editor`, `HotkeyService`, `TabRoot`, `HideSuppressionCounter`?**
-  _High betweenness centrality (0.249) - this node is a cross-community bridge._
-- **Why does `SettingsWindow` connect `SettingsWindow` to `PricingService`, `Window`, `ReactionRepository`, `ApiProvider`, `StyleGuideRepository`, `ComboBox`, `JpScratch.Services`, `AppSettings`, `RoutedEventArgs`, `Window`, `ProofreadingModelCatalog`?**
-  _High betweenness centrality (0.111) - this node is a cross-community bridge._
-- **Why does `JpScratch.Services` connect `JpScratch.Services` to `PricingService`, `FxRateService`, `MissedCorrectionDialog`, `.Add`, `ApiCallRepository`, `BillingHistoryEmptyStateValidation.cs`, `StyleGuideRepository`, `.OnStartup`, `.StartOfMonth`, `.RunBenchmarkAsync`, `.Select`, `UsageLimitServiceValidation`, `BillingCsvExporterValidation`, `JpScratch.PromptValidation`, `Database`, `.FormatUsd`, `SettingsFieldFormattingValidation`, `TrayIconService`, `.CollectHits`, `.RunSelfTests`, `.RunCompactionSelfTests`, `ApiUsageDisplayCost`, `.FormatInclusive`, `ReactionRepository`, `CLAUDE.md`, `TrayIconStateValidation`, `HideSuppressionCounter`, `CrossTabSearchPreviewValidation`, `CurrencyConversionValidation`?**
-  _High betweenness centrality (0.083) - this node is a cross-community bridge._
+- **Why does `MainWindow` connect `MainWindow` to `PricingService`, `FxRateService`, `NativeMethods`, `Window`, `ProofreadingInlineDiffGenerator`, `ApiCallRepository`, `ApiProvider`, `StyleGuideRepository`, `ThemeService`, `ProofreadingClientRouter`, `.RefreshUsageDisplay`, `ProofreadingProposal`, `.GetCachedRate`, `UsageLimitServiceValidation`, `.FormatUsd`, `TrashWindow`, `TabManager`, `.RunProofreadingAsync`, `App`, `TabRepository`, `AppSettings`, `TrayIconService`, `Window`, `JpScratch.Editor`, `ProofreadingSchedule`, `ScratchTab`, `ReactionRepository`, `BillingHistoryWindow`, `TabRoot`, `CrossTabSearchWindow`, `HideSuppressionCounter`?**
+  _High betweenness centrality (0.250) - this node is a cross-community bridge._
+- **Why does `SettingsWindow` connect `SettingsWindow` to `PricingService`, `Window`, `ReactionRepository`, `.HotkeyBox_LostFocus`, `ApiProvider`, `StyleGuideRepository`, `ComboBox`, `AppSettings`, `RoutedEventArgs`, `Window`, `JpScratch.Editor`?**
+  _High betweenness centrality (0.110) - this node is a cross-community bridge._
+- **Why does `JpScratch.Services` connect `JpScratch.Services` to `PricingService`, `FxRateService`, `BillingCsvExporterValidation`, `MissedCorrectionDialog`, `ApiCallRepository`, `StyleGuideRepository`, `ApiUsageDisplayCost`, `.RefreshUsageDisplay`, `.RunBenchmarkAsync`, `.Select`, `UsageLimitServiceValidation`, `.FormatUsd`, `JpScratch.Models`, `SettingsFieldFormattingValidation`, `.StartOfMonth`, `TrayIconService`, `JpScratch.Editor`, `.RunCompactionSelfTests`, `JpScratch.Infrastructure`, `.FormatInclusive`, `ReactionRepository`, `CLAUDE.md`, `JpScratch.Views`, `CrossTabSearchWindow`, `HideSuppressionCounter`?**
+  _High betweenness centrality (0.081) - this node is a cross-community bridge._
 - **What connects `sync-config.sh script`, `$schema`, `model` to the rest of the system?**
-  _193 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _203 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `.CreateAutomaticPlan` be split into smaller, more focused modules?**
-  _Cohesion score 0.05737234652897304 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0645933014354067 - nodes in this community are weakly interconnected._
 - **Should `PricingService` be split into smaller, more focused modules?**
-  _Cohesion score 0.07106293285155074 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07314814814814814 - nodes in this community are weakly interconnected._
 - **Should `FxRateService` be split into smaller, more focused modules?**
-  _Cohesion score 0.09659090909090909 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.055642633228840124 - nodes in this community are weakly interconnected._
