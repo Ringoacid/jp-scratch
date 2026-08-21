@@ -1254,12 +1254,31 @@ public partial class MainWindow : Window
             {
                 stopwatch.Stop();
                 _apiErrorSticky = true;
-                FailedApiCallRecord failedRecord = RecordFailedApiCall(
-                    ApiCallTrigger.Realternative,
-                    ex,
-                    stopwatch.Elapsed);
-                failedApiCost = failedRecord.Cost;
-                failedAccountingError = failedRecord.AccountingError;
+                try
+                {
+                    FailedApiCallRecord failedRecord = RecordFailedApiCall(
+                        ApiCallTrigger.Realternative,
+                        ex,
+                        stopwatch.Elapsed);
+                    failedApiCost = failedRecord.Cost;
+                    failedAccountingError = failedRecord.AccountingError;
+                }
+                catch (Exception accountingException)
+                {
+                    // 記録処理が例外を投げても、下で再送出する API エラー自体の通知は止めない。
+                    // 包まないと記録側の例外が ex を置き換えて一般の catch へ落ち、ユーザーには
+                    // 本当の失敗理由の代わりに DB のエラーだけが出る（スタイルガイド生成と同じ扱いに揃える）。
+                    failedAccountingError = accountingException;
+                    // 記録が落ちた以上、使用量も料金も分からない。failedApiCost を null のままに
+                    // すると表示は「応答前のため」と言い切ってしまうが、実際には応答して課金
+                    // 済みかもしれない。$0 の確定にも応答前にも見せず、未確認として扱う。
+                    failedApiCost = new ApiUsageCost(
+                        0, 0, 0m, null,
+                        OriginalCurrency: null,
+                        OriginalCost: null,
+                        IsCostConfirmed: false,
+                        IsUsageKnown: false);
+                }
                 throw;
             }
 
