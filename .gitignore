@@ -35,3 +35,6 @@ graphify-out/graph.html
 
 graphify-out/.graphify_python
 graphify-out/.graphify_root
+
+# AIエージェント用の一時フォルダ
+.tmp/
