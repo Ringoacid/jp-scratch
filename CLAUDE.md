@@ -36,6 +36,7 @@ python tools/plot-model-benchmark.py   # 上の結果から README 用の比較�
 - `Services/` 設定・SQLite・資格情報・リアクション・タブ・ホットキー・配置・テーマ・トレイ
 - `Themes/` ライト / ダーク / 共通スタイル / `Views/` メインウィンドウ・設定・全タブ検索・ダイアログ
 - `installer/` WiX による MSI / `tools/` 煙テスト・アイコン生成スクリプト / `PromptValidation/` 検証アプリ
+- `docs/` 設計メモ（`proofreading-ux-fixes-plan.md`）・モデル仕様書・README 用画像（`requirements.md` はルートのまま）
 
 ## 重要な実装上の注意
 
