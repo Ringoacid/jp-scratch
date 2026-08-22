@@ -4,7 +4,7 @@ using JpScratch.Models;
 namespace JpScratch.Services;
 
 /// <summary>
-/// ステータスバー下段の課金表示オプション（proofreading-ux-fixes-plan.md §8）。
+/// ステータスバー下段の課金表示オプション（docs/proofreading-ux-fixes-plan.md §8）。
 /// <see cref="Models.AppSettings"/> の各項目をそのまま写した不変値。WPF 非依存で自己テストできる。
 /// </summary>
 internal readonly record struct StatusBarDisplayOptions(

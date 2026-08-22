@@ -79,7 +79,7 @@ internal static class ReactionRepositoryValidation
     }
 
     /// <summary>
-    /// 校正漏れ報告（proofreading-ux-fixes-plan.md §9）の保存と読み出しのテスト。
+    /// 校正漏れ報告（docs/proofreading-ux-fixes-plan.md §9）の保存と読み出しのテスト。
     /// 置換・挿入・削除の3種を記録し、reaction が missed_correction であること・
     /// 原文/修正後/左右文脈/理由が保存されること・few-shot候補として取得できること・
     /// 拒否率推移に含まれないことを確認する。

@@ -1,7 +1,7 @@
 namespace JpScratch.Services;
 
 /// <summary>
-/// 校正漏れ報告（proofreading-ux-fixes-plan.md §9）の操作種別。
+/// 校正漏れ報告（docs/proofreading-ux-fixes-plan.md §9）の操作種別。
 /// </summary>
 internal enum MissedCorrectionKind
 {
@@ -16,7 +16,7 @@ internal enum MissedCorrectionKind
 }
 
 /// <summary>
-/// 校正漏れ報告の操作種別判定（proofreading-ux-fixes-plan.md §9.3）。WPF 非依存の純粋関数。
+/// 校正漏れ報告の操作種別判定（docs/proofreading-ux-fixes-plan.md §9.3）。WPF 非依存の純粋関数。
 /// 置換・挿入・削除の判定と、実行ボタンの文言を固定する。
 /// </summary>
 internal static class MissedCorrectionAction

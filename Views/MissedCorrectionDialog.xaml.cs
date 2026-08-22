@@ -7,7 +7,7 @@ using JpScratch.Services;
 namespace JpScratch.Views;
 
 /// <summary>
-/// 校正漏れ報告（proofreading-ux-fixes-plan.md §9）の入力ダイアログ。
+/// 校正漏れ報告（docs/proofreading-ux-fixes-plan.md §9）の入力ダイアログ。
 /// 修正前（読み取り専用）・修正後・補足理由（任意）を入力し、操作種別に応じた実行ボタンを出す。
 /// 「修正後」の入力に応じて、前後の文脈を込めたプレビューをライブで描く:
 /// - 置換: 原文を赤の二重取り消し線、修正後を緑の太字で表示
@@ -144,7 +144,7 @@ public partial class MissedCorrectionDialog : Window
     }
 
     /// <summary>
-    /// エディタのインライン差分（proofreading-ux-fixes-plan.md §5）と同じ赤い二重取り消し線。
+    /// エディタのインライン差分（docs/proofreading-ux-fixes-plan.md §5）と同じ赤い二重取り消し線。
     /// 間隔 ±1.2px は実測値。PenOffsetUnit / PenThicknessUnit は Pixel 固定
     /// （FontRecommended のままにするとフォント推奨単位で解釈され線が外へ飛ぶ）。
     /// </summary>

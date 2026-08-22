@@ -4,7 +4,7 @@ using JpScratch.Services;
 namespace JpScratch.PromptValidation;
 
 /// <summary>
-/// ステータスバー下段の課金表示（proofreading-ux-fixes-plan.md §8）の純粋関数テスト。
+/// ステータスバー下段の課金表示（docs/proofreading-ux-fixes-plan.md §8）の純粋関数テスト。
 /// 各表示項目の単独・複数・全非表示、通貨形式の切替、既定値（当月＋為替、円表示）、
 /// 円欠損時の安全な表示を確認する。
 /// </summary>

@@ -54,7 +54,7 @@ internal static class OpenAiCacheProbeCommand
         {
             GeminiProofreadingResult result = await client.ProofreadAsync(request);
             GeminiUsage usage = result.Usage;
-            // gpt-5.6-luna.md の標準単価（入力$0.20 / 出力$1.20 per 1M）。この診断はコストの目安表示のみで、
+            // docs/gpt-5.6-luna.md の標準単価（入力$0.20 / 出力$1.20 per 1M）。この診断はコストの目安表示のみで、
             // pricing.json やapi_calls とは無関係。
             decimal cost =
                 usage.PromptTokens / 1_000_000m * 0.20m +

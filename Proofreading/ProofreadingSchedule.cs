@@ -9,7 +9,7 @@ internal sealed class ProofreadingSchedule
     private readonly Dictionary<string, DateTimeOffset> _lastChanges = [];
     private DateTimeOffset? _lastSentAt;
 
-    /// <summary>既定は 5 秒（proofreading-ux-fixes-plan.md §7.1）。設定から上書きされる。</summary>
+    /// <summary>既定は 5 秒（docs/proofreading-ux-fixes-plan.md §7.1）。設定から上書きされる。</summary>
     internal TimeSpan Debounce { get; set; } = TimeSpan.FromSeconds(5);
     internal TimeSpan MinimumSendInterval { get; set; } = TimeSpan.FromSeconds(10);
 

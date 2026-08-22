@@ -126,7 +126,7 @@ public partial class SettingsWindow : Window
         MonthlyLimitWarningBox.Text = SettingsFieldFormatting.FormatWarningPercent(s.MonthlyLimitWarningRatio);
         ApiLogRetentionBox.Text = s.ApiLogRetentionMonths.ToString(CultureInfo.InvariantCulture);
 
-        // ステータスバーの課金表示（proofreading-ux-fixes-plan.md §8）
+        // ステータスバーの課金表示（docs/proofreading-ux-fixes-plan.md §8）
         StatusBarLatestCheck.IsChecked = s.StatusBarShowLatest;
         StatusBarSessionCheck.IsChecked = s.StatusBarShowSession;
         StatusBarTodayCheck.IsChecked = s.StatusBarShowToday;

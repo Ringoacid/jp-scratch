@@ -7,7 +7,7 @@ namespace JpScratch.Editor;
 
 /// <summary>
 /// 校正提案の範囲を「修正前（薄色＋赤い二重取り消し線）＋修正後（緑）」に差し替えて描く
-/// （要件 3.3.5 / proofreading-ux-fixes-plan.md §4・§5）。本文（TextDocument）は変更しない。
+/// （要件 3.3.5 / docs/proofreading-ux-fixes-plan.md §4・§5）。本文（TextDocument）は変更しない。
 ///
 /// - 選択中の提案は、修正前と修正後を含む変更単位全体をアクセントカラーの背景と枠線で囲む
 ///   （色だけに頼らず、視認できる枠線を必ず描く。§4.1）。

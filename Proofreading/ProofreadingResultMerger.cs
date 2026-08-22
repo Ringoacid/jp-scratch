@@ -30,7 +30,7 @@ internal static class ProofreadingResultMerger
     }
 
     /// <summary>
-    /// 部分結果保持（proofreading-ux-fixes-plan.md §7.2）用の全文構築。
+    /// 部分結果保持（docs/proofreading-ux-fixes-plan.md §7.2）用の全文構築。
     /// 本文が送信時スナップショットから編集されていても、編集されていない文章ブロックの結果は
     /// 現在の本文位置へ安全に対応付けて提案として表示する。
     ///

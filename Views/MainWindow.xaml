@@ -202,7 +202,7 @@
                                    PreviewMouseWheel="Editor_PreviewMouseWheel"
                                    ContextMenuOpening="Editor_ContextMenuOpening">
                     <avalon:TextEditor.ContextMenu>
-                        <!-- proofreading-ux-fixes-plan.md §10。「元に戻す」「やり直し」は追加しない。
+                        <!-- docs/proofreading-ux-fixes-plan.md §10。「元に戻す」「やり直し」は追加しない。
                              切り取り・コピー・貼り付け・削除・すべて選択は標準コマンドのため、
                              選択やクリップボード状態に応じて自動で有効・無効が切り替わる。 -->
                         <ContextMenu>

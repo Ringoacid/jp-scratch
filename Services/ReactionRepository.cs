@@ -9,7 +9,7 @@ internal enum ProofreadingReaction
     RejectWithReason,
 
     /// <summary>
-    /// 校正漏れ報告（proofreading-ux-fixes-plan.md §9）。モデルが見逃した誤字・脱字・余分な文字を
+    /// 校正漏れ報告（docs/proofreading-ux-fixes-plan.md §9）。モデルが見逃した誤字・脱字・余分な文字を
     /// ユーザー自身が訂正して記録したもの。既存の許可・拒否リアクションと区別し、few-shot の
     /// 強い学習例として使う。
     /// </summary>
@@ -79,7 +79,7 @@ internal sealed class ReactionRepository
     }
 
     /// <summary>
-    /// 校正漏れ報告（proofreading-ux-fixes-plan.md §9.4）の記録。
+    /// 校正漏れ報告（docs/proofreading-ux-fixes-plan.md §9.4）の記録。
     /// 選択範囲の置換・挿入・削除を、左文脈・右文脈・任意理由とともに <c>reactions</c> へ保存する。
     /// 本文の編集とは独立しており、呼び出し側（MainWindow）が「保存に成功してから本文を変更する」
     /// 順序を守る（記録だけ失敗して本文だけ変わる状態を作らない）。

@@ -457,6 +457,7 @@ Proofreading/            4プロバイダーの校正クライアント、プロ
 Services/                設定・SQLite・資格情報・リアクション・タブ・ホットキー・配置・テーマ・トレイ
 Themes/                  ライト / ダーク / 共通スタイル
 Views/                   メインウィンドウ、設定、全タブ検索、資格情報・拒否理由ダイアログ
+docs/                    設計メモ（校正 UX 改修計画）とモデル仕様書
 docs/images/             README のスクリーンショットとベンチマーク図
 installer/               WiX による MSI
 ```

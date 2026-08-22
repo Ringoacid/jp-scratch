@@ -3,7 +3,7 @@ using JpScratch.Services;
 namespace JpScratch.PromptValidation;
 
 /// <summary>
-/// 校正漏れ報告（proofreading-ux-fixes-plan.md §9）の操作種別判定と実行ボタン文言のテスト。
+/// 校正漏れ報告（docs/proofreading-ux-fixes-plan.md §9）の操作種別判定と実行ボタン文言のテスト。
 /// §9.3 の置換・挿入・削除の判定と、実行不可のケース（選択なし＋修正後空・修正前後同一）を確認する。
 /// </summary>
 internal static class MissedCorrectionActionValidation

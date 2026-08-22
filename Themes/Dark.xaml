@@ -44,7 +44,7 @@
 
     <SolidColorBrush x:Key="SearchMatchBrush" Color="#5B4A1E" />
     <SolidColorBrush x:Key="SearchCurrentMatchBrush" Color="#9A6A15" />
-    <!-- 校正提案のインライン差分（要件 3.3.5 / proofreading-ux-fixes-plan.md §4・§5）。色だけに頼らず、
+    <!-- 校正提案のインライン差分（要件 3.3.5 / docs/proofreading-ux-fixes-plan.md §4・§5）。色だけに頼らず、
          修正前は取り消し線という「形」でも区別できるようにしてある。選択中は背景＋枠線で
          変更単位全体（修正前＋修正後）を囲む。 -->
     <SolidColorBrush x:Key="ProofreadingOriginalBrush" Color="#8C8C8C" />

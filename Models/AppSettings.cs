@@ -114,7 +114,7 @@ public sealed class AppSettings
     public bool AutoProofreadingEnabled { get; set; } = true;
     /// <summary>
     /// 入力停止から自動校正を送信するまでの待ち時間。
-    /// 既定 5000ms（proofreading-ux-fixes-plan.md §7.1）。入力中に校正結果が何度も破棄されて
+    /// 既定 5000ms（docs/proofreading-ux-fixes-plan.md §7.1）。入力中に校正結果が何度も破棄されて
     /// 不要なAPI呼び出しが発生しうる問題への対策として、v2 の 2000ms から引き上げた。
     /// </summary>
     public int ProofreadingDebounceMs { get; set; } = 5000;
@@ -124,7 +124,7 @@ public sealed class AppSettings
     /// <summary>課金APIを実行する前に確認ダイアログを表示するか。</summary>
     public bool ConfirmPaidApiCalls { get; set; } = true;
 
-    // ---- ステータスバーの課金表示（proofreading-ux-fixes-plan.md §8） ----
+    // ---- ステータスバーの課金表示（docs/proofreading-ux-fixes-plan.md §8） ----
     /// <summary>
     /// ステータスバー下段の料金表示形式。直近・起動後・当日・当月の全項目へ共通適用する。
     /// 未知の値は <see cref="SettingsService"/> の正規化で円表示へ戻す。

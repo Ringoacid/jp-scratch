@@ -27,6 +27,12 @@ publish/
 .claude/settings.json
 .codex-loop/
 
+# 個人のエージェント運用ツール（このアプリの実装とは無関係なので共有しない）
+.claude/skills/codex-loop/
+.claude/codex-loop-tools/
+.claude/codex-loop.json
+.mcp.json
+
 # graphify: 再生成できる生成物・キャッシュ・自動バックアップは追跡しない
 # （graph.json と GRAPH_REPORT.md だけあれば query / explain は動く）
 graphify-out/cache/

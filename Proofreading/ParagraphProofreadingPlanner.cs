@@ -176,7 +176,7 @@ internal sealed class ParagraphProofreadingPlanner
     /// それ以外（送信完了・変更なしと判定されたパート）は送信済みのまま記録する。
     /// <see cref="MarkSent(ProofreadingPlan, int)"/> が「未送信＝完了位置以降のサフィックス」と
     /// 決め打ちなのに対し、こちらは任意のパート集合を未送信にできる。部分結果保持
-    /// （proofreading-ux-fixes-plan.md §7.2）では、本文編集で個別に破棄されたパートだけを
+    /// （docs/proofreading-ux-fixes-plan.md §7.2）では、本文編集で個別に破棄されたパートだけを
     /// 未送信にしたいため、サフィックス表現では済まない。
     /// 注意: <see cref="_lastSentPartHashes"/> は過去の実行ぶんも含む累積状態なので、丸ごと
     /// 置き換えてはいけない。「今回完了したぶんだけを入れる」方式だと、前回送信済みで今回の
@@ -316,7 +316,7 @@ internal sealed class ParagraphProofreadingPlanner
         if (text.Length == 0)
             return [];
 
-        // proofreading-ux-fixes-plan.md §6: 常に空行を文章ブロックの区切りとして扱う。
+        // docs/proofreading-ux-fixes-plan.md §6: 常に空行を文章ブロックの区切りとして扱う。
         // 空行が無い複数行は一つの文章ブロック、連続する複数の空行は一つの区切り、
         // 先頭・末尾の空行はブロックを作らない。
         // 従来は「空行が一つでもあれば空行区切り、無ければ改行単位」と分岐していたため、

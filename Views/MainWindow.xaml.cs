@@ -959,7 +959,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 右クリックメニュー（proofreading-ux-fixes-plan.md §10）の表示直前処理。
+    /// 右クリックメニュー（docs/proofreading-ux-fixes-plan.md §10）の表示直前処理。
     /// - 右クリック位置が既存選択範囲内なら選択を維持する。選択外なら通常のエディタ動作に
     ///   合わせてキャレットを移動する。
     /// - 大文字・小文字変換は選択がないとき無効化する（切り取り・コピー・貼り付け・削除・
@@ -1003,7 +1003,7 @@ public partial class MainWindow : Window
         => TransformSelectionCase(upper: false);
 
     /// <summary>
-    /// 選択範囲の英字だけを大文字/小文字へ変換する（proofreading-ux-fixes-plan.md §10.2）。
+    /// 選択範囲の英字だけを大文字/小文字へ変換する（docs/proofreading-ux-fixes-plan.md §10.2）。
     /// 日本語や記号は保持し、invariant な1文字単位の変換で文字数変化を起こさない
     /// （ß の大文字化のような文化依存の拡張をしない）。変換は1回の Undo で戻せる。
     /// </summary>
@@ -1086,7 +1086,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 校正漏れ報告（proofreading-ux-fixes-plan.md §9）。選択範囲の置換・挿入・削除を
+    /// 校正漏れ報告（docs/proofreading-ux-fixes-plan.md §9）。選択範囲の置換・挿入・削除を
     /// 学習データ（reactions）へ記録し、その後に本文を変更する。この操作自体は API を呼ばない。
     /// 保存に失敗した場合は本文も変更しない（記録だけ失敗して本文だけ変わる状態を作らない）。
     /// 本文の変更は1回の Undo で戻せる。Undo しても記録は残る。
@@ -2203,7 +2203,7 @@ public partial class MainWindow : Window
         ApiCallTrigger trigger = manual ? ApiCallTrigger.Manual : ApiCallTrigger.Auto;
         bool resultsApplied = false;
 
-        // 部分結果保持（proofreading-ux-fixes-plan.md §7.2）用の状態。
+        // 部分結果保持（docs/proofreading-ux-fixes-plan.md §7.2）用の状態。
         // 各リクエストの対象範囲（パート）の先頭へ TextAnchor を張り、本文編集による位置の
         // ずれをアンカーに追従させる。送信直前と適用時に「アンカー位置の原文が今も
         // request.SourceText と一致するか」を見ることで、**リクエスト対象の内部が編集された場合だけ**
@@ -2450,7 +2450,7 @@ public partial class MainWindow : Window
             if (editDiscardHappened)
             {
                 // 破棄通知は一回の処理につき一度だけ表示する。料金・破棄件数の詳細は課金履歴で
-                // 確認できるようにする（proofreading-ux-fixes-plan.md §7.3）。
+                // 確認できるようにする（docs/proofreading-ux-fixes-plan.md §7.3）。
                 SetProofreadingStatus("編集された部分は、入力が止まってから再校正します", force: true);
             }
             else
@@ -2463,7 +2463,7 @@ public partial class MainWindow : Window
             // 途中で API が失敗しても、**それより前に成功した応答は既に課金されている**。
             // ここで丸ごと破棄すると、その段落は未送信のまま残り、次の自動校正でもう一度
             // 送られて二度目の課金になる（10段落中9件成功・1件タイムアウトで9件ぶんが再課金）。
-            // 部分結果保持（proofreading-ux-fixes-plan.md §7.2）は本文編集による中断だけを
+            // 部分結果保持（docs/proofreading-ux-fixes-plan.md §7.2）は本文編集による中断だけを
             // 想定していたが、API 失敗も「途中まで成功した」という同じ状態なので同じ扱いにする。
             // 失敗したリクエスト以降は未送信として残るため、次回そこだけが再送される。
             bool salvaged = false;
@@ -3018,7 +3018,7 @@ public partial class MainWindow : Window
             UsageLimitState limitState = UsageLimitService.Evaluate(
                 _monthUsageUsd, limit, _settings.Current.MonthlyLimitWarningRatio);
 
-            // 主表示は設定で選択された項目・通貨だけを出す（proofreading-ux-fixes-plan.md §8）。
+            // 主表示は設定で選択された項目・通貨だけを出す（docs/proofreading-ux-fixes-plan.md §8）。
             // 既定は「当月＋為替、円表示」。ツールチップには選択されていない詳細項目も含める
             // （主表示を再び過密にしない）。
             StatusUsage.Text = StatusBarUsageFormatter.Format(

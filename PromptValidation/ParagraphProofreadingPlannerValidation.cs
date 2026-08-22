@@ -59,7 +59,7 @@ internal static class ParagraphProofreadingPlannerValidation
     private static bool TestNoBlankLineSingleBlock()
     {
         // 空行が無い複数行は一つの文章ブロックとして扱う
-        // （proofreading-ux-fixes-plan.md §6.2。従来の「改行単位フォールバック」は廃止）。
+        // （docs/proofreading-ux-fixes-plan.md §6.2。従来の「改行単位フォールバック」は廃止）。
         IReadOnlyList<ProofreadingParagraph> paragraphs =
             ParagraphProofreadingPlanner.SplitParagraphs("一行目\r\n二行目\n三行目");
         return paragraphs.Count == 1 &&
@@ -68,7 +68,7 @@ internal static class ParagraphProofreadingPlannerValidation
     }
 
     /// <summary>
-    /// 文末の改行・空行は校正単位数（リクエスト数）に影響させない（proofreading-ux-fixes-plan.md §6.4）。
+    /// 文末の改行・空行は校正単位数（リクエスト数）に影響させない（docs/proofreading-ux-fixes-plan.md §6.4）。
     /// 同じ本文について、文末改行なし・LF・CRLF・空行1つ・空行複数のすべてでリクエスト数が一致する。
     /// </summary>
     private static bool TestTrailingLineBreakInvariance()
@@ -133,7 +133,7 @@ internal static class ParagraphProofreadingPlannerValidation
     }
 
     /// <summary>
-    /// 2,000文字を超えるブロックだけが追加分割される（proofreading-ux-fixes-plan.md §6.2）。
+    /// 2,000文字を超えるブロックだけが追加分割される（docs/proofreading-ux-fixes-plan.md §6.2）。
     /// 2,000文字ちょうどは分割せず、2,001文字以上は書記素を壊さずに分割する。
     /// </summary>
     private static bool TestBoundarySplit()
