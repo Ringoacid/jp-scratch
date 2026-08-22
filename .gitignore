@@ -19,8 +19,8 @@ obj/
 __pycache__/
 
 # ランタイム同梱 MSI（55MB）と wixpdb はリポジトリに入れず、Releases の添付だけで配る
-publish/msi/*-selfcontained.msi
-publish/msi/*.wixpdb
+# Build/release artifacts (published via GitHub Releases)
+publish/
 
 # Claude Code のローカル専用設定（共有しない）
 .claude/settings.local.json
