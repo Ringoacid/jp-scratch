@@ -17,12 +17,6 @@
     "ast_hash": "2a80789de8924054a2fe2723f857bb19",
     "semantic_hash": "2a80789de8924054a2fe2723f857bb19"
   },
-  ".claude/settings.json": {
-    "mtime": 1787289148.805583,
-    "seen": 1787289838.145657,
-    "ast_hash": "d356a2b35852d34493cf1a7258164797",
-    "semantic_hash": "d356a2b35852d34493cf1a7258164797"
-  },
   ".claude/skills/codex-loop/scripts/state_manager.ps1": {
     "mtime": 1787287256.7898023,
     "seen": 1787289838.1456578,
@@ -965,30 +959,6 @@
     "ast_hash": "9a8ba49e68e44ffd93b7a2518d6cb4d6",
     "semantic_hash": "9a8ba49e68e44ffd93b7a2518d6cb4d6"
   },
-  "publish/fdd/JpScratch.deps.json": {
-    "mtime": 1787315714.7488372,
-    "seen": 1787316023.3716772,
-    "ast_hash": "23792da8d5c7c2b3ce626af8288aecaa",
-    "semantic_hash": "23792da8d5c7c2b3ce626af8288aecaa"
-  },
-  "publish/fdd/JpScratch.runtimeconfig.json": {
-    "mtime": 1787315714.79813,
-    "seen": 1787316023.3716779,
-    "ast_hash": "399e49f1a98489d0fc58736af13265dd",
-    "semantic_hash": "399e49f1a98489d0fc58736af13265dd"
-  },
-  "publish/scd/JpScratch.deps.json": {
-    "mtime": 1786530740.5429137,
-    "seen": 1787289838.1457467,
-    "ast_hash": "fccb7206e94d0807c8dc628208e07766",
-    "semantic_hash": "fccb7206e94d0807c8dc628208e07766"
-  },
-  "publish/scd/JpScratch.runtimeconfig.json": {
-    "mtime": 1786530740.5716777,
-    "seen": 1787289838.1457472,
-    "ast_hash": "8db97613b79c98b8951b195224be9cc1",
-    "semantic_hash": "8db97613b79c98b8951b195224be9cc1"
-  },
   "tools/build-tray-icons.py": {
     "mtime": 1785656346.3516843,
     "seen": 1787289838.145748,
@@ -1307,40 +1277,10 @@
     "ast_hash": "778df373d405f695749268ff034414d3",
     "semantic_hash": ""
   },
-  "PromptValidation/artifacts/build-check/JpScratch.PromptValidation.deps.json": {
-    "mtime": 1787331134.8514123,
-    "seen": 1787331202.4648721,
-    "ast_hash": "434204e79fa9251792118d9660712772",
-    "semantic_hash": ""
-  },
-  "PromptValidation/artifacts/build-check/JpScratch.PromptValidation.runtimeconfig.json": {
-    "mtime": 1787331134.8822005,
-    "seen": 1787331202.4648743,
-    "ast_hash": "b451096fec6028f9acbd24badac69055",
-    "semantic_hash": ""
-  },
-  "PromptValidation/artifacts/build-check/benchmark-texts.json": {
-    "mtime": 1786020790.2199967,
-    "seen": 1787331202.4648755,
-    "ast_hash": "b4334c1556129ff00242f1628df0b9df",
-    "semantic_hash": ""
-  },
-  "PromptValidation/artifacts/build-check/cases.json": {
-    "mtime": 1785325900.215164,
-    "seen": 1787331202.4648762,
-    "ast_hash": "a334338a27cc56253ddc384494a70ba5",
-    "semantic_hash": ""
-  },
-  "artifacts/build-check/JpScratch.deps.json": {
-    "mtime": 1787331135.1383,
-    "seen": 1787331202.4649417,
-    "ast_hash": "4053194e24eedf4db295d7245bd3d24e",
-    "semantic_hash": ""
-  },
-  "artifacts/build-check/JpScratch.runtimeconfig.json": {
-    "mtime": 1787331135.1905015,
-    "seen": 1787331202.4649427,
-    "ast_hash": "44f5a150d44bc365c8cdff15f4a480e5",
+  "THIRD-PARTY-NOTICES.md": {
+    "mtime": 1787380906.1802146,
+    "seen": 1787402265.6893394,
+    "ast_hash": "de2e847bc486d35dfa2082402793a3d2",
     "semantic_hash": ""
   }
 }
