@@ -24,6 +24,7 @@ publish/msi/*.wixpdb
 
 # Claude Code のローカル専用設定（共有しない）
 .claude/settings.local.json
+.claude/settings.json
 .codex-loop/
 
 # graphify: 再生成できる生成物・キャッシュ・自動バックアップは追跡しない
