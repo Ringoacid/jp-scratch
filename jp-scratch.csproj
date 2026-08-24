@@ -29,6 +29,14 @@
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
 
+  <!-- Release アセンブリは既定でも PDB へのフルパス（ビルド機のユーザー名入り）を
+       デバッグディレクトリに埋め込む。PDB は配布していないので、Release では
+       デバッグ情報の生成ごとやめてパスの混入を防ぐ。 -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
   <ItemGroup>
     <!-- WinForms は通知領域アイコンのためだけに使う。暗黙 using を残すと
          Brush / Point / FontFamily / KeyEventArgs などが WPF 側と全面衝突するので外す。
