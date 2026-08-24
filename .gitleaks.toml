@@ -1,0 +1,10 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+    [[rules.allowlists]]
+    description = "Public PLaMo model identifier used in offline validation fixtures"
+    regexTarget = "secret"
+    regexes = ['''^plamo-3\.0-prime$''']
