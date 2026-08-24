@@ -6,10 +6,10 @@
     "semantic_hash": "ad437aec0cf2fd85aef65c5f0a6c7171"
   },
   "App.xaml.cs": {
-    "mtime": 1787289127.560327,
-    "seen": 1787289838.1456604,
-    "ast_hash": "c7e44f3d59da78a917426c7b277af417",
-    "semantic_hash": "c7e44f3d59da78a917426c7b277af417"
+    "mtime": 1787558935.900872,
+    "seen": 1787559116.0090308,
+    "ast_hash": "ee287a34eaae6de01ba9135c50568d1f",
+    "semantic_hash": ""
   },
   "AssemblyInfo.cs": {
     "mtime": 1785224385.7432957,
@@ -330,9 +330,9 @@
     "semantic_hash": "16440542e50a475c8c3809b4f283a558"
   },
   "PromptValidation/Program.cs": {
-    "mtime": 1787311568.4786413,
-    "seen": 1787312134.196228,
-    "ast_hash": "40f2802c880cee0735594a54c7f993cc",
+    "mtime": 1787557433.8266132,
+    "seen": 1787557593.4337523,
+    "ast_hash": "59da2bf13314c1ad05a642e751e649d4",
     "semantic_hash": ""
   },
   "PromptValidation/PromptFactory.cs": {
@@ -342,9 +342,9 @@
     "semantic_hash": "1daa734a75f674edfeeda595fddd736b"
   },
   "PromptValidation/PromptValidation.csproj": {
-    "mtime": 1787311567.8723402,
-    "seen": 1787312134.19623,
-    "ast_hash": "778d84e6c5597441235ede692fde0cb9",
+    "mtime": 1787557432.2654827,
+    "seen": 1787557593.433754,
+    "ast_hash": "b5249c5f843797b5325b95dc4837dc2a",
     "semantic_hash": ""
   },
   "PromptValidation/ProofreadingDispatchPlannerValidation.cs": {
@@ -636,10 +636,10 @@
     "semantic_hash": "aa9067cdcabb782c5780ae4c5f3e9f4e"
   },
   "Services/Database.cs": {
-    "mtime": 1787244157.8327527,
-    "seen": 1787289838.1457193,
-    "ast_hash": "90580c6ff42ea7d7450bd01f934ad4f0",
-    "semantic_hash": "90580c6ff42ea7d7450bd01f934ad4f0"
+    "mtime": 1787553220.5296898,
+    "seen": 1787553340.217761,
+    "ast_hash": "9ab51cca59be83af3dcee5e5db16fc28",
+    "semantic_hash": ""
   },
   "Services/FxRateService.cs": {
     "mtime": 1787289739.1656363,
@@ -840,9 +840,9 @@
     "semantic_hash": ""
   },
   "Views/MainWindow.xaml.cs": {
-    "mtime": 1787411071.3773787,
-    "seen": 1787411206.6988225,
-    "ast_hash": "221eae4766c808aad75e75eb7772620d",
+    "mtime": 1787557679.043659,
+    "seen": 1787557713.9613276,
+    "ast_hash": "ff48c5a4fb2b992470ad6e99a56fd16e",
     "semantic_hash": ""
   },
   "Views/MissedCorrectionDialog.xaml": {
@@ -882,15 +882,15 @@
     "semantic_hash": "4cd612e15920e1e45953c2767288d7d4"
   },
   "Views/SettingsWindow.xaml": {
-    "mtime": 1787038318.7731113,
-    "seen": 1787289838.145742,
-    "ast_hash": "41a7c6e16ad9b000cb379783101520b9",
-    "semantic_hash": "41a7c6e16ad9b000cb379783101520b9"
+    "mtime": 1787557401.1854358,
+    "seen": 1787557593.433828,
+    "ast_hash": "bc2c4a8f838d744ec1d7ec73b6b8cdd5",
+    "semantic_hash": ""
   },
   "Views/SettingsWindow.xaml.cs": {
-    "mtime": 1787411071.5512655,
-    "seen": 1787411206.6988282,
-    "ast_hash": "72a77a0c1ba667a9730c57c37453509f",
+    "mtime": 1787558935.1816576,
+    "seen": 1787559116.0091543,
+    "ast_hash": "e094f68a60d2ec4738b1e56fd509781a",
     "semantic_hash": ""
   },
   "Views/TrashWindow.xaml": {
@@ -906,9 +906,9 @@
     "semantic_hash": "297bc196de11bf489ef0dcb64226d736"
   },
   "installer/build.ps1": {
-    "mtime": 1787549002.7609363,
-    "seen": 1787549490.674972,
-    "ast_hash": "beb58714a300ef8db6f0fbd2762b217e",
+    "mtime": 1787552709.1947792,
+    "seen": 1787552748.6552136,
+    "ast_hash": "d50368fbcea7e668a3a1569917995f2a",
     "semantic_hash": ""
   },
   "jp-scratch.csproj": {
@@ -996,10 +996,10 @@
     "semantic_hash": "3c46f8ad006874260614ed8657d02307"
   },
   "AGENTS.md": {
-    "mtime": 1787289179.2964914,
-    "seen": 1787289838.1457593,
-    "ast_hash": "21ceb6533048be51308e69e7b74a35cf",
-    "semantic_hash": "21ceb6533048be51308e69e7b74a35cf"
+    "mtime": 1787558936.6286142,
+    "seen": 1787559116.0091722,
+    "ast_hash": "3d823c732fb41ba04ea793cc474900d4",
+    "semantic_hash": ""
   },
   "CLAUDE.md": {
     "mtime": 1787411296.7900608,
@@ -1038,9 +1038,9 @@
     "semantic_hash": "689cbc9e193834ad02002fbccbadc4eb"
   },
   "README.md": {
-    "mtime": 1787549003.5514512,
-    "seen": 1787549490.6750102,
-    "ast_hash": "957a3c293cac86bcb08e97df374a53fe",
+    "mtime": 1787557578.8982697,
+    "seen": 1787557593.4338531,
+    "ast_hash": "0c20f702d91c18cb3c35b566dc235b0f",
     "semantic_hash": ""
   },
   "requirements.md": {
@@ -1227,6 +1227,54 @@
     "mtime": 1785680450.7285292,
     "seen": 1787411206.6988552,
     "ast_hash": "900c1cc880fc2623706af8f6772bfe4f",
+    "semantic_hash": ""
+  },
+  "Services/BackupService.cs": {
+    "mtime": 1787558890.966202,
+    "seen": 1787559116.009116,
+    "ast_hash": "4938cb4c8e33ce44db362530a35ba886",
+    "semantic_hash": ""
+  },
+  "Services/DiagnosticInfoService.cs": {
+    "mtime": 1787552474.7821054,
+    "seen": 1787552661.4112124,
+    "ast_hash": "de8e4d368d946d5538f5c138c6ef1ac4",
+    "semantic_hash": ""
+  },
+  "Services/ReleaseInfo.cs": {
+    "mtime": 1787552255.4456296,
+    "seen": 1787552661.4112182,
+    "ast_hash": "7ede0cf513fb7f5e48d7788244a57723",
+    "semantic_hash": ""
+  },
+  "Services/ReleaseUpdateService.cs": {
+    "mtime": 1787552886.2967553,
+    "seen": 1787553340.2177684,
+    "ast_hash": "5b4d532d5a05173ae9a261e52be82555",
+    "semantic_hash": ""
+  },
+  "PromptValidation/BackupServiceValidation.cs": {
+    "mtime": 1787553278.0436833,
+    "seen": 1787553340.2176952,
+    "ast_hash": "f93871eb091d740ef1d4840aa3a77ef2",
+    "semantic_hash": ""
+  },
+  "PromptValidation/BackupRestoreServiceValidation.cs": {
+    "mtime": 1787558991.397067,
+    "seen": 1787559116.009057,
+    "ast_hash": "2f96d52325f4cce103d8997b21fe12c1",
+    "semantic_hash": ""
+  },
+  "Services/BackupRestoreService.cs": {
+    "mtime": 1787558990.6871555,
+    "seen": 1787559116.009115,
+    "ast_hash": "d23880f2df9ef95990b577d6fb512098",
+    "semantic_hash": ""
+  },
+  "graphify-out/memory/query_20260824_080245_git\u306e\u5909\u66f4\u3092\u30ec\u30d3\u30e5\u30fc\u3057\u3066\u304f\u3060\u3055\u3044.md": {
+    "mtime": 1787558565.3213522,
+    "seen": 1787559116.009185,
+    "ast_hash": "7d67a9af5f5a8cdeb07014b4f210f46a",
     "semantic_hash": ""
   }
 }
