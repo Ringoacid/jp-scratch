@@ -34,8 +34,10 @@ public partial class MainWindow : Window
     private readonly FxRateService _fxRates;
     private readonly ReactionRepository _reactions;
     private readonly StyleGuideRepository _styleGuides;
+    private readonly Database _database;
     private readonly IProofreadingClient _proofreadingClient;
     private readonly TrayIconService _tray;
+    private readonly Func<string, bool> _requestRestore;
     private readonly DateTimeOffset _sessionStartedAt;
 
     /// <summary>1回のGemini応答で固定するUSD額と、その時点の為替スナップショット。</summary>
@@ -174,13 +176,15 @@ public partial class MainWindow : Window
     internal MainWindow(SettingsService settings, ThemeService theme, TabManager tabs,
                          TabRepository repository, HotkeyService hotkeys,
                          CredentialService credentials,
-                         PricingService pricing,
-                         ApiCallRepository apiCalls,
-                         FxRateService fxRates,
-                         ReactionRepository reactions,
-                         StyleGuideRepository styleGuides,
-                        IProofreadingClient proofreadingClient,
-                        TrayIconService tray)
+                          PricingService pricing,
+                          ApiCallRepository apiCalls,
+                          FxRateService fxRates,
+                          ReactionRepository reactions,
+                          StyleGuideRepository styleGuides,
+                          Database database,
+                         IProofreadingClient proofreadingClient,
+                         TrayIconService tray,
+                         Func<string, bool> requestRestore)
     {
         _settings = settings;
         _theme = theme;
@@ -193,8 +197,10 @@ public partial class MainWindow : Window
         _fxRates = fxRates;
         _reactions = reactions;
         _styleGuides = styleGuides;
+        _database = database;
         _proofreadingClient = proofreadingClient;
         _tray = tray;
+        _requestRestore = requestRestore;
         _sessionStartedAt = DateTimeOffset.Now;
 
         InitializeComponent();
@@ -3338,7 +3344,16 @@ public partial class MainWindow : Window
         SuppressAutoHide();
         try
         {
-            var dialog = new SettingsWindow(_settings, _credentials, _pricing, _styleGuides, _reactions) { Owner = this };
+            var dialog = new SettingsWindow(
+                _settings,
+                _credentials,
+                _pricing,
+                _styleGuides,
+                _reactions,
+                _database,
+                () => _tabs.SaveDirty(),
+                () => IsProofreadingOrAlternativeInProgress,
+                _requestRestore) { Owner = this };
             dialog.ShowDialog();
 
             // GUI smoke test only: after the settings dialog has completed, exercise the

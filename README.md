@@ -241,6 +241,16 @@ Gemini 3.6 / 3.7 Flash と Claude Sonnet 5 の期間限定価格は、終了日�
 
 設定画面の「データフォルダを開く」ボタンから、このフォルダをそのまま開けます。
 
+設定画面の「サポート」から、現在のバージョン表示、GitHub Releases の更新確認、
+データ一式のバックアップと復元、診断情報のコピー、不具合報告（GitHub Issue）を利用できます。
+バックアップは `.jpsbackup` 形式のZIPで、本文・設定・課金履歴・学習履歴・保存済みの場合は暗号化済みAPIキーを含みます。
+APIキーはWindows DPAPIで現在のユーザーに結び付いているため、別のWindowsユーザーでは復号できません。
+復元前にはバックアップを検証し、現在のデータフォルダを `.before-restore-日時-識別子` の名前で退避してから、
+アプリを再起動して復元済みのデータを開きます。
+
+「不具合を報告（Issue）」は診断情報をクリップボードへコピーしてから、GitHubのIssue作成画面を開きます。
+診断情報には本文やAPIキーを含めませんが、貼り付ける前に内容を確認してください。
+
 ---
 
 <details>
@@ -434,11 +444,15 @@ python tools/build-tray-icons.py
 ```powershell
 powershell -File installer\build.ps1                  # フレームワーク依存 (約 2 MB)
 powershell -File installer\build.ps1 -SelfContained   # ランタイム同梱 (約 55 MB)
+powershell -File installer\build.ps1 -SelfContained `
+  -Sign -CertificateThumbprint '<CurrentUser証明書の拇印>' # EXE/DLL/MSIへ署名
 ```
 
 出力は `publish\msi\`。ユーザー単位インストール（`%LOCALAPPDATA%\Programs\JP Scratch`）なので管理者権限は不要。
 スタートメニューのショートカットと `HKCU\...\Run` のスタートアップ登録を作る。
 バージョンは `jp-scratch.csproj` の `<Version>` が正典。
+署名付きビルドにはWindows SDKの `signtool.exe` と、現在のユーザー証明書ストアにあるコード署名証明書が必要です。
+MSIごとにSHA-256チェックサムファイル（`.sha256`）も生成します。
 
 > WiX v6 以降は Open Source Maintenance Fee の EULA 同意が必要になる。
 > 同意するかは利用者側の判断なので、ここでは v5 に固定している。

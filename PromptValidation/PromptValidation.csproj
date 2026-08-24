@@ -70,6 +70,12 @@
              Link="Services\CrossTabSearchPreview.cs" />
     <Compile Include="..\Services\Database.cs"
              Link="Services\Database.cs" />
+    <Compile Include="..\Services\BackupService.cs"
+             Link="Services\BackupService.cs" />
+    <Compile Include="..\Services\BackupRestoreService.cs"
+             Link="Services\BackupRestoreService.cs" />
+    <Compile Include="..\Services\ReleaseInfo.cs"
+             Link="Services\ReleaseInfo.cs" />
     <Compile Include="..\Models\ScratchTab.cs"
              Link="Models\ScratchTab.cs" />
     <Compile Include="..\Services\TabRepository.cs"

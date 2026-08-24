@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Interop;
@@ -33,6 +34,7 @@ public partial class App : Application
     private TabManager? _tabs;
     private MainWindow? _window;
     private bool _exitInProgress;
+    private string? _pendingRestoreDirectory;
 
     /// <summary>
     /// 既に常駐しているのを見つけて退場するだけのプロセスか。
@@ -156,8 +158,10 @@ public partial class App : Application
             _fxRates,
             _reactions,
             _styleGuides,
+            _database,
             _proofreadingClient,
-            _tray);
+            _tray,
+            RequestRestore);
 
         // ホットキーはウィンドウの HWND に紐づける。
         // EnsureHandle なら「表示せずに HWND だけ作る」ができるので、常駐開始が速い。
@@ -270,6 +274,25 @@ public partial class App : Application
         }
 
         Shutdown();
+    }
+
+    /// <summary>
+    /// 設定画面で検証済みのバックアップを、DBを閉じた終了処理の後に適用する。
+    /// 復元後は同じ実行ファイルを起動し直して、復元された設定・本文・DBを読み込ませる。
+    /// </summary>
+    internal bool RequestRestore(string stagingDirectory)
+    {
+        if (_exitInProgress || _pendingRestoreDirectory is not null ||
+            !Directory.Exists(stagingDirectory))
+        {
+            return false;
+        }
+
+        _pendingRestoreDirectory = stagingDirectory;
+        _exitInProgress = true;
+        _tabs?.SuspendAutoSave();
+        Shutdown();
+        return true;
     }
 
     /// <summary>
@@ -426,6 +449,64 @@ public partial class App : Application
         _fxRates?.Dispose();
         _database?.Dispose();
         _singleInstance.Dispose();
+
+        if (_pendingRestoreDirectory is { } stagingDirectory)
+        {
+            _pendingRestoreDirectory = null;
+            RestoreResult? restoreResult = null;
+            try
+            {
+                restoreResult = BackupRestoreService.RestorePrepared(
+                    stagingDirectory,
+                    AppPaths.Root);
+            }
+            catch (Exception ex)
+            {
+                WriteCrashLog(ex, "バックアップの復元");
+                MessageBox.Show(
+                    "バックアップを復元できませんでした。現在のデータは可能な限り元の状態へ戻しています。\n\n" +
+                    ex.Message + "\n\n詳細: " + AppPaths.CrashLogFile,
+                    "JP Scratch",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            finally
+            {
+                BackupRestoreService.Discard(stagingDirectory);
+            }
+
+            if (restoreResult is not null)
+            {
+                string recoveryMessage = restoreResult.PreviousDataDirectory is { } recoveryDirectory
+                    ? $"以前のデータは次の場所へ退避しました。\n{recoveryDirectory}"
+                    : "以前のデータはありませんでした。";
+                try
+                {
+                    string? processPath = Environment.ProcessPath;
+                    if (string.IsNullOrWhiteSpace(processPath))
+                        throw new InvalidOperationException("アプリの実行ファイルを特定できません。");
+
+                    MessageBox.Show(
+                        "バックアップを復元しました。アプリを再起動します。\n\n" +
+                        recoveryMessage,
+                        "JP Scratch",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    Process.Start(new ProcessStartInfo(processPath) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    WriteCrashLog(ex, "バックアップ復元後の再起動");
+                    MessageBox.Show(
+                        "バックアップの復元は完了しましたが、アプリを自動的に再起動できませんでした。\n\n" +
+                        "JP Scratchを手動で起動してください。\n\n" + recoveryMessage +
+                        "\n\n詳細: " + AppPaths.CrashLogFile,
+                        "JP Scratch",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+            }
+        }
 
         base.OnExit(e);
     }

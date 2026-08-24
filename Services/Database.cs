@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using System.IO;
 using JpScratch.Infrastructure;
 
 namespace JpScratch.Services;
@@ -219,6 +220,46 @@ internal sealed class Database : IDisposable
             foreach (var (name, value) in parameters) cmd.Parameters.AddWithValue(name, value ?? DBNull.Value);
             using var reader = cmd.ExecuteReader();
             return projector(reader);
+        }
+    }
+
+    /// <summary>SQLiteのオンラインバックアップAPIで、一貫性のあるDBスナップショットを作る。</summary>
+    public void BackupTo(string destinationFile)
+    {
+        lock (_gate)
+        {
+            ThrowIfDisposed();
+
+            string? directory = Path.GetDirectoryName(destinationFile);
+            if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+
+            var csb = new SqliteConnectionStringBuilder
+            {
+                DataSource = destinationFile,
+                Mode = SqliteOpenMode.ReadWriteCreate,
+                Cache = SqliteCacheMode.Private,
+                // バックアップ先は直後にZIPへ読み込むため、接続プールに残さない。
+                // プールに返却されるだけだとWindows上でapp.dbのハンドルが残り、
+                // BackupService.AddFileが共有違反になることがある。
+                Pooling = false,
+            };
+
+            using var destination = new SqliteConnection(csb.ToString());
+            destination.Open();
+            _connection.BackupDatabase(destination);
+        }
+    }
+
+    /// <summary>診断情報へ表示するSQLiteのスキーマ番号。</summary>
+    public int SchemaVersion
+    {
+        get
+        {
+            lock (_gate)
+            {
+                ThrowIfDisposed();
+                return Convert.ToInt32(ScalarInternal("PRAGMA user_version;") ?? 0);
+            }
         }
     }
 

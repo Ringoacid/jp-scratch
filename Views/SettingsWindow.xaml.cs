@@ -11,6 +11,7 @@ using JpScratch.Infrastructure;
 using JpScratch.Models;
 using JpScratch.Services;
 using JpScratch.Controls;
+using Microsoft.Win32;
 
 namespace JpScratch.Views;
 
@@ -24,6 +25,10 @@ public partial class SettingsWindow : Window
     private readonly PricingService _pricing;
     private readonly StyleGuideRepository _styleGuides;
     private readonly ReactionRepository _reactions;
+    private readonly Database _database;
+    private readonly Func<IReadOnlyList<string>> _saveDirty;
+    private readonly Func<bool> _isWorkInProgress;
+    private readonly Func<string, bool> _requestRestore;
     // 資格情報の欄はプロバイダーごとに複製せず、選択中モデルのプロバイダーへ切り替える1枚で扱う。
     // そのため「入力途中のキー」「削除指示」「取得元の選択」はプロバイダー別に持ち、
     // パネル切替時に退避・復元する。単一の bool のままだと、Gemini を選んで削除を押し
@@ -67,13 +72,21 @@ public partial class SettingsWindow : Window
         CredentialService credentials,
         PricingService pricing,
         StyleGuideRepository styleGuides,
-        ReactionRepository reactions)
+        ReactionRepository reactions,
+        Database database,
+        Func<IReadOnlyList<string>> saveDirty,
+        Func<bool> isWorkInProgress,
+        Func<string, bool> requestRestore)
     {
         _service = service;
         _credentials = credentials;
         _pricing = pricing;
         _styleGuides = styleGuides;
         _reactions = reactions;
+        _database = database;
+        _saveDirty = saveDirty;
+        _isWorkInProgress = isWorkInProgress;
+        _requestRestore = requestRestore;
         InitializeComponent();
         LoadFrom(service.Current);
     }
@@ -176,6 +189,9 @@ public partial class SettingsWindow : Window
         DataFolderText.Text =
             $"本文と設定の保存先: {AppPaths.Root}\n" +
             "本文はプレーンテキスト（UTF-8）で保存されるため、このアプリが動かなくなってもメモ帳で開けます。";
+        VersionText.Text =
+            $"現在のバージョン: {ReleaseInfo.CurrentVersion}（{ReleaseInfo.ProcessArchitecture}）";
+        UpdateStatusText.Text = "更新確認はまだ実行していません。";
     }
 
     private void ApplyTo(AppSettings s)
@@ -1244,7 +1260,7 @@ public partial class SettingsWindow : Window
         {
             _pricing.ReplaceAllUserEvents(_pricingOriginalEvents);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        catch (Exception)
         {
             MessageBox.Show(
                 this,
@@ -1327,6 +1343,257 @@ public partial class SettingsWindow : Window
         {
             MessageBox.Show(this, "フォルダを開けませんでした。", "JP Scratch",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async void CheckForUpdatesButton_Click(object sender, RoutedEventArgs e)
+    {
+        CheckForUpdatesButton.IsEnabled = false;
+        UpdateStatusText.Text = "更新情報を確認しています…";
+
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(9));
+            UpdateCheckResult result = await ReleaseUpdateService.CheckLatestAsync(
+                ReleaseInfo.CurrentVersion, timeout.Token);
+
+            if (!result.Succeeded)
+            {
+                UpdateStatusText.Text = result.Error ?? "更新情報を取得できませんでした。";
+                return;
+            }
+
+            ReleaseUpdateInfo latest = result.Latest!;
+            if (!result.IsNewer)
+            {
+                UpdateStatusText.Text =
+                    $"最新版です（{ReleaseInfo.CurrentVersion}）。確認時刻: {DateTime.Now:yyyy-MM-dd HH:mm}";
+                return;
+            }
+
+            UpdateStatusText.Text =
+                $"新しいバージョン {latest.TagName} があります。";
+            if (MessageBox.Show(
+                    this,
+                    $"新しいバージョン {latest.TagName} が公開されています。\n\n" +
+                    "Releaseページを開きますか？",
+                    "JP Scratch",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information,
+                    MessageBoxResult.Yes) == MessageBoxResult.Yes)
+            {
+                OpenExternalUrl(latest.HtmlUrl);
+            }
+        }
+        finally
+        {
+            CheckForUpdatesButton.IsEnabled = true;
+        }
+    }
+
+    private async void CreateBackupButton_Click(object sender, RoutedEventArgs e)
+    {
+        IReadOnlyList<string> failures = _saveDirty();
+        if (failures.Count > 0)
+        {
+            MessageBox.Show(
+                this,
+                "未保存のタブがあるため、バックアップを作成できません。\n\n" +
+                TabManager.FormatTitles(failures) + "\n\n" +
+                "保存先のアクセス権を確認してから、もう一度実行してください。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "JP Scratch のバックアップを保存",
+            Filter = "JP Scratch バックアップ (*.jpsbackup)|*.jpsbackup|ZIPファイル (*.zip)|*.zip",
+            DefaultExt = ".jpsbackup",
+            AddExtension = true,
+            FileName = $"JpScratch-backup-{DateTime.Now:yyyyMMdd-HHmmss}.jpsbackup",
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        CreateBackupButton.IsEnabled = false;
+        UpdateStatusText.Text = "バックアップを作成しています…";
+        try
+        {
+            BackupResult result = await Task.Run(() => BackupService.Create(
+                _database, AppPaths.Root, dialog.FileName));
+            UpdateStatusText.Text =
+                $"バックアップを保存しました（{result.IncludedFileCount}ファイル）。";
+            MessageBox.Show(
+                this,
+                $"バックアップを保存しました。\n\n{result.FilePath}\n\n" +
+                "APIキーは現在のWindowsユーザーに結び付いています。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex) when (ex is IOException
+                                   or UnauthorizedAccessException
+                                   or InvalidDataException
+                                   or Microsoft.Data.Sqlite.SqliteException)
+        {
+            UpdateStatusText.Text = "バックアップを作成できませんでした。";
+            MessageBox.Show(
+                this,
+                "バックアップを作成できませんでした。保存先の空き容量とアクセス権を確認してください。\n\n" +
+                $"詳細: {ex.Message}",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            CreateBackupButton.IsEnabled = true;
+        }
+    }
+
+    private async void RestoreBackupButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isWorkInProgress())
+        {
+            MessageBox.Show(
+                this,
+                "校正または別案生成が完了するまで、バックアップを復元できません。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        IReadOnlyList<string> failures = _saveDirty();
+        if (failures.Count > 0)
+        {
+            MessageBox.Show(
+                this,
+                "未保存のタブがあるため、復元できません。\n\n" +
+                TabManager.FormatTitles(failures) + "\n\n" +
+                "保存できる状態にしてから、もう一度実行してください。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        var dialog = new OpenFileDialog
+        {
+            Title = "JP Scratch のバックアップを選択",
+            Filter = "JP Scratch バックアップ (*.jpsbackup)|*.jpsbackup|ZIPファイル (*.zip)|*.zip|すべてのファイル (*.*)|*.*",
+            CheckFileExists = true,
+            Multiselect = false,
+        };
+        if (dialog.ShowDialog(this) != true) return;
+
+        PreparedBackup? prepared = null;
+        bool handedOff = false;
+        RestoreBackupButton.IsEnabled = false;
+        UpdateStatusText.Text = "バックアップを検証しています…";
+        try
+        {
+            prepared = await Task.Run(() => BackupRestoreService.Prepare(dialog.FileName));
+
+            string credentialNote = prepared.IncludesCredentials
+                ? "保存済みAPIキーも含まれています（同じWindowsユーザーでのみ復号できます）。"
+                : "保存済みAPIキーは含まれていません。復元後に再入力してください。";
+            MessageBoxResult confirmation = MessageBox.Show(
+                this,
+                "次のバックアップを復元します。\n\n" +
+                $"ファイル: {Path.GetFileName(prepared.SourceFilePath)}\n" +
+                $"作成時のバージョン: {prepared.AppVersion}\n" +
+                $"含まれるファイル数: {prepared.IncludedFileCount}\n" +
+                $"{credentialNote}\n\n" +
+                "現在のデータは別名のフォルダへ退避し、アプリを終了してから復元します。\n" +
+                "復元後はアプリを自動的に再起動します。\n\n" +
+                "復元を実行しますか？",
+                "JP Scratch",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            if (confirmation != MessageBoxResult.Yes) return;
+
+            if (!_requestRestore(prepared.StagingDirectory))
+                throw new InvalidOperationException("アプリの終了処理を開始できませんでした。");
+
+            handedOff = true;
+            UpdateStatusText.Text = "復元の準備が完了しました。アプリを再起動します…";
+        }
+        catch (Exception ex)
+        {
+            UpdateStatusText.Text = "バックアップを復元できませんでした。";
+            MessageBox.Show(
+                this,
+                "バックアップを復元できませんでした。ファイルが壊れていないか確認してください。\n\n" +
+                $"詳細: {ex.Message}",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        finally
+        {
+            if (!handedOff && prepared is not null)
+                BackupRestoreService.Discard(prepared.StagingDirectory);
+            RestoreBackupButton.IsEnabled = true;
+        }
+    }
+
+    private void CopyDiagnosticsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (CopyDiagnosticsToClipboard())
+        {
+            UpdateStatusText.Text = "診断情報をクリップボードへコピーしました。";
+            MessageBox.Show(
+                this,
+                "診断情報をクリップボードへコピーしました。Issue本文へ貼り付ける前に内容を確認してください。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+    }
+
+    private void ReportIssueButton_Click(object sender, RoutedEventArgs e)
+    {
+        CopyDiagnosticsToClipboard();
+        OpenExternalUrl(ReleaseInfo.IssuesUrl);
+    }
+
+    private bool CopyDiagnosticsToClipboard()
+    {
+        try
+        {
+            Clipboard.SetText(DiagnosticInfoService.Create(_database));
+            return true;
+        }
+        catch (System.Runtime.InteropServices.ExternalException)
+        {
+            MessageBox.Show(
+                this,
+                "診断情報をクリップボードへコピーできませんでした。ほかのアプリがクリップボードを使用中かもしれません。",
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return false;
+        }
+    }
+
+    private void OpenExternalUrl(string url)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Win32Exception)
+        {
+            MessageBox.Show(
+                this,
+                "ブラウザーでページを開けませんでした。URLをコピーして手動で開いてください。\n\n" + url,
+                "JP Scratch",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
         }
     }
 }

@@ -12,12 +12,16 @@
 .EXAMPLE
     powershell -File installer\build.ps1
     powershell -File installer\build.ps1 -SelfContained
+    powershell -File installer\build.ps1 -SelfContained -Sign -CertificateThumbprint '<thumbprint>'
 #>
 [CmdletBinding()]
 param(
     [switch]$SelfContained,
     [string]$Version,
-    [string]$Configuration = 'Release'
+    [string]$Configuration = 'Release',
+    [switch]$Sign,
+    [string]$CertificateThumbprint,
+    [string]$TimestampUrl = 'http://timestamp.digicert.com'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +56,29 @@ else {
     $msiName = "JpScratch-$Version.msi"
 }
 $msiPath = Join-Path $outputDir $msiName
+
+$signTool = $null
+if ($Sign) {
+    if ([string]::IsNullOrWhiteSpace($CertificateThumbprint)) {
+        throw '-Sign を指定する場合は -CertificateThumbprint を指定してください。'
+    }
+
+    $CertificateThumbprint = ($CertificateThumbprint -replace '\s', '').ToUpperInvariant()
+    $certificate = Get-ChildItem "Cert:\CurrentUser\My\$CertificateThumbprint" -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($null -eq $certificate) {
+        throw "現在のユーザーの証明書ストアに署名証明書が見つかりません: $CertificateThumbprint"
+    }
+    if (-not $certificate.HasPrivateKey) {
+        throw "署名証明書に秘密鍵がありません: $CertificateThumbprint"
+    }
+
+    $signToolCommand = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($null -eq $signToolCommand) {
+        throw 'signtool.exe が見つかりません。Windows SDK の署名ツールをPATHへ追加してください。'
+    }
+    $signTool = $signToolCommand.Source
+}
 
 if (-not (Get-Command wix -ErrorAction SilentlyContinue)) {
     throw 'WiX が見つかりません。dotnet tool install --global wix を実行してください。'
@@ -96,15 +123,45 @@ if ($SelfContained) {
     Copy-Item -LiteralPath $dotnetNotices -Destination (Join-Path $publishDir 'DOTNET-THIRD-PARTY-NOTICES.txt') -Force
 }
 
+function Sign-File([string]$path) {
+    Write-Host "==> sign $([System.IO.Path]::GetFileName($path))" -ForegroundColor Cyan
+    & $signTool sign /sha1 $CertificateThumbprint /fd SHA256 /tr $TimestampUrl /td SHA256 $path
+    if ($LASTEXITCODE -ne 0) { throw "署名に失敗しました: $path" }
+}
+
+if ($Sign) {
+    # self-contained版に含まれるネイティブDLLも含め、実行可能な配布バイナリへ署名する。
+    Get-ChildItem $publishDir -Recurse -File |
+        Where-Object { @('.exe', '.dll') -contains $_.Extension.ToLowerInvariant() } |
+        ForEach-Object { Sign-File $_.FullName }
+}
+
 Write-Host '==> wix build' -ForegroundColor Cyan
 New-Item -ItemType Directory -Force $outputDir | Out-Null
 
 wix build (Join-Path $PSScriptRoot 'Package.wxs') -arch x64 -d Version=$Version -d PublishDir=$publishDir -d IconFile=$iconFile -o $msiPath
 if ($LASTEXITCODE -ne 0) { throw 'wix build に失敗しました' }
 
+if ($Sign) {
+    Sign-File $msiPath
+    & $signTool verify /pa /all $msiPath
+    if ($LASTEXITCODE -ne 0) { throw "MSI署名の検証に失敗しました: $msiPath" }
+}
+
+$hashFile = "$msiPath.sha256"
+$hash = (Get-FileHash -LiteralPath $msiPath -Algorithm SHA256).Hash.ToLowerInvariant()
+Set-Content -LiteralPath $hashFile -Value "$hash  $([System.IO.Path]::GetFileName($msiPath))" -Encoding ASCII
+
 $sizeMb = [math]::Round((Get-Item $msiPath).Length / 1MB, 1)
 Write-Host ''
 Write-Host "MSI: $msiPath ($sizeMb MB)" -ForegroundColor Green
+Write-Host "SHA-256: $hashFile" -ForegroundColor Green
+if ($Sign) {
+    Write-Host "署名: あり（証明書 $CertificateThumbprint）" -ForegroundColor Green
+}
+else {
+    Write-Host '署名: なし（公開配布時は -Sign を推奨）' -ForegroundColor Yellow
+}
 Write-Host 'インストール先: %LOCALAPPDATA%\Programs\JP Scratch (ユーザー単位・管理者権限不要)'
 if (-not $SelfContained) {
     Write-Host '前提: .NET 10 Desktop Runtime (x64)。未導入の環境では初回起動時に入手先が案内されます。' -ForegroundColor Yellow

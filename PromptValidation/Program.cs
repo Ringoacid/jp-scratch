@@ -252,6 +252,8 @@ internal static class Program
         bool usagePeriodPass = UsagePeriodValidation.RunSelfTests();
         bool usageLimitPass = UsageLimitServiceValidation.RunSelfTests();
         bool migrationPass = DatabaseMigrationValidation.RunSelfTests();
+        bool backupPass = BackupServiceValidation.RunSelfTests();
+        bool backupRestorePass = BackupRestoreServiceValidation.RunSelfTests();
         bool fxRatePass = await FxRateServiceValidation.RunSelfTestsAsync();
         bool fxRateCompletionPass = await FxRateCompletionValidation.RunSelfTestsAsync();
         bool reactionPass = ReactionRepositoryValidation.RunSelfTests();
@@ -282,7 +284,7 @@ internal static class Program
                credentialPass && pricingPass && currencyConversionPass && apiCallPass && apiCallHistoryPass &&
                apiCallUsageTriggerPass && apiCallUnconfirmedPass && hideSuppressionPass && customDateRangePass &&
                billingHistoryEmptyStatePass && usagePeriodPass && usageLimitPass &&
-               migrationPass && fxRatePass && fxRateCompletionPass && reactionPass && schedulePass && dispatchPlannerPass &&
+               migrationPass && backupPass && backupRestorePass && fxRatePass && fxRateCompletionPass && reactionPass && schedulePass && dispatchPlannerPass &&
                geminiClientPass && openAiClientPass && completionGuardPass && modelCatalogPass &&
                appPathsPass && singleInstancePass &&
                billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&

@@ -23,7 +23,7 @@
     <Icon Id="AppIcon.ico" SourceFile="$(var.IconFile)" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
     <Property Id="ARPNOREPAIR" Value="1" />
-    <Property Id="ARPHELPLINK" Value="https://github.com/" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/Ringoacid/jp-scratch" />
 
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="ProgramsFolder" Name="Programs">
