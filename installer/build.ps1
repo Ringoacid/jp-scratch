@@ -66,6 +66,36 @@ if ($SelfContained) { $selfContainedArg = 'true' }
 dotnet publish $project -c $Configuration -r win-x64 --self-contained $selfContainedArg -p:Version=$Version -o $publishDir --nologo
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish に失敗しました' }
 
+# バイナリと同じ配布物に、JP Scratch 本体および同梱ライブラリの
+# ライセンス・著作権表示を必ず含める。Package.wxs は publishDir 全体を
+# MSI に取り込むため、ここへ置けば ZIP 相当の発行物と MSI の双方に入る。
+$licenseFile = Join-Path $root 'LICENSE'
+$thirdPartyNoticesFile = Join-Path $root 'THIRD-PARTY-NOTICES.md'
+foreach ($requiredLegalFile in @($licenseFile, $thirdPartyNoticesFile)) {
+    if (-not (Test-Path -LiteralPath $requiredLegalFile -PathType Leaf)) {
+        throw "配布に必要なライセンス文書が見つかりません: $requiredLegalFile"
+    }
+}
+Copy-Item -LiteralPath $licenseFile -Destination (Join-Path $publishDir 'LICENSE.txt') -Force
+Copy-Item -LiteralPath $thirdPartyNoticesFile -Destination (Join-Path $publishDir 'THIRD-PARTY-NOTICES.md') -Force
+
+if ($SelfContained) {
+    # 自己完結版は .NET Runtime / Windows Desktop Runtime を再頒布する。
+    # 使用した dotnet インストールに付属する正本をコピーし、SDK更新時にも
+    # 実際に同梱したランタイムと通知文がずれないようにする。
+    $dotnetCommand = Get-Command dotnet -ErrorAction Stop
+    $dotnetRoot = Split-Path -Parent $dotnetCommand.Source
+    $dotnetLicense = Join-Path $dotnetRoot 'LICENSE.txt'
+    $dotnetNotices = Join-Path $dotnetRoot 'ThirdPartyNotices.txt'
+    foreach ($requiredDotnetFile in @($dotnetLicense, $dotnetNotices)) {
+        if (-not (Test-Path -LiteralPath $requiredDotnetFile -PathType Leaf)) {
+            throw "自己完結版の配布に必要な .NET ライセンス文書が見つかりません: $requiredDotnetFile"
+        }
+    }
+    Copy-Item -LiteralPath $dotnetLicense -Destination (Join-Path $publishDir 'DOTNET-LICENSE.txt') -Force
+    Copy-Item -LiteralPath $dotnetNotices -Destination (Join-Path $publishDir 'DOTNET-THIRD-PARTY-NOTICES.txt') -Force
+}
+
 Write-Host '==> wix build' -ForegroundColor Cyan
 New-Item -ItemType Directory -Force $outputDir | Out-Null
 
