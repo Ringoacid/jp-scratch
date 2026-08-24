@@ -366,12 +366,13 @@ internal sealed class PricingService
                     _utcTodayProvider());
             }
 
-            // v4初期版は期間限定価格を意図的に通常価格で登録していた。値と更新日がその既定値に
-            // 完全一致する場合だけカタログ管理へ移し、ユーザーが編集した単価は固定値のまま保持する。
-            foreach (string model in new[] { "gemini-3.6-flash", "claude-sonnet-5" })
+            // v4初期版が CatalogManaged なしで書き出した既定単価のうち、その後カタログ側の値が
+            // 変わったものを拾い直す（<see cref="IsSupersededCatalogDefault"/>）。放っておくと
+            // 古い既定がユーザー設定として恒久的に固定される。
+            foreach (string model in new[] { "gemini-3.6-flash", "claude-sonnet-5", "gpt-5.6-sol" })
             {
                 if (_models.TryGetValue(model, out ModelPricing? pricing) &&
-                    IsPreviousPromotionalModelDefault(model, pricing))
+                    IsSupersededCatalogDefault(model, pricing))
                 {
                     _models[model] = CreateDefaultPricing(
                         ProofreadingModelCatalog.Get(model),
@@ -454,7 +455,12 @@ internal sealed class PricingService
            pricing.OutputUsdPerMillion == 6.00m &&
            pricing.UpdatedAt == "2026-07-31";
 
-    private static bool IsPreviousPromotionalModelDefault(
+    /// <summary>
+    /// v4初期版が <c>CatalogManaged</c> なしで書き出した既定単価のうち、その後カタログ側の値が
+    /// 変わったものの指紋。値と更新日が当時の既定に完全一致する場合だけカタログ管理へ移し、
+    /// ユーザーが編集した単価は固定値のまま保持する。
+    /// </summary>
+    private static bool IsSupersededCatalogDefault(
         string model,
         ModelPricing pricing)
     {
@@ -467,12 +473,17 @@ internal sealed class PricingService
 
         return model switch
         {
+            // 期間限定価格を意図的に通常価格で登録していたもの。
             "gemini-3.6-flash" =>
                 pricing.InputUsdPerMillion == 1.50m &&
                 pricing.OutputUsdPerMillion == 7.50m,
             "claude-sonnet-5" =>
                 pricing.InputUsdPerMillion == 3.00m &&
                 pricing.OutputUsdPerMillion == 15.00m,
+            // 公表価格の改定で当時の既定が古くなったもの。
+            "gpt-5.6-sol" =>
+                pricing.InputUsdPerMillion == 5.00m &&
+                pricing.OutputUsdPerMillion == 30.00m,
             _ => false,
         };
     }
@@ -550,7 +561,7 @@ internal sealed class PricingService
             bool catalogManaged = pricing.CatalogManaged ||
                 IsCatalogEquivalent(model, pricing) ||
                 (model == OpenAiModel && IsPreviousOpenAiDefaultPricing(pricing)) ||
-                IsPreviousPromotionalModelDefault(model, pricing);
+                IsSupersededCatalogDefault(model, pricing);
             List<PricingEvent> events = [];
             if (!catalogManaged)
             {

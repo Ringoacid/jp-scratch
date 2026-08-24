@@ -140,8 +140,11 @@ public static class ProofreadingModelCatalog
     private static readonly ModelDescriptor[] Descriptors =
     [
         // ---- OpenAI（Responses API）----
+        // Sol は「少なくとも 2026-11-21 まで」の割引中で終了日が確定していない。期限付きの
+        // PromotionalPricing にすると延長された場合にその日以降を過大見積もりするため、
+        // 通常単価として持ち、値上げが公表されたら差し替える。
         new("gpt-5.6-sol", "GPT 5.6 Sol", ApiProvider.OpenAi, Slow,
-            "low", "medium", 5.00m, 30.00m, "USD", "2026-08-04"),
+            "low", "medium", 4.00m, 20.00m, "USD", "2026-08-24"),
         new("gpt-5.6-terra", "GPT 5.6 Terra", ApiProvider.OpenAi, Medium,
             "low", "medium", 2.00m, 12.00m, "USD", "2026-08-04"),
         new(OpenAiModel, "GPT 5.6 Luna", ApiProvider.OpenAi, Fast,
@@ -168,9 +171,11 @@ public static class ProofreadingModelCatalog
             "low", "medium", 10.00m, 50.00m, "USD", "2026-08-04"),
         new("claude-opus-5", "Claude Opus 5", ApiProvider.Anthropic, Slow,
             "low", "medium", 5.00m, 25.00m, "USD", "2026-08-04"),
+        // 導入価格の $2 / $10 がそのまま通常価格に確定し、2026-09-01 に予定されていた
+        // $3 / $15 への値上げは行われないと公表された。期間限定扱いのままだと 9/1 から
+        // 実価格の 1.5 倍で見積もるため、通常単価へ移して PromotionalPricing を外す。
         new(DefaultManualModel, "Claude Sonnet 5", ApiProvider.Anthropic, Medium,
-            "low", "medium", 3.00m, 15.00m, "USD", "2026-08-14",
-            new(2.00m, 10.00m, "2026-08-14", new DateOnly(2026, 8, 31))),
+            "low", "medium", 2.00m, 10.00m, "USD", "2026-08-24"),
         new("claude-haiku-4-5-20251001", "Claude Haiku 4.5", ApiProvider.Anthropic, Fast,
             null, null, 1.00m, 5.00m, "USD", "2026-08-04"),
 

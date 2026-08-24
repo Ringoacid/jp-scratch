@@ -165,7 +165,7 @@ AI の利用料は**使った分だけ**かかります。
 | Anthropic | Claude Fable 5 / Opus 5 / Sonnet 5 / Haiku 4.5 | `ANTHROPIC_API_KEY` |
 | Preferred Networks | PLaMo 3.0 Prime | `PLAMO_API_KEY` |
 
-Gemini 3.6 / 3.7 Flash と Claude Sonnet 5 の期間限定価格は、終了日までは割引価格、翌日からは
+Gemini 3.6 / 3.7 Flash の期間限定価格は、終了日までは割引価格、翌日からは
 通常価格として概算料金へ自動反映します。「API・料金」では、横軸が日付・縦軸が単価の入力／出力グラフと
 履歴表で、公式価格とユーザー設定の推移、変更額・変更率、現在／予約／過去の状態を確認できます。
 公式価格は読み取り専用で、ユーザー設定は過去・当日・未来の日付で追加・編集・削除でき、必要な日から
@@ -355,13 +355,17 @@ python tools\capture-docs-screenshots.py --shots all  # 校正・課金履歴も
 | GPT 5.6 Terra | OpenAI | $2 / $12 | 2.7 s | $0.0050 | 1.6 | ✗ 無事故 2/3 | ✓ |
 | Gemini 3.5 Flash Lite | Google | $0.3 / $2.5 | 2.8 s | $0.0024 | 1.6 | ✓ | ✓ |
 | GPT 5.6 Luna | OpenAI | $0.2 / $1.2 | 3.1 s | $0.0006 | 1.9 | ✗ 無事故 1/3 | ✓ |
-| GPT 5.6 Sol | OpenAI | $5 / $30 | 4.8 s | $0.0144 | 1.5 | ✓ | ✓ |
+| GPT 5.6 Sol | OpenAI | $5 / $30 → $4 / $20 | 4.8 s | $0.0144 | 1.5 | ✓ | ✓ |
 | Gemini 3.6 Flash | Google | $1.5 / $7.5 | 5.2 s | $0.0080 | 1.4 | ✓ | ✓ |
 | Claude Opus 5 | Anthropic | $5 / $25 | 5.8 s | $0.0129 | 1.3 | ✓ | ✓ |
-| Claude Sonnet 5 | Anthropic | $3 / $15 | 6.0 s | $0.0078 | 1.9 | ✓ | ✓ |
+| Claude Sonnet 5 | Anthropic | $3 / $15 → $2 / $10 | 6.0 s | $0.0078 | 1.9 | ✓ | ✓ |
 | Claude Fable 5 | Anthropic | $10 / $50 | 8.9 s | $0.0299 | 1.3 | ✓ | ✓ |
 | Gemini 3.1 Pro (Preview) | Google | $2 / $12 | 9.5 s | $0.0109 | 1.3 | ✓ | ✓ |
 | PLaMo 3.0 Prime | Preferred Networks | ¥60 / ¥250 | 39.2 s | $0.0021 | 2.7 | ✗ 無事故 0/3 | ✓ |
+
+単価は計測当時（2026-08-06）のものです。その後 GPT 5.6 Sol が $4 / $20、Claude Sonnet 5 が
+$2 / $10 に変わりました（2026-08-24 確認、表では「計測時 → 現在」と併記）。
+「1回あたり料金」は計測時の単価で算出した実測値なので、そのまま残してあります。
 
 「引用保護」は、**誤字そのものを話題にしている文章**（例:「原稿の『防腐剤を問ふする』は
 『防腐剤を塗布する』に修正してください」）で、引用符の中の誤りを触らずにいられた試行数。

@@ -132,10 +132,10 @@
     "semantic_hash": "c2db57bbae0b02f6a7cce47b1ab8fc62"
   },
   "Models/ProofreadingModelCatalog.cs": {
-    "mtime": 1786693634.1626148,
-    "seen": 1787289838.1456733,
-    "ast_hash": "3fcc9aa811e6036a20203a814a559f4e",
-    "semantic_hash": "3fcc9aa811e6036a20203a814a559f4e"
+    "mtime": 1787581863.6004837,
+    "seen": 1787582057.9295611,
+    "ast_hash": "bbb2f7e9ac9b0239fecffe48d95a16d3",
+    "semantic_hash": ""
   },
   "Models/ScratchTab.cs": {
     "mtime": 1785329517.9913588,
@@ -324,10 +324,10 @@
     "semantic_hash": ""
   },
   "PromptValidation/PricingServiceValidation.cs": {
-    "mtime": 1786693356.6137362,
-    "seen": 1787289838.1456907,
-    "ast_hash": "16440542e50a475c8c3809b4f283a558",
-    "semantic_hash": "16440542e50a475c8c3809b4f283a558"
+    "mtime": 1787581932.4870608,
+    "seen": 1787582057.9295905,
+    "ast_hash": "524ba075af872f0d8c8bab73e1ca40f7",
+    "semantic_hash": ""
   },
   "PromptValidation/Program.cs": {
     "mtime": 1787557433.8266132,
@@ -666,9 +666,9 @@
     "semantic_hash": ""
   },
   "Services/PricingService.cs": {
-    "mtime": 1787311566.6591547,
-    "seen": 1787312134.196286,
-    "ast_hash": "b2d2bf5392913b7d7092cba86fd8c9e6",
+    "mtime": 1787581884.4418075,
+    "seen": 1787582057.9296386,
+    "ast_hash": "a0dacceb140b9bbafb091332f8900376",
     "semantic_hash": ""
   },
   "Services/ReactionRepository.cs": {
@@ -1038,15 +1038,15 @@
     "semantic_hash": "689cbc9e193834ad02002fbccbadc4eb"
   },
   "README.md": {
-    "mtime": 1787557578.8982697,
-    "seen": 1787557593.4338531,
-    "ast_hash": "0c20f702d91c18cb3c35b566dc235b0f",
+    "mtime": 1787581968.9488735,
+    "seen": 1787582057.9296947,
+    "ast_hash": "e747c053b2e953a26eea22c90b5d5cd6",
     "semantic_hash": ""
   },
   "requirements.md": {
-    "mtime": 1787411071.754953,
-    "seen": 1787411206.698858,
-    "ast_hash": "4ab5012c6ce18f95f313937ab6b3be25",
+    "mtime": 1787581956.8237345,
+    "seen": 1787582057.9297073,
+    "ast_hash": "c6161fa2a9a0ecb7b8b843f1579dc94b",
     "semantic_hash": ""
   },
   "docs/images/billing-history.png": {

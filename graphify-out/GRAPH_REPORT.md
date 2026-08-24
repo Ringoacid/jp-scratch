@@ -1,7 +1,7 @@
 # Graph Report - jp-scratch  (2026-08-24)
 
 ## Corpus Check
-- 202 files · ~198,796 words
+- 202 files · ~198,928 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `fc6adbcd`
+- Built from commit: `e541ebbe`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -40,7 +40,7 @@
 - StatusBarUsageFormatterValidation
 - .SetTransientStatus
 - ApiUsageDisplayCost
-- .RefreshUsageDisplay
+- .OnStartup
 - RoutedEventArgs
 - PricingHistoryChart
 - ReactionRepository
@@ -48,7 +48,7 @@
 - ProviderCompletionGuardValidation
 - .RunProofreadingAsync
 - .RunBenchmarkAsync
-- Editor
+- .SelectProposal
 - UsageLimitServiceValidation
 - .FormatUsd
 - ProofreadingPrompt
@@ -145,7 +145,7 @@
 - 3.2 エディタ
 - Dark.xaml
 - Light.xaml
-- ValidationCase
+- Models.cs
 - Evaluator
 - Graphify Skill
 - Context Menu UI
@@ -161,7 +161,7 @@
 - .CollectHits
 - graphify reference: GitHub clone and cross-repo merge
 - graphify reference: transcribe video and audio
-- PromptFactory
+- ValidationCase
 - VisualTreeHelpers
 - .ConfirmCredentialSourceIfNeeded
 - CrossTabSearchPreviewValidation
@@ -278,7 +278,7 @@ Nodes (15): DailyKey, DailyTotals, IReadOnlyCollection, bool, DateTimeOffset, de
 
 ### Community 16 - "MainWindow"
 Cohesion: 0.07
-Nodes (15): DataObjectSettingDataEventArgs, EventArgs, bool, Brush, CancelEventArgs, DateTime, decimal, DispatcherTimer (+7 more)
+Nodes (17): DataObjectSettingDataEventArgs, bool, Brush, DateOnly, DateTime, DateTimeOffset, decimal, DispatcherTimer (+9 more)
 
 ### Community 17 - "ApiProvider"
 Cohesion: 0.16
@@ -308,9 +308,9 @@ Nodes (3): DateOnly, StatusBarUsageFormatterValidation, StatusBarDisplayOptions
 Cohesion: 0.40
 Nodes (4): ApiUsageDisplayFormatterValidation, IReadOnlyList, ApiUsageDisplayCost, ApiUsageDisplayFormatter
 
-### Community 25 - ".RefreshUsageDisplay"
-Cohesion: 0.10
-Nodes (7): IReadOnlyList, string, StartupRegistration, StartupEventArgs, DateOnly, DateTimeOffset, Task
+### Community 25 - ".OnStartup"
+Cohesion: 0.09
+Nodes (7): EventArgs, IReadOnlyList, string, StartupRegistration, StartupEventArgs, CancelEventArgs, KeyEventArgs
 
 ### Community 26 - "RoutedEventArgs"
 Cohesion: 0.08
@@ -333,15 +333,15 @@ Cohesion: 0.05
 Nodes (35): Body, Case, HttpMessageHandler, Label, FewShotSelectorValidation, CancellationToken, Func, HttpClient (+27 more)
 
 ### Community 31 - ".RunProofreadingAsync"
-Cohesion: 0.10
-Nodes (12): ApiUsageCost, FailedApiCallRecord, RecordedApiCall, Exception, IEnumerable, IReadOnlyList, TextAnchor, TimeSpan (+4 more)
+Cohesion: 0.12
+Nodes (10): ApiUsageCost, FailedApiCallRecord, RecordedApiCall, Exception, IReadOnlyList, TimeSpan, ApiUsageCost, FailedApiCallRecord (+2 more)
 
 ### Community 32 - ".RunBenchmarkAsync"
 Cohesion: 0.14
 Nodes (13): BenchmarkOptions, CancellationToken, HttpClient, int, IReadOnlyDictionary, IReadOnlyList, JsonSerializerOptions, Task (+5 more)
 
-### Community 33 - "Editor"
-Cohesion: 0.20
+### Community 33 - ".SelectProposal"
+Cohesion: 0.17
 Nodes (6): ContextMenuEventArgs, MouseWheelEventArgs, Editor, TabScroller, ScrollViewer, TextEditor
 
 ### Community 34 - "UsageLimitServiceValidation"
@@ -353,7 +353,7 @@ Cohesion: 0.21
 Nodes (6): StatusBarCurrencyFormat, DateTimeOffset, BillingHistoryEmptyStateValidation, ApiCallUsageSummary, StatusBarUsageFormatter, UsageFormatting
 
 ### Community 36 - "ProofreadingPrompt"
-Cohesion: 0.18
+Cohesion: 0.20
 Nodes (5): ProofreadingPromptV3Validation, IReadOnlyList, Regex, string, ProofreadingPrompt
 
 ### Community 37 - "Window"
@@ -453,7 +453,7 @@ Cohesion: 0.28
 Nodes (8): CancellationToken, Func, HttpRequestMessage, HttpResponseMessage, string, Task, OpenAiProofreadingClientValidation, StubHandler
 
 ### Community 65 - "ProofreadingSchedule"
-Cohesion: 0.23
+Cohesion: 0.27
 Nodes (5): ProofreadingScheduleValidation, DateTimeOffset, Dictionary, TimeSpan, ProofreadingSchedule
 
 ### Community 66 - "ProofreadingProposal"
@@ -676,9 +676,9 @@ Nodes (10): 3.1.1 タスクトレイ, 3.1.2 表示位置とサイズ, 3.1.3 自�
 Cohesion: 0.40
 Nodes (5): 3.2.1 タブ, 3.2.2 編集機能, 3.2.3 検索・置換, 3.2.4 永続化（スクラッチパッド型）, 3.2 エディタ
 
-### Community 131 - "ValidationCase"
-Cohesion: 0.25
-Nodes (11): IReadOnlyList, IReadOnlyList, TimeSpan, CaseResult, Correction, CorrectionResponse, ExpectedChange, ProbeResult (+3 more)
+### Community 131 - "Models.cs"
+Cohesion: 0.36
+Nodes (9): IReadOnlyList, TimeSpan, CaseResult, Correction, CorrectionResponse, ExpectedChange, ProbeResult, ResolvedCorrection (+1 more)
 
 ### Community 132 - "Evaluator"
 Cohesion: 0.27
@@ -712,9 +712,9 @@ Nodes (5): 1. 概要, 2. 入出力と上限, 3. JP Scratch での利用, 4. 標�
 Cohesion: 0.18
 Nodes (8): LineNumber, End, int, Start, CrossTabSearchPreview, List, Regex, CrossTabHit
 
-### Community 148 - "PromptFactory"
-Cohesion: 0.31
-Nodes (4): IReadOnlyList, JsonObject, string, PromptFactory
+### Community 148 - "ValidationCase"
+Cohesion: 0.24
+Nodes (6): IReadOnlyList, ValidationCase, IReadOnlyList, JsonObject, string, PromptFactory
 
 ### Community 150 - ".ConfirmCredentialSourceIfNeeded"
 Cohesion: 0.36
@@ -756,11 +756,11 @@ Nodes (4): IReadOnlyList, string, Task, OpenAiCacheProbeCommand
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `MainWindow` connect `MainWindow` to `PricingService`, `FxRateService`, `NativeMethods`, `Window`, `ProofreadingInlineDiffGenerator`, `ApiCallRepository`, `ApiProvider`, `StyleGuideRepository`, `.SetTransientStatus`, `.RefreshUsageDisplay`, `ReactionRepository`, `.RunProofreadingAsync`, `.RunBenchmarkAsync`, `Editor`, `UsageLimitServiceValidation`, `.FormatUsd`, `TrashWindow`, `Database`, `App`, `TabRepository`, `.AlternativeWithReasonMenuItem_Click`, `TrayIconService`, `Window`, `IdeographicSpaceColorizer`, `ProofreadingSchedule`, `ProofreadingProposal`, `AppSettings`, `BillingHistoryWindow`, `TabRoot`, `ScratchTab`, `HideSuppressionCounter`, `ThemeService`, `JpScratch.Views`, `CrossTabSearchWindow`?**
+- **Why does `MainWindow` connect `MainWindow` to `PricingService`, `FxRateService`, `NativeMethods`, `Window`, `ProofreadingInlineDiffGenerator`, `ApiCallRepository`, `ApiProvider`, `StyleGuideRepository`, `.SetTransientStatus`, `.OnStartup`, `ReactionRepository`, `.RunProofreadingAsync`, `.RunBenchmarkAsync`, `.SelectProposal`, `UsageLimitServiceValidation`, `.FormatUsd`, `TrashWindow`, `Database`, `App`, `TabRepository`, `.AlternativeWithReasonMenuItem_Click`, `TrayIconService`, `Window`, `IdeographicSpaceColorizer`, `ProofreadingSchedule`, `ProofreadingProposal`, `AppSettings`, `BillingHistoryWindow`, `TabRoot`, `ScratchTab`, `HideSuppressionCounter`, `ThemeService`, `JpScratch.Views`, `CrossTabSearchWindow`?**
   _High betweenness centrality (0.222) - this node is a cross-community bridge._
 - **Why does `SettingsWindow` connect `SettingsWindow` to `PricingService`, `AppSettings`, `Window`, `HotkeySpec`, `Database`, `JpScratch.Views`, `ComboBox`, `Window`, `ApiProvider`, `StyleGuideRepository`, `.HotkeyBox_LostFocus`, `RoutedEventArgs`, `ReactionRepository`, `.RefreshCredentialStatus`?**
   _High betweenness centrality (0.121) - this node is a cross-community bridge._
-- **Why does `JpScratch.Services` connect `JpScratch.Services` to `PricingService`, `FxRateService`, `BillingCsvExporterValidation`, `MissedCorrectionDialog`, `.BuildRows`, `.CollectHits`, `StyleGuideRepository`, `StatusBarUsageFormatterValidation`, `ApiUsageDisplayCost`, `.RefreshUsageDisplay`, `ReactionRepository`, `ProviderCompletionGuardValidation`, `UsageLimitServiceValidation`, `.FormatUsd`, `JpScratch.Models`, `ApiCallTrigger`, `BackupRestoreService`, `SettingsFieldFormattingValidation`, `TrayIconService`, `ModelBenchmarkReport.cs`, `.FormatInclusive`, `.CheckLatestAsync`, `.Create`, `CLAUDE.md`, `JpScratch.Infrastructure`, `HideSuppressionCounter`, `ReleaseInfo.cs`, `JpScratch.Views`?**
+- **Why does `JpScratch.Services` connect `JpScratch.Services` to `PricingService`, `FxRateService`, `BillingCsvExporterValidation`, `MissedCorrectionDialog`, `.BuildRows`, `.CollectHits`, `StyleGuideRepository`, `StatusBarUsageFormatterValidation`, `ApiUsageDisplayCost`, `.OnStartup`, `ReactionRepository`, `ProviderCompletionGuardValidation`, `UsageLimitServiceValidation`, `.FormatUsd`, `JpScratch.Models`, `ApiCallTrigger`, `BackupRestoreService`, `SettingsFieldFormattingValidation`, `TrayIconService`, `ModelBenchmarkReport.cs`, `.FormatInclusive`, `.CheckLatestAsync`, `.Create`, `CLAUDE.md`, `JpScratch.Infrastructure`, `HideSuppressionCounter`, `ReleaseInfo.cs`, `JpScratch.Views`?**
   _High betweenness centrality (0.105) - this node is a cross-community bridge._
 - **What connects `JpScratch`, `TextBlock`, `CheckBox` to the rest of the system?**
   _266 weakly-connected nodes found - possible documentation gaps or missing edges._
