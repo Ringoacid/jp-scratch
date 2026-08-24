@@ -277,8 +277,8 @@ powershell -File tools\smoke-test.ps1 publish\fdd\JpScratch.exe
 
 起動・日本語入力・自動保存・BOM なし UTF-8・非表示時のメモリ返却・二重起動時の呼び戻し・
 再表示後のキャレット位置までを通しで確認する。UI 自動化は使わず `WM_CHAR` の送出だけで動く。
-
-> **`%APPDATA%\JpScratch` を消してから走る**ので、実データがある状態では実行しないこと。
+テストデータは `%TEMP%\JpScratch-SmokeTest-<GUID>` に隔離し、終了時に削除する。
+既に起動中の JP Scratch は終了せず、誤って実データへ接続しないようテスト自体を中止する。
 
 ### README 用スクリーンショットの撮り直し
 
