@@ -906,10 +906,10 @@
     "semantic_hash": "297bc196de11bf489ef0dcb64226d736"
   },
   "installer/build.ps1": {
-    "mtime": 1785836270.1556797,
-    "seen": 1787289838.1457438,
-    "ast_hash": "49ac793f3f32b2cbe3e0b2a4cdfc5a68",
-    "semantic_hash": "49ac793f3f32b2cbe3e0b2a4cdfc5a68"
+    "mtime": 1787549002.7609363,
+    "seen": 1787549490.674972,
+    "ast_hash": "beb58714a300ef8db6f0fbd2762b217e",
+    "semantic_hash": ""
   },
   "jp-scratch.csproj": {
     "mtime": 1787402905.4940999,
@@ -954,10 +954,10 @@
     "semantic_hash": "bd6d2fdf2c2b04f3228d1df76326a8b1"
   },
   "tools/smoke-test.ps1": {
-    "mtime": 1785235856.9271715,
-    "seen": 1787289838.1457508,
-    "ast_hash": "c8b603fb4e98319f9a6472c02b515895",
-    "semantic_hash": "c8b603fb4e98319f9a6472c02b515895"
+    "mtime": 1787549072.5635448,
+    "seen": 1787549490.6749837,
+    "ast_hash": "9b78518ee0afc69e609cf321ba673886",
+    "semantic_hash": ""
   },
   ".claude/CLAUDE.md": {
     "mtime": 1787289148.7982452,
@@ -1002,9 +1002,9 @@
     "semantic_hash": "21ceb6533048be51308e69e7b74a35cf"
   },
   "CLAUDE.md": {
-    "mtime": 1787315506.3114517,
-    "seen": 1787316023.3716955,
-    "ast_hash": "f7927abbd08055ee27ec735299acdcae",
+    "mtime": 1787411296.7900608,
+    "seen": 1787549490.675001,
+    "ast_hash": "8f3a1a8351d03a651e64e0f6b9016cf1",
     "semantic_hash": ""
   },
   "PromptValidation/README.md": {
@@ -1038,9 +1038,9 @@
     "semantic_hash": "689cbc9e193834ad02002fbccbadc4eb"
   },
   "README.md": {
-    "mtime": 1787411133.7199998,
-    "seen": 1787411206.698852,
-    "ast_hash": "2af8b343ac8c5063dadb604f73b18ba4",
+    "mtime": 1787549003.5514512,
+    "seen": 1787549490.6750102,
+    "ast_hash": "957a3c293cac86bcb08e97df374a53fe",
     "semantic_hash": ""
   },
   "requirements.md": {
@@ -1206,9 +1206,9 @@
     "semantic_hash": ""
   },
   "THIRD-PARTY-NOTICES.md": {
-    "mtime": 1787380906.1802146,
-    "seen": 1787402265.6893394,
-    "ast_hash": "de2e847bc486d35dfa2082402793a3d2",
+    "mtime": 1787549004.354875,
+    "seen": 1787549490.6750116,
+    "ast_hash": "1cbfb85605f2b2311af4898e94f066a1",
     "semantic_hash": ""
   },
   "docs/gemini-3.5-flash-lite.md": {

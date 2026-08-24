@@ -1,16 +1,16 @@
-# Graph Report - jp-scratch  (2026-08-23)
+# Graph Report - jp-scratch  (2026-08-24)
 
 ## Corpus Check
-- 189 files · ~194,909 words
+- 189 files · ~195,210 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2716 nodes · 6016 edges · 151 communities (128 shown, 23 thin omitted)
+- 2716 nodes · 6016 edges · 152 communities (129 shown, 23 thin omitted)
 - Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 445 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `68571b17`
+- Built from commit: `4a23f2f4`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -48,7 +48,7 @@
 - ProofreadingSession
 - ApiUsageCost
 - .RunBenchmarkAsync
-- .HideWindow
+- .Editor_PreviewMouseWheel
 - UsageLimitServiceValidation
 - .FormatUsd
 - ProviderCompletionGuardValidation
@@ -163,6 +163,7 @@
 - HotkeySpec
 - VisualTreeHelpers
 - .ToUsdCost
+- .RefreshUsageDisplay
 
 ## God Nodes (most connected - your core abstractions)
 1. `MainWindow` - 176 edges
@@ -200,7 +201,7 @@
 - **Settings UI Tabs** — docs_images_settings_general, docs_images_settings_editor, docs_images_settings_learning, docs_images_settings_billing [EXTRACTED 1.00]
 - **Proofreading Subsystem** — proofreading_proofreadingclientbase, proofreading_proofreadingmodelcatalog, proofreading_proofreadingprompt [INFERRED 0.85]
 
-## Communities (151 total, 23 thin omitted)
+## Communities (152 total, 23 thin omitted)
 
 ### Community 0 - ".CreateAutomaticPlan"
 Cohesion: 0.06
@@ -267,8 +268,8 @@ Cohesion: 0.11
 Nodes (22): DailyKey, DailyTotals, InClause, IReadOnlyCollection, long, Name, Parameters, bool (+14 more)
 
 ### Community 16 - "MainWindow"
-Cohesion: 0.09
-Nodes (16): DataObjectSettingDataEventArgs, UsageLimitState, bool, Brush, DateOnly, DateTime, DateTimeOffset, decimal (+8 more)
+Cohesion: 0.07
+Nodes (15): DataObjectSettingDataEventArgs, EventArgs, bool, Brush, CancelEventArgs, DateTime, decimal, DispatcherTimer (+7 more)
 
 ### Community 17 - "ApiProvider"
 Cohesion: 0.13
@@ -334,9 +335,9 @@ Nodes (4): ApiUsageCost, IReadOnlyList, ApiUsageCost, RecordedApiCall
 Cohesion: 0.17
 Nodes (11): ModelDescriptor, CancellationToken, HttpClient, int, IReadOnlyDictionary, JsonSerializerOptions, Task, TimeSpan (+3 more)
 
-### Community 33 - ".HideWindow"
-Cohesion: 0.11
-Nodes (6): EventArgs, MouseWheelEventArgs, TabScroller, CancelEventArgs, KeyEventArgs, ScrollViewer
+### Community 33 - ".Editor_PreviewMouseWheel"
+Cohesion: 0.33
+Nodes (3): MouseWheelEventArgs, TabScroller, ScrollViewer
 
 ### Community 34 - "UsageLimitServiceValidation"
 Cohesion: 0.18
@@ -702,6 +703,10 @@ Nodes (4): AppTheme, ResourceDictionary, string, ThemeService
 Cohesion: 0.47
 Nodes (3): Key, HotkeySpec, ModifierKeys
 
+### Community 151 - ".RefreshUsageDisplay"
+Cohesion: 0.20
+Nodes (4): UsageLimitState, DateOnly, DateTimeOffset, IEnumerable
+
 ## Knowledge Gaps
 - **248 isolated node(s):** `JpScratch`, `TextBlock`, `CheckBox`, `StoredApiCall`, `net10.0-windows` (+243 more)
   These have ≤1 connection - possible missing edges or undocumented components.
@@ -710,7 +715,7 @@ Nodes (3): Key, HotkeySpec, ModifierKeys
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `MainWindow` connect `MainWindow` to `PricingService`, `FxRateService`, `Window`, `ProofreadingInlineDiffGenerator`, `ApiCallRepository`, `ApiProvider`, `StyleGuideRepository`, `ThemeService`, `.OnStartup`, `ReactionRepository`, `ProofreadingSession`, `ApiUsageCost`, `.RunBenchmarkAsync`, `.HideWindow`, `UsageLimitServiceValidation`, `.FormatUsd`, `TrashWindow`, `ScratchTab`, `.RunProofreadingAsync`, `App`, `TabRepository`, `AppSettings`, `TrayIconService`, `Window`, `IdeographicSpaceColorizer`, `ProofreadingSchedule`, `JpScratch.Views`, `.SetTransientStatus`, `BillingHistoryWindow`, `ProofreadingProposal`, `TabRoot`, `CrossTabSearchWindow`, `HotkeyService`, `.RunAnchorTests`, `HideSuppressionCounter`?**
+- **Why does `MainWindow` connect `MainWindow` to `PricingService`, `FxRateService`, `Window`, `ProofreadingInlineDiffGenerator`, `ApiCallRepository`, `ApiProvider`, `StyleGuideRepository`, `ThemeService`, `.RefreshUsageDisplay`, `.OnStartup`, `ReactionRepository`, `ProofreadingSession`, `ApiUsageCost`, `.RunBenchmarkAsync`, `.Editor_PreviewMouseWheel`, `UsageLimitServiceValidation`, `.FormatUsd`, `TrashWindow`, `ScratchTab`, `.RunProofreadingAsync`, `App`, `TabRepository`, `AppSettings`, `TrayIconService`, `Window`, `IdeographicSpaceColorizer`, `ProofreadingSchedule`, `JpScratch.Views`, `.SetTransientStatus`, `BillingHistoryWindow`, `ProofreadingProposal`, `TabRoot`, `CrossTabSearchWindow`, `HotkeyService`, `.RunAnchorTests`, `HideSuppressionCounter`?**
   _High betweenness centrality (0.228) - this node is a cross-community bridge._
 - **Why does `SettingsWindow` connect `SettingsWindow` to `PricingService`, `.HotkeyBox_LostFocus`, `JpScratch.Views`, `Window`, `Window`, `ApiProvider`, `StyleGuideRepository`, `.LoadStyleGuideControls`, `ComboBox`, `AppSettings`, `RoutedEventArgs`, `ReactionRepository`?**
   _High betweenness centrality (0.114) - this node is a cross-community bridge._

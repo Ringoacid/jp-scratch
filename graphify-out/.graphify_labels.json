@@ -32,7 +32,7 @@
   "30": "ProofreadingSession",
   "31": "ApiUsageCost",
   "32": ".RunBenchmarkAsync",
-  "33": ".HideWindow",
+  "33": ".Editor_PreviewMouseWheel",
   "34": "UsageLimitServiceValidation",
   "35": ".FormatUsd",
   "36": "ProviderCompletionGuardValidation",
@@ -149,5 +149,6 @@
   "147": "graphify reference: transcribe video and audio",
   "148": "HotkeySpec",
   "149": "VisualTreeHelpers",
-  "150": ".ToUsdCost"
+  "150": ".ToUsdCost",
+  "151": ".RefreshUsageDisplay"
 }

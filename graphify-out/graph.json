@@ -1451,8 +1451,8 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 16,
-      "community_name": "MainWindow",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
       "file_type": "code",
       "metadata": {
         "namespace": "JpScratch.Services",
@@ -9745,6 +9745,240 @@
       "source_location": "L108"
     },
     {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_formatcachedratetooltip",
+      "label": ".FormatCachedRateTooltip()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".formatcachedratetooltip()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L3275"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_formatusagelimittooltip",
+      "label": ".FormatUsageLimitTooltip()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".formatusagelimittooltip()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L3102"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_localdate",
+      "label": ".LocalDate()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".localdate()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L3233"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_localstartofday",
+      "label": ".LocalStartOfDay()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".localstartofday()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L3240"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_localstartofmonth",
+      "label": ".LocalStartOfMonth()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".localstartofmonth()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L3242"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_localstartofnextday",
+      "label": ".LocalStartOfNextDay()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".localstartofnextday()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L3244"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_localstartofnextmonth",
+      "label": ".LocalStartOfNextMonth()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".localstartofnextmonth()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L3250"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_markapicallsdiscarded",
+      "label": ".MarkApiCallsDiscarded()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".markapicallsdiscarded()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L2864"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_notifymonthlylimitreachedifneeded",
+      "label": ".NotifyMonthlyLimitReachedIfNeeded()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".notifymonthlylimitreachedifneeded()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L3130"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_refreshfxrateasync",
+      "label": ".RefreshFxRateAsync()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".refreshfxrateasync()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L2946"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_refreshusagedisplay",
+      "label": ".RefreshUsageDisplay()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".refreshusagedisplay()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L3001"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_refreshusageforrollover",
+      "label": ".RefreshUsageForRollover()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".refreshusageforrollover()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L3156"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_updateusagelimitprogressbar",
+      "label": ".UpdateUsageLimitProgressBar()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".updateusagelimitprogressbar()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L3080"
+    },
+    {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_applythemetoeditor",
       "label": ".ApplyThemeToEditor()",
       "_callable": true,
@@ -9763,6 +9997,24 @@
       "source_location": "L539"
     },
     {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_attachhotkeyhandlers",
+      "label": ".AttachHotkeyHandlers()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "MainWindow",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".attachhotkeyhandlers()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L289"
+    },
+    {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_brush",
       "label": ".Brush()",
       "_callable": true,
@@ -9779,6 +10031,42 @@
       "norm_label": ".brush()",
       "source_file": "Views/MainWindow.xaml.cs",
       "source_location": "L566"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_copyallandhide",
+      "label": ".CopyAllAndHide()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "MainWindow",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".copyallandhide()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L460"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_copycurrenttext",
+      "label": ".CopyCurrentText()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "MainWindow",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".copycurrenttext()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L474"
     },
     {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_countcharacters",
@@ -9817,8 +10105,8 @@
       "source_location": "L2665"
     },
     {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_formatcachedratetooltip",
-      "label": ".FormatCachedRateTooltip()",
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_hidewindow",
+      "label": ".HideWindow()",
       "_callable": true,
       "_origin": "ast",
       "community": 16,
@@ -9830,27 +10118,9 @@
           "s500"
         ]
       },
-      "norm_label": ".formatcachedratetooltip()",
+      "norm_label": ".hidewindow()",
       "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L3275"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_formatusagelimittooltip",
-      "label": ".FormatUsageLimitTooltip()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "MainWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".formatusagelimittooltip()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L3102"
+      "source_location": "L393"
     },
     {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_indexofproposal",
@@ -9889,8 +10159,8 @@
       "source_location": "L2679"
     },
     {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_localdate",
-      "label": ".LocalDate()",
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_nextproposalbutton_click",
+      "label": ".NextProposalButton_Click()",
       "_callable": true,
       "_origin": "ast",
       "community": 16,
@@ -9902,117 +10172,9 @@
           "s500"
         ]
       },
-      "norm_label": ".localdate()",
+      "norm_label": ".nextproposalbutton_click()",
       "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L3233"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_localstartofday",
-      "label": ".LocalStartOfDay()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "MainWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".localstartofday()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L3240"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_localstartofmonth",
-      "label": ".LocalStartOfMonth()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "MainWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".localstartofmonth()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L3242"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_localstartofnextday",
-      "label": ".LocalStartOfNextDay()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "MainWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".localstartofnextday()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L3244"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_localstartofnextmonth",
-      "label": ".LocalStartOfNextMonth()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "MainWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".localstartofnextmonth()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L3250"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_markapicallsdiscarded",
-      "label": ".MarkApiCallsDiscarded()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "MainWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".markapicallsdiscarded()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L2864"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_notifymonthlylimitreachedifneeded",
-      "label": ".NotifyMonthlyLimitReachedIfNeeded()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "MainWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".notifymonthlylimitreachedifneeded()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L3130"
+      "source_location": "L1045"
     },
     {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_onactivetabchanged",
@@ -10033,6 +10195,42 @@
       "source_location": "L570"
     },
     {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_onclosing",
+      "label": ".OnClosing()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "MainWindow",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".onclosing()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L352"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_ondeactivated",
+      "label": ".OnDeactivated()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "MainWindow",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".ondeactivated()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L446"
+    },
+    {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_oneditorclipboardsettingdata",
       "label": ".OnEditorClipboardSettingData()",
       "_callable": true,
@@ -10049,6 +10247,24 @@
       "norm_label": ".oneditorclipboardsettingdata()",
       "source_file": "Views/MainWindow.xaml.cs",
       "source_location": "L486"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_onpreviewkeydown",
+      "label": ".OnPreviewKeyDown()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "MainWindow",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".onpreviewkeydown()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L901"
     },
     {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_onproofreadingchanged",
@@ -10069,8 +10285,8 @@
       "source_location": "L651"
     },
     {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_refreshfxrateasync",
-      "label": ".RefreshFxRateAsync()",
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_onsourceinitialized",
+      "label": ".OnSourceInitialized()",
       "_callable": true,
       "_origin": "ast",
       "community": 16,
@@ -10082,9 +10298,27 @@
           "s500"
         ]
       },
-      "norm_label": ".refreshfxrateasync()",
+      "norm_label": ".onsourceinitialized()",
       "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L2946"
+      "source_location": "L269"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_previousproposalbutton_click",
+      "label": ".PreviousProposalButton_Click()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "MainWindow",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".previousproposalbutton_click()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L1039"
     },
     {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_refreshproofreadingpresentation",
@@ -10105,8 +10339,8 @@
       "source_location": "L654"
     },
     {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_refreshusagedisplay",
-      "label": ".RefreshUsageDisplay()",
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_renamebox_keydown",
+      "label": ".RenameBox_KeyDown()",
       "_callable": true,
       "_origin": "ast",
       "community": 16,
@@ -10118,27 +10352,9 @@
           "s500"
         ]
       },
-      "norm_label": ".refreshusagedisplay()",
+      "norm_label": ".renamebox_keydown()",
       "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L3001"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_refreshusageforrollover",
-      "label": ".RefreshUsageForRollover()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "MainWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".refreshusageforrollover()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L3156"
+      "source_location": "L834"
     },
     {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_schedulestatusupdate",
@@ -10177,6 +10393,60 @@
       "source_location": "L703"
     },
     {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_selectrelativeproposal",
+      "label": ".SelectRelativeProposal()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "MainWindow",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".selectrelativeproposal()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L718"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_showandfocus",
+      "label": ".ShowAndFocus()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "MainWindow",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".showandfocus()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L373"
+    },
+    {
+      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_togglevisibility",
+      "label": ".ToggleVisibility()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "MainWindow",
+      "file_type": "code",
+      "metadata": {
+        "namespace": "JpScratch.Views",
+        "scope_chain": [
+          "s500"
+        ]
+      },
+      "norm_label": ".togglevisibility()",
+      "source_file": "Views/MainWindow.xaml.cs",
+      "source_location": "L360"
+    },
+    {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_updatestatus",
       "label": ".UpdateStatus()",
       "_callable": true,
@@ -10193,24 +10463,6 @@
       "norm_label": ".updatestatus()",
       "source_file": "Views/MainWindow.xaml.cs",
       "source_location": "L3589"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_updateusagelimitprogressbar",
-      "label": ".UpdateUsageLimitProgressBar()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "MainWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".updateusagelimitprogressbar()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L3080"
     },
     {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_wndproc",
@@ -14088,7 +14340,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": ".HideWindow",
+      "community_name": ".Editor_PreviewMouseWheel",
       "file_type": "code",
       "metadata": {
         "namespace": "JpScratch.Services",
@@ -14101,66 +14353,12 @@
       "source_location": "L105"
     },
     {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_attachhotkeyhandlers",
-      "label": ".AttachHotkeyHandlers()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".attachhotkeyhandlers()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L289"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_copyallandhide",
-      "label": ".CopyAllAndHide()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".copyallandhide()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L460"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_copycurrenttext",
-      "label": ".CopyCurrentText()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".copycurrenttext()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L474"
-    },
-    {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_editor_previewmousewheel",
       "label": ".Editor_PreviewMouseWheel()",
       "_callable": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": ".HideWindow",
+      "community_name": ".Editor_PreviewMouseWheel",
       "file_type": "code",
       "metadata": {
         "namespace": "JpScratch.Views",
@@ -14173,138 +14371,12 @@
       "source_location": "L925"
     },
     {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_hidewindow",
-      "label": ".HideWindow()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".hidewindow()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L393"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_onclosing",
-      "label": ".OnClosing()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".onclosing()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L352"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_ondeactivated",
-      "label": ".OnDeactivated()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".ondeactivated()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L446"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_onpreviewkeydown",
-      "label": ".OnPreviewKeyDown()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".onpreviewkeydown()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L901"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_onsourceinitialized",
-      "label": ".OnSourceInitialized()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".onsourceinitialized()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L269"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_renamebox_keydown",
-      "label": ".RenameBox_KeyDown()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".renamebox_keydown()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L834"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_showandfocus",
-      "label": ".ShowAndFocus()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".showandfocus()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L373"
-    },
-    {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_tabscroller_previewmousewheel",
       "label": ".TabScroller_PreviewMouseWheel()",
       "_callable": true,
       "_origin": "ast",
       "community": 33,
-      "community_name": ".HideWindow",
+      "community_name": ".Editor_PreviewMouseWheel",
       "file_type": "code",
       "metadata": {
         "namespace": "JpScratch.Views",
@@ -14315,24 +14387,6 @@
       "norm_label": ".tabscroller_previewmousewheel()",
       "source_file": "Views/MainWindow.xaml.cs",
       "source_location": "L864"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_togglevisibility",
-      "label": ".ToggleVisibility()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".togglevisibility()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L360"
     },
     {
       "id": "promptvalidation_usagelimitservicevalidation_jpscratch_promptvalidation_usagelimitservicevalidation_at",
@@ -22393,24 +22447,6 @@
       "source_location": "L747"
     },
     {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_nextproposalbutton_click",
-      "label": ".NextProposalButton_Click()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 7,
-      "community_name": "Window",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".nextproposalbutton_click()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L1045"
-    },
-    {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_pinbutton_changed",
       "label": ".PinButton_Changed()",
       "_callable": true,
@@ -22427,24 +22463,6 @@
       "norm_label": ".pinbutton_changed()",
       "source_file": "Views/MainWindow.xaml.cs",
       "source_location": "L3307"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_previousproposalbutton_click",
-      "label": ".PreviousProposalButton_Click()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 7,
-      "community_name": "Window",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".previousproposalbutton_click()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L1039"
     },
     {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_reasonproposalbutton_click",
@@ -22499,24 +22517,6 @@
       "norm_label": ".renamebox_lostfocus()",
       "source_file": "Views/MainWindow.xaml.cs",
       "source_location": "L855"
-    },
-    {
-      "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_selectrelativeproposal",
-      "label": ".SelectRelativeProposal()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 7,
-      "community_name": "Window",
-      "file_type": "code",
-      "metadata": {
-        "namespace": "JpScratch.Views",
-        "scope_chain": [
-          "s500"
-        ]
-      },
-      "norm_label": ".selectrelativeproposal()",
-      "source_file": "Views/MainWindow.xaml.cs",
-      "source_location": "L718"
     },
     {
       "id": "views_mainwindow_xaml_jpscratch_views_mainwindow_settingsbutton_click",
@@ -27120,7 +27120,7 @@
       "file_type": "code",
       "norm_label": "check()",
       "source_file": "tools/smoke-test.ps1",
-      "source_location": "L72"
+      "source_location": "L90"
     },
     {
       "id": "tools_smoke_test_find_appwindow",
@@ -27131,7 +27131,7 @@
       "file_type": "code",
       "norm_label": "find-appwindow()",
       "source_file": "tools/smoke-test.ps1",
-      "source_location": "L30"
+      "source_location": "L37"
     },
     {
       "id": "tools_smoke_test_send_text",
@@ -27142,7 +27142,7 @@
       "file_type": "code",
       "norm_label": "send-text()",
       "source_file": "tools/smoke-test.ps1",
-      "source_location": "L47"
+      "source_location": "L54"
     },
     {
       "id": "tools_smoke_test_wait_window",
@@ -27153,7 +27153,7 @@
       "file_type": "code",
       "norm_label": "wait-window()",
       "source_file": "tools/smoke-test.ps1",
-      "source_location": "L54"
+      "source_location": "L61"
     },
     {
       "id": "body",
@@ -29158,6 +29158,39 @@
       "source_location": ""
     },
     {
+      "id": "views_mainwindow_xaml_cs_dateonly",
+      "label": "DateOnly",
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "norm_label": "dateonly",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "views_mainwindow_xaml_cs_datetimeoffset",
+      "label": "DateTimeOffset",
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "norm_label": "datetimeoffset",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "views_mainwindow_xaml_cs_ienumerable",
+      "label": "IEnumerable",
+      "_origin": "ast",
+      "community": 151,
+      "community_name": ".RefreshUsageDisplay",
+      "file_type": "code",
+      "norm_label": "ienumerable",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
       "id": "dataobjectsettingdataeventargs",
       "label": "DataObjectSettingDataEventArgs",
       "_origin": "ast",
@@ -29165,6 +29198,17 @@
       "community_name": "MainWindow",
       "file_type": "code",
       "norm_label": "dataobjectsettingdataeventargs",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "eventargs",
+      "label": "EventArgs",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "MainWindow",
+      "file_type": "code",
+      "norm_label": "eventargs",
       "source_file": "",
       "source_location": ""
     },
@@ -29191,13 +29235,13 @@
       "source_location": ""
     },
     {
-      "id": "views_mainwindow_xaml_cs_dateonly",
-      "label": "DateOnly",
+      "id": "views_mainwindow_xaml_cs_canceleventargs",
+      "label": "CancelEventArgs",
       "_origin": "ast",
       "community": 16,
       "community_name": "MainWindow",
       "file_type": "code",
-      "norm_label": "dateonly",
+      "norm_label": "canceleventargs",
       "source_file": "",
       "source_location": ""
     },
@@ -29209,17 +29253,6 @@
       "community_name": "MainWindow",
       "file_type": "code",
       "norm_label": "datetime",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "views_mainwindow_xaml_cs_datetimeoffset",
-      "label": "DateTimeOffset",
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "MainWindow",
-      "file_type": "code",
-      "norm_label": "datetimeoffset",
       "source_file": "",
       "source_location": ""
     },
@@ -29246,17 +29279,6 @@
       "source_location": ""
     },
     {
-      "id": "views_mainwindow_xaml_cs_ienumerable",
-      "label": "IEnumerable",
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "MainWindow",
-      "file_type": "code",
-      "norm_label": "ienumerable",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
       "id": "views_mainwindow_xaml_cs_int",
       "label": "int",
       "_origin": "ast",
@@ -29275,6 +29297,17 @@
       "community_name": "MainWindow",
       "file_type": "code",
       "norm_label": "intptr",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "views_mainwindow_xaml_cs_keyeventargs",
+      "label": "KeyEventArgs",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "MainWindow",
+      "file_type": "code",
+      "norm_label": "keyeventargs",
       "source_file": "",
       "source_location": ""
     },
@@ -31758,22 +31791,11 @@
       "source_location": ""
     },
     {
-      "id": "eventargs",
-      "label": "EventArgs",
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "norm_label": "eventargs",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
       "id": "mousewheeleventargs",
       "label": "MouseWheelEventArgs",
       "_origin": "ast",
       "community": 33,
-      "community_name": ".HideWindow",
+      "community_name": ".Editor_PreviewMouseWheel",
       "file_type": "code",
       "norm_label": "mousewheeleventargs",
       "source_file": "",
@@ -31784,40 +31806,18 @@
       "label": "TabScroller",
       "_origin": "ast",
       "community": 33,
-      "community_name": ".HideWindow",
+      "community_name": ".Editor_PreviewMouseWheel",
       "file_type": "code",
       "norm_label": "tabscroller",
       "source_file": "Views/MainWindow.xaml",
       "source_location": "L95"
     },
     {
-      "id": "views_mainwindow_xaml_cs_canceleventargs",
-      "label": "CancelEventArgs",
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "norm_label": "canceleventargs",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "views_mainwindow_xaml_cs_keyeventargs",
-      "label": "KeyEventArgs",
-      "_origin": "ast",
-      "community": 33,
-      "community_name": ".HideWindow",
-      "file_type": "code",
-      "norm_label": "keyeventargs",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
       "id": "views_mainwindow_xaml_xaml_scrollviewer",
       "label": "ScrollViewer",
       "_origin": "ast",
       "community": 33,
-      "community_name": ".HideWindow",
+      "community_name": ".Editor_PreviewMouseWheel",
       "file_type": "concept",
       "norm_label": "scrollviewer",
       "source_file": "Views/MainWindow.xaml",
@@ -38377,7 +38377,7 @@
       "node_kind": "heading",
       "norm_label": "7. \u5916\u90e8 api \u30b5\u30fc\u30d2\u30b9\u306b\u3064\u3044\u3066",
       "source_file": "THIRD-PARTY-NOTICES.md",
-      "source_location": "L359"
+      "source_location": "L362"
     },
     {
       "id": "third_party_notices_\u30b5\u30fc\u30c9\u30d1\u30fc\u30c6\u30a3\u30fc\u901a\u77e5_third_party_notices",
@@ -38401,7 +38401,7 @@
       "node_kind": "heading",
       "norm_label": "\u66f4\u65b0\u65b9\u6cd5",
       "source_file": "THIRD-PARTY-NOTICES.md",
-      "source_location": "L365"
+      "source_location": "L368"
     },
     {
       "id": "mouseeventargs",
@@ -88409,7 +88409,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tools/smoke-test.ps1",
-      "source_location": "L57",
+      "source_location": "L64",
       "weight": 1.0
     },
     {
@@ -94237,7 +94237,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "THIRD-PARTY-NOTICES.md",
-      "source_location": "L359",
+      "source_location": "L362",
       "weight": 1.0
     },
     {
@@ -94248,7 +94248,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "THIRD-PARTY-NOTICES.md",
-      "source_location": "L365",
+      "source_location": "L368",
       "weight": 1.0
     },
     {
@@ -95117,7 +95117,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tools/smoke-test.ps1",
-      "source_location": "L30",
+      "source_location": "L37",
       "weight": 1.0
     },
     {
@@ -95128,7 +95128,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tools/smoke-test.ps1",
-      "source_location": "L47",
+      "source_location": "L54",
       "weight": 1.0
     },
     {
@@ -95139,7 +95139,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tools/smoke-test.ps1",
-      "source_location": "L54",
+      "source_location": "L61",
       "weight": 1.0
     },
     {
@@ -95150,7 +95150,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tools/smoke-test.ps1",
-      "source_location": "L72",
+      "source_location": "L90",
       "weight": 1.0
     },
     {
@@ -115845,5 +115845,5 @@
       "source_file": "CLAUDE.md"
     }
   ],
-  "built_at_commit": "68571b1795adf8c6681660608c6fccf28582b968"
+  "built_at_commit": "4a23f2f44377495e4b233c44d72b9cc21ed1db68"
 }
