@@ -161,6 +161,11 @@ public static class ProofreadingModelCatalog
         new("gemini-3.7-flash", "Gemini 3.7 Flash", ApiProvider.Google, Medium,
             "low", "medium", 1.50m, 7.50m, "USD", "2026-08-14",
             new(0.75m, 3.75m, "2026-08-14", new DateOnly(2026, 12, 31))),
+        new("gemini-3.8-flash", "Gemini 3.8 Flash", ApiProvider.Google, Medium,
+            "low", "medium", 1.50m, 7.50m, "USD", "2026-09-04",
+            new(0.75m, 3.75m, "2026-09-04", new DateOnly(2026, 12, 31))),
+        new("gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite", ApiProvider.Google, Fast,
+            "low", "medium", 0.25m, 1.50m, "USD", "2026-03-03"),
         new(GeminiModel, "Gemini 3.5 Flash Lite", ApiProvider.Google, Fast,
             "low", "medium", 0.30m, 2.50m, "USD", "2026-07-29"),
 
@@ -169,6 +174,8 @@ public static class ProofreadingModelCatalog
         // effort も受け付けないため、effort を送らない（null）。
         new("claude-fable-5", "Claude Fable 5", ApiProvider.Anthropic, Slow,
             "low", "medium", 10.00m, 50.00m, "USD", "2026-08-04"),
+        new("claude-fable-5-1", "Claude Fable 5.1", ApiProvider.Anthropic, Slow,
+            "low", "medium", 10.00m, 50.00m, "USD", "2026-09-01"),
         new("claude-opus-5", "Claude Opus 5", ApiProvider.Anthropic, Slow,
             "low", "medium", 5.00m, 25.00m, "USD", "2026-08-04"),
         // 導入価格の $2 / $10 がそのまま通常価格に確定し、2026-09-01 に予定されていた
@@ -267,7 +274,7 @@ public static class ProofreadingModelCatalog
 
     /// <summary>Anthropic で adaptive thinking を明示できるモデルか（Haiku 4.5 は非対応）。</summary>
     public static bool SupportsAdaptiveThinking(string? model)
-        => Get(model).Id is "claude-fable-5" or "claude-opus-5" or DefaultManualModel;
+        => Get(model).Id is "claude-fable-5" or "claude-fable-5-1" or "claude-opus-5" or DefaultManualModel;
 
     /// <summary>
     /// v3 までの単一モデル設定を、自動用・手動用の 2 枠へ移す（要件 3.5.1）。

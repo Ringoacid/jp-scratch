@@ -44,8 +44,14 @@ internal static class ProofreadingModelCatalogValidation
 
         ModelDescriptor? gemini37 = ProofreadingModelCatalog.All
             .SingleOrDefault(descriptor => descriptor.Id == "gemini-3.7-flash");
+        ModelDescriptor? gemini38 = ProofreadingModelCatalog.All
+            .SingleOrDefault(descriptor => descriptor.Id == "gemini-3.8-flash");
+        ModelDescriptor? gemini31Lite = ProofreadingModelCatalog.All
+            .SingleOrDefault(descriptor => descriptor.Id == "gemini-3.1-flash-lite");
+        ModelDescriptor? fable51 = ProofreadingModelCatalog.All
+            .SingleOrDefault(descriptor => descriptor.Id == "claude-fable-5-1");
         bool gemini37Pass =
-            ProofreadingModelCatalog.All.Count == 12 &&
+            ProofreadingModelCatalog.All.Count == 15 &&
             gemini37 is not null &&
             gemini37.Provider == ApiProvider.Google &&
             gemini37.RecommendedTimeout == TimeSpan.FromSeconds(30) &&
@@ -53,6 +59,21 @@ internal static class ProofreadingModelCatalogValidation
             gemini37.EffortFor(ProofreadingPurpose.Manual) == "medium" &&
             ProofreadingModelCatalog.IsSupported("gemini-3.7-flash") &&
             ProofreadingModelCatalog.DefaultAutomaticModel != "gemini-3.7-flash";
+
+        bool newModelsPass =
+            gemini38 is { Provider: ApiProvider.Google, RecommendedTimeout: var gemini38Timeout } &&
+            gemini38Timeout == TimeSpan.FromSeconds(30) &&
+            gemini38.EffortFor(ProofreadingPurpose.Manual) == "medium" &&
+            gemini38.PricingFor(new DateOnly(2026, 9, 4)).InputPricePerMillion == 0.75m &&
+            gemini31Lite is { Provider: ApiProvider.Google, RecommendedTimeout: var gemini31LiteTimeout } &&
+            gemini31LiteTimeout == TimeSpan.FromSeconds(15) &&
+            gemini31Lite.InputPricePerMillion == 0.25m &&
+            gemini31Lite.OutputPricePerMillion == 1.50m &&
+            fable51 is { Provider: ApiProvider.Anthropic, RecommendedTimeout: var fable51Timeout } &&
+            fable51Timeout == TimeSpan.FromSeconds(90) &&
+            fable51.InputPricePerMillion == 10.00m &&
+            fable51.OutputPricePerMillion == 50.00m &&
+            ProofreadingModelCatalog.SupportsAdaptiveThinking(fable51.Id);
 
         // 用途別の思考量は、Haiku 4.5（effort 非対応）以外のすべてで定義されていること。
         bool effortPass = ProofreadingModelCatalog.All.All(descriptor =>
@@ -78,11 +99,12 @@ internal static class ProofreadingModelCatalogValidation
         Console.WriteLine($"モデルカタログ（新規は既定のまま）: {(freshPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（未知IDは引き継がない）: {(unknownPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（既定モデルが収録済み）: {(defaultsPass ? "PASS" : "FAIL")}");
+        Console.WriteLine($"モデルカタログ（新規3モデルのID・単価・思考量）: {(newModelsPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（用途別の思考量）: {(effortPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（通貨はPLaMoのみJPY）: {(currencyPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（タイムアウトの丸め）: {(clampPass ? "PASS" : "FAIL")}");
 
-        return legacyPass && freshPass && unknownPass && defaultsPass && gemini37Pass &&
+        return legacyPass && freshPass && unknownPass && defaultsPass && gemini37Pass && newModelsPass &&
             effortPass && currencyPass && clampPass;
     }
 }

@@ -156,16 +156,16 @@ AI の利用料は**使った分だけ**かかります。
 
 <img src="docs/images/settings-billing.png" alt="設定画面の「API・料金」タブ。モデル専用のAPIキー欄と、日付別単価の階段グラフ・履歴表・追加編集ボタンが表示されている。" width="760">
 
-対応しているのは **4 社 12 モデル**です。
+対応しているのは **4 社 15 モデル**です。
 
 | 提供元 | モデル | 環境変数（キーの代わりに使えます） |
 |---|---|---|
 | OpenAI | GPT 5.6 Sol / Terra / Luna | `OPENAI_API_KEY` |
-| Google | Gemini 3.1 Pro (Preview) / 3.7 Flash / 3.6 Flash / 3.5 Flash Lite | `GEMINI_API_KEY` |
-| Anthropic | Claude Fable 5 / Opus 5 / Sonnet 5 / Haiku 4.5 | `ANTHROPIC_API_KEY` |
+| Google | Gemini 3.8 Flash / 3.7 Flash / 3.6 Flash / 3.1 Pro (Preview) / 3.1 Flash-Lite / 3.5 Flash Lite | `GEMINI_API_KEY` |
+| Anthropic | Claude Fable 5.1 / Fable 5 / Opus 5 / Sonnet 5 / Haiku 4.5 | `ANTHROPIC_API_KEY` |
 | Preferred Networks | PLaMo 3.0 Prime | `PLAMO_API_KEY` |
 
-Gemini 3.6 / 3.7 Flash の期間限定価格は、終了日までは割引価格、翌日からは
+Gemini 3.6 / 3.7 / 3.8 Flash の期間限定価格は、終了日までは割引価格、翌日からは
 通常価格として概算料金へ自動反映します。「API・料金」では、横軸が日付・縦軸が単価の入力／出力グラフと
 履歴表で、公式価格とユーザー設定の推移、変更額・変更率、現在／予約／過去の状態を確認できます。
 公式価格は読み取り専用で、ユーザー設定は過去・当日・未来の日付で追加・編集・削除でき、必要な日から
@@ -186,7 +186,7 @@ Gemini 3.6 / 3.7 Flash の期間限定価格は、終了日までは割引価格
 > 実際の初期値は自動校正オンで、モデルは下に書いたとおりです。
 
 迷ったら、そのままで大丈夫です（既定は自動 `GPT 5.6 Luna` / 手動 `Claude Sonnet 5`）。
-2026-08-06 の 11 モデル比較と、追加後の Gemini 3.7 Flash の追補計測は下の
+2026-08-06 の 11 モデル比較と、追加後の4モデルの追補計測は下の
 [校正モデルの比較](#校正モデルの比較実測) にあります。ざっくりまとめると:
 
 - **速くて安いのがいい** → Claude Haiku 4.5、Gemini 3.5 Flash Lite、GPT 5.6 Luna
@@ -264,7 +264,7 @@ APIキーはWindows DPAPIで現在のユーザーに結び付いているため�
   課金履歴画面、月間上限の進捗表示とガード、CSVエクスポート、明細の保持期限後圧縮、
   トレイアイコンの4状態表示。
 - **v3 文体の学習** — リアクション履歴からの few-shot 選定、スタイルガイドの自動生成、カスタム指示。
-- **v4 プロバイダー拡張** — Google / OpenAI / Anthropic / Preferred Networks の 4 社 12 モデル、
+- **v4 プロバイダー拡張** — Google / OpenAI / Anthropic / Preferred Networks の 4 社 15 モデル、
   自動用と手動用でモデルを分ける 2 枠構成。
 
 残っているのはコンテキストキャッシュの適用だけで、これは Gemini 側の割引単価と最小トークン数が
@@ -329,36 +329,43 @@ python tools\capture-docs-screenshots.py --shots all  # 校正・課金履歴も
 
 当時の全 11 モデルに同じ日本語文章 7 本を 3 回ずつ投げて実測した
 （2026-08-06、231 リクエスト、実費 $2.05）。後から追加した Gemini 3.7 Flash も同じ条件で
-追補計測した（2026-08-21、21 リクエスト、実費 $0.0592）。詳細は
+追補計測した（2026-08-21、21 リクエスト、実費 $0.0592）。さらに Gemini 3.8 Flash、
+Gemini 3.1 Flash-Lite、Claude Fable 5.1 も同条件で追補計測した
+（2026-09-04、63 リクエスト、実費 $0.7099）。詳細は
 [`PromptValidation/model-benchmark-2026-08-06.md`](PromptValidation/model-benchmark-2026-08-06.md) と
 [`PromptValidation/gemini-3.7-flash-benchmark-2026-08-21.md`](PromptValidation/gemini-3.7-flash-benchmark-2026-08-21.md)、
+[`PromptValidation/results/model-benchmark-2026-09-04-supplement-r3.json`](PromptValidation/results/model-benchmark-2026-09-04-supplement-r3.json)、
 生データは [`PromptValidation/results/`](PromptValidation/results/)。再現は
 `dotnet run --project PromptValidation -- --model-benchmark`、図は `python tools/plot-model-benchmark.py`。
 
-> 図は 2026-08-06 の一斉計測 11 モデルに、同条件で単独計測した Gemini 3.7 Flash を
-> 「8/21追補」と明示して加えています。別日の通信状況を含むため、所要時間の厳密な同順位とは扱えません。
+> 図は 2026-08-06 の一斉計測 11 モデルに、同条件で単独計測した Gemini 3.7 Flash（8/21）と
+> Gemini 3.8 Flash、Gemini 3.1 Flash-Lite、Claude Fable 5.1（9/4）を「追補」と明記して加えています。
+> 別日の通信状況を含むため、所要時間の厳密な同順位とは扱えません。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/model-benchmark-scatter-dark.png">
-  <img src="docs/images/model-benchmark-scatter-light.png" alt="12モデルの校正1回の所要時間と料金の散布図。Gemini 3.7 Flashは8月21日の追補として表示。両軸とも対数目盛で、Claude Haiku 4.5、Gemini 3.5 Flash Lite、GPT 5.6 Lunaがパレート境界にある。">
+  <img src="docs/images/model-benchmark-scatter-light.png" alt="15モデルの校正1回の所要時間と料金の散布図。Gemini 3.7 Flashは8月21日、Gemini 3.8 Flash、Gemini 3.1 Flash-Lite、Claude Fable 5.1は9月4日の追補として表示。両軸とも対数目盛。">
 </picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/model-benchmark-bars-dark.png">
-  <img src="docs/images/model-benchmark-bars-light.png" alt="12モデルの所要時間（中央値と最小〜最大）と1回あたりの提案件数。Gemini 3.7 Flashは8月21日の追補として表示し、行はプロバイダーごとにまとまっている。">
+  <img src="docs/images/model-benchmark-bars-light.png" alt="15モデルの所要時間（中央値と最小〜最大）と1回あたりの提案件数。追補4モデルの日付を明記し、行はプロバイダーごとにまとまっている。">
 </picture>
 
 | モデル | プロバイダー | 単価 入力/出力 (per 1M) | 所要時間 中央値 | 1回あたり料金 | 提案件数 | 引用保護 | 指示耐性 |
 |---|---|---|---|---:|---:|:-:|:-:|
 | Claude Haiku 4.5 | Anthropic | $1 / $5 | 2.1 s | $0.0026 | 1.6 | ✓ | ✓ |
-| Gemini 3.7 Flash（8/21追補） | Google | $0.75 / $3.75 | 2.4 s | $0.002875 | 1.3 | ✓ | ✓ |
+| Gemini 3.7 Flash（08/21追補） | Google | $0.75 / $3.75 | 2.4 s | $0.0029 | 1.3 | ✓ | ✓ |
 | GPT 5.6 Terra | OpenAI | $2 / $12 | 2.7 s | $0.0050 | 1.6 | ✗ 無事故 2/3 | ✓ |
 | Gemini 3.5 Flash Lite | Google | $0.3 / $2.5 | 2.8 s | $0.0024 | 1.6 | ✓ | ✓ |
 | GPT 5.6 Luna | OpenAI | $0.2 / $1.2 | 3.1 s | $0.0006 | 1.9 | ✗ 無事故 1/3 | ✓ |
+| Gemini 3.8 Flash（09/04追補） | Google | $0.75 / $3.75 | 3.4 s | $0.0033 | 1.3 | ✓ | ✓ |
+| Gemini 3.1 Flash-Lite（09/04追補） | Google | $0.25 / $1.5 | 3.8 s | $0.0019 | 1.9 | ✗ 無事故 0/3 | ✓ |
 | GPT 5.6 Sol | OpenAI | $5 / $30 → $4 / $20 | 4.8 s | $0.0144 | 1.5 | ✓ | ✓ |
 | Gemini 3.6 Flash | Google | $1.5 / $7.5 | 5.2 s | $0.0080 | 1.4 | ✓ | ✓ |
 | Claude Opus 5 | Anthropic | $5 / $25 | 5.8 s | $0.0129 | 1.3 | ✓ | ✓ |
 | Claude Sonnet 5 | Anthropic | $3 / $15 → $2 / $10 | 6.0 s | $0.0078 | 1.9 | ✓ | ✓ |
+| Claude Fable 5.1（09/04追補） | Anthropic | $10 / $50 | 7.8 s | $0.0256 | 1.5 | ✓ | ✓ |
 | Claude Fable 5 | Anthropic | $10 / $50 | 8.9 s | $0.0299 | 1.3 | ✓ | ✓ |
 | Gemini 3.1 Pro (Preview) | Google | $2 / $12 | 9.5 s | $0.0109 | 1.3 | ✓ | ✓ |
 | PLaMo 3.0 Prime | Preferred Networks | ¥60 / ¥250 | 39.2 s | $0.0021 | 2.7 | ✗ 無事故 0/3 | ✓ |
@@ -374,15 +381,16 @@ $2 / $10 に変わりました（2026-08-24 確認、表では「計測時 → �
 
 読み取れること:
 
-- **引用内の誤字は 3 モデルが直してしまう**。GPT 5.6 Luna（3 試行中 2 回）、GPT 5.6 Terra（1 回）、
-  PLaMo（3 回）。直った結果は「原稿の『防腐剤を塗布する』という箇所は『防腐剤を塗布する』に
+- **引用内の誤字は 4 モデルが直してしまう**。GPT 5.6 Luna（3 試行中 2 回）、GPT 5.6 Terra（1 回）、
+  PLaMo（3 回）、Gemini 3.1 Flash-Lite（3 回）。直った結果は「原稿の『防腐剤を塗布する』という箇所は『防腐剤を塗布する』に
   修正してください」となり、**校正指示そのものが消える**。1 文字単位の妥当な修正に見えるので
   安全検査を通過し、一括許可（`Ctrl+Shift+.`）で黙って適用される。
   **既定の自動用モデルがこれに該当する**ため、引用の多い文章では一括許可の前に目視すること。
-- **本文中の指示に従ったモデルは 1 つも無かった**（11 モデル × 3 試行すべてで提案 0 件）。
+- **本文中の指示に従ったモデルは 1 つも無かった**（15 モデル × 3 試行すべてで提案 0 件）。
   本文に書いた `</document>` も逃がしが正しく往復している。
-- **Gemini 3.7 Flash の追補計測も保護違反 0 件**。引用保護・指示耐性はいずれも 3/3、
-  失敗・安全検査での破棄も 0 件だった。中央値 2.4 秒で、実測料金の中央値は 1 回 $0.002875。
+- **Gemini 3.8 Flash と Claude Fable 5.1 の追補計測も保護違反 0 件**。引用保護・指示耐性は
+  いずれも 3/3、失敗・安全検査での破棄も 0 件だった。Gemini 3.1 Flash-Lite は引用保護を
+  3/3 で破ったため、引用の多い文章には使わないほうがよい。
 - **誤りの無い文章はほぼ全モデルが放置する**。口語 33/33 試行、技術文書 30/33 試行で提案 0 件。
   安全検査で破棄された応答は 231 件中 0 件。
 - **PLaMo はカタログの推奨 30 秒では通らない**。最遅の試行が 119 秒（この計測は 120 秒設定）。
