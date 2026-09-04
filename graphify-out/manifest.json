@@ -18,16 +18,16 @@
     "semantic_hash": "ab620c0dcb1ef4bc35ed75d4e2bfef89"
   },
   "Controls/FindReplacePanel.xaml": {
-    "mtime": 1786527014.5233028,
-    "seen": 1787289838.1456616,
-    "ast_hash": "c9e06127244b19b8bb42b60ed0b3249b",
-    "semantic_hash": "c9e06127244b19b8bb42b60ed0b3249b"
+    "mtime": 1788488644.0671902,
+    "seen": 1788488700.8895228,
+    "ast_hash": "6c8b56a10d21861c497efe1a21e06e5c",
+    "semantic_hash": ""
   },
   "Controls/FindReplacePanel.xaml.cs": {
-    "mtime": 1785836270.1326065,
-    "seen": 1787289838.1456625,
-    "ast_hash": "c5092833df66567f59d40ae439980ee7",
-    "semantic_hash": "c5092833df66567f59d40ae439980ee7"
+    "mtime": 1788488642.954784,
+    "seen": 1788488700.8895245,
+    "ast_hash": "150fb79411e1e4f81cc3586457969203",
+    "semantic_hash": ""
   },
   "Controls/PricingHistoryChart.cs": {
     "mtime": 1786694271.1793008,
@@ -330,9 +330,9 @@
     "semantic_hash": ""
   },
   "PromptValidation/Program.cs": {
-    "mtime": 1787557433.8266132,
-    "seen": 1787557593.4337523,
-    "ast_hash": "59da2bf13314c1ad05a642e751e649d4",
+    "mtime": 1788488647.3827164,
+    "seen": 1788488700.8895702,
+    "ast_hash": "88e9277496a41d23d6a5abf78c9c46c2",
     "semantic_hash": ""
   },
   "PromptValidation/PromptFactory.cs": {
@@ -342,9 +342,9 @@
     "semantic_hash": "1daa734a75f674edfeeda595fddd736b"
   },
   "PromptValidation/PromptValidation.csproj": {
-    "mtime": 1787557432.2654827,
-    "seen": 1787557593.433754,
-    "ast_hash": "b5249c5f843797b5325b95dc4837dc2a",
+    "mtime": 1788488646.2782998,
+    "seen": 1788488700.889572,
+    "ast_hash": "51dad37792ac77551c7a872e275f754d",
     "semantic_hash": ""
   },
   "PromptValidation/ProofreadingDispatchPlannerValidation.cs": {
@@ -1305,6 +1305,30 @@
     "mtime": 1787570207.4648502,
     "seen": 1787572301.937412,
     "ast_hash": "cad7dd6a617e69340a20f76ec440e26e",
+    "semantic_hash": ""
+  },
+  "Editor/RegexReplacement.cs": {
+    "mtime": 1788488641.8737314,
+    "seen": 1788488700.8895302,
+    "ast_hash": "9f793614ebc3773ed7910e86b4af11db",
+    "semantic_hash": ""
+  },
+  "PromptValidation/RegexReplacementValidation.cs": {
+    "mtime": 1788488645.1857793,
+    "seen": 1788488700.8895783,
+    "ast_hash": "7cf4cbd34783f6bcd165db3e868bca16",
+    "semantic_hash": ""
+  },
+  "tools/measure-performance.py": {
+    "mtime": 1787588719.7126508,
+    "seen": 1788488700.889655,
+    "ast_hash": "98bccd9ee7eafd913a3839ae4aa53bf0",
+    "semantic_hash": ""
+  },
+  "tools/gui-regex-replace-test.py": {
+    "mtime": 1788489273.7663262,
+    "seen": 1788489301.7172868,
+    "ast_hash": "dfcf7c936101e28d3364b020a6529c3a",
     "semantic_hash": ""
   }
 }

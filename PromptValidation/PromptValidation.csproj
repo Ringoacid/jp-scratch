@@ -106,6 +106,8 @@
          位置決めロジックだけを純粋関数として切り出したこのファイルを検証する。 -->
     <Compile Include="..\Editor\ProofreadingInlineDiffLayout.cs"
              Link="Editor\ProofreadingInlineDiffLayout.cs" />
+    <Compile Include="..\Editor\RegexReplacement.cs"
+             Link="Editor\RegexReplacement.cs" />
     <!-- TrayIconService本体はWinFormsのNotifyIconに依存するため取り込めない。
          状態の決定だけを純粋関数として切り出したこのファイルを検証する。 -->
     <Compile Include="..\Services\TrayIconStateResolver.cs"

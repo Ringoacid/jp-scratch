@@ -117,6 +117,7 @@
                     Style="{StaticResource SearchFieldShell}">
                 <TextBox x:Name="ReplaceBox"
                          Style="{StaticResource SearchFieldTextBox}"
+                         ToolTip="正規表現が有効なときは $1 などの参照と \r、\n、\t を使用できます"
                          KeyDown="ReplaceBox_KeyDown" />
             </Border>
 

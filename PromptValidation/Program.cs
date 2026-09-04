@@ -273,6 +273,7 @@ internal static class Program
         bool styleGuidePass = StyleGuideRepositoryValidation.RunSelfTests();
         bool promptV3Pass = ProofreadingPromptV3Validation.RunSelfTests();
         bool inlineDiffPass = ProofreadingInlineDiffLayoutValidation.RunSelfTests();
+        bool regexReplacementPass = RegexReplacementValidation.RunSelfTests();
         bool statusBarFormatterPass = StatusBarUsageFormatterValidation.RunSelfTests();
         bool apiUsageDisplayPass = ApiUsageDisplayFormatterValidation.RunSelfTests();
         bool missedCorrectionPass = MissedCorrectionActionValidation.RunSelfTests();
@@ -289,7 +290,7 @@ internal static class Program
                appPathsPass && singleInstancePass &&
                billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&
                apiLogCompactionPass && trayIconStatePass &&
-               fewShotPass && styleGuidePass && promptV3Pass && inlineDiffPass &&
+               fewShotPass && styleGuidePass && promptV3Pass && inlineDiffPass && regexReplacementPass &&
                statusBarFormatterPass && apiUsageDisplayPass && missedCorrectionPass &&
                crossTabPreviewPass && trashRepositoryPass && atomicFilePass && modelBenchmarkPass ? 0 : 1;
     }
