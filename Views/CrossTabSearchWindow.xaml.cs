@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using JpScratch.Infrastructure;
 using JpScratch.Services;
@@ -151,6 +152,19 @@ public partial class CrossTabSearchWindow : Window
         if (ResultsList.SelectedItem is CrossTabHit hit) HitSelected?.Invoke(hit);
     }
 
+    private void UpdateJumpButton()
+    {
+        if (ResultsList.SelectedItem is not CrossTabHit hit)
+        {
+            JumpButton.Content = "この箇所へ移動";
+            JumpButton.IsEnabled = false;
+            return;
+        }
+
+        JumpButton.Content = hit.IsTrash ? "復元して移動" : "この箇所へ移動";
+        JumpButton.IsEnabled = true;
+    }
+
     private void SearchButton_Click(object sender, RoutedEventArgs e) => Search();
 
     private void TermBox_KeyDown(object sender, KeyEventArgs e)
@@ -161,6 +175,9 @@ public partial class CrossTabSearchWindow : Window
     }
 
     private void ResultsList_MouseDoubleClick(object sender, MouseButtonEventArgs e) => Jump();
+
+    private void ResultsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => UpdateJumpButton();
 
     private void ResultsList_KeyDown(object sender, KeyEventArgs e)
     {

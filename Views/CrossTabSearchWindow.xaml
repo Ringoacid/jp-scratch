@@ -82,6 +82,7 @@
                   Foreground="{DynamicResource TextBrush}"
                   BorderBrush="{DynamicResource BorderBrush}"
                   ItemContainerStyle="{StaticResource AppListViewItem}"
+                  SelectionChanged="ResultsList_SelectionChanged"
                   MouseDoubleClick="ResultsList_MouseDoubleClick"
                   KeyDown="ResultsList_KeyDown">
             <ListView.View>
@@ -102,6 +103,7 @@
                     Style="{StaticResource AppButton}"
                     Content="この箇所へ移動"
                     MinWidth="120"
+                    IsEnabled="False"
                     Click="JumpButton_Click" />
                 </DockPanel>
             </Grid>

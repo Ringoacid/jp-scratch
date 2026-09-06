@@ -25,7 +25,11 @@ When the user has not supplied final wording, show exactly two Japanese proposal
 
 Base both proposals only on the intended diff. Match an established repository convention; otherwise use an appropriate prefix such as `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, or `chore:`. Keep the subject near 50 Japanese characters when practical. Do not claim effects or verification absent from the evidence.
 
-Do not stage or commit yet. Ask the user to choose `案1`, `案2`, or provide revised wording, using the host's user-confirmation facility when available. Wait for an explicit answer. Invoking this skill is not approval of either proposal.
+Do not stage or commit yet. Choose which proposal you recommend based on the diff and repository convention, without changing the proposal numbering.
+
+Use the host's structured user-input or user-confirmation facility to present clickable choices whenever it is available; do not ask for a typed reply in ordinary prose in that case. Configure one choice for each proposal, put the recommended proposal first in the UI, and mark it as recommended. Keep the labels tied to the original proposal numbers (for example, `案2 (Recommended)` followed by `案1` when proposal 2 is recommended). Include a concise identifying summary in each choice description. The facility's free-form or `Other` path is the way to request revised wording; do not add a third choice solely for revisions when that path is supplied automatically.
+
+If no structured choice facility is available, fall back to asking the user to choose `案1`, `案2`, or provide revised wording. Wait for an explicit selection. Invoking this skill is not approval of either proposal.
 
 If the user already supplied exact final wording, preserve it and skip the two-proposal choice unless it conflicts with the actual diff; resolve any conflict before committing.
 

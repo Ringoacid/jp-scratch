@@ -810,16 +810,16 @@
     "semantic_hash": "420016221b093eab8bd15d33502b56ed"
   },
   "Views/CrossTabSearchWindow.xaml": {
-    "mtime": 1785313454.4681377,
-    "seen": 1787289838.1457353,
-    "ast_hash": "d9f6942b787a58ee4027f12c2353ce3e",
-    "semantic_hash": "d9f6942b787a58ee4027f12c2353ce3e"
+    "mtime": 1788708497.814869,
+    "seen": 1788708592.3735802,
+    "ast_hash": "3c0da21bd7951b6b097c26452fed831e",
+    "semantic_hash": ""
   },
   "Views/CrossTabSearchWindow.xaml.cs": {
-    "mtime": 1785836270.1527066,
-    "seen": 1787289838.1457357,
-    "ast_hash": "82612a6aa190b53856d37769822c86fe",
-    "semantic_hash": "82612a6aa190b53856d37769822c86fe"
+    "mtime": 1788708498.7925699,
+    "seen": 1788708592.3735816,
+    "ast_hash": "5309a375f876c228bd389a261821baac",
+    "semantic_hash": ""
   },
   "Views/FxRateCompletionDialog.xaml": {
     "mtime": 1787289061.5542867,
@@ -840,9 +840,9 @@
     "semantic_hash": ""
   },
   "Views/MainWindow.xaml.cs": {
-    "mtime": 1788702206.636042,
-    "seen": 1788704612.7461412,
-    "ast_hash": "e98af21061e00c400e0e5ae4f7493392",
+    "mtime": 1788708499.723328,
+    "seen": 1788708592.373585,
+    "ast_hash": "41518e347452fee47e4496c1c10256e7",
     "semantic_hash": ""
   },
   "Views/MissedCorrectionDialog.xaml": {

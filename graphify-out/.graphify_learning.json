@@ -1,0 +1,249 @@
+{
+  "generated_at": "2026-09-06T15:24:48.549258+00:00",
+  "nodes": {
+    "agents_md": {
+      "code_fingerprint": "5d8d1bfa3404e0cfc27b4a48e450f5907d6243cd31c09bd0391b6e3708c9b1f1",
+      "label": "AGENTS.md",
+      "last": "2026-08-24T10:27:32.442221+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-24T10:27:32.442221+00:00",
+          "outcome": "useful",
+          "q": "次のコミットメッセージを作成してください。"
+        }
+      ],
+      "score": 0.737024995,
+      "source_file": "AGENTS.md",
+      "status": "tentative",
+      "uses": 1
+    },
+    "app_xaml_jpscratch_app": {
+      "code_fingerprint": "3ea8be08fe648cc2cfae1e88b3963ef7b807e8fbd6c9727cf85f7e37e0401ef6",
+      "label": "App",
+      "last": "2026-08-24T08:12:40.886087+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-24T08:12:40.886087+00:00",
+          "outcome": "useful",
+          "q": "レビューで見つかった4件を修正し、PromptValidationの有料API実行ルールをAGENTS.mdへ追加する"
+        },
+        {
+          "date": "2026-08-24T08:02:45.321298+00:00",
+          "outcome": "useful",
+          "q": "Gitの変更をレビューしてください。"
+        }
+      ],
+      "score": 1.470746731,
+      "source_file": "App.xaml.cs",
+      "status": "preferred",
+      "uses": 2
+    },
+    "claude_skills_graphify_references_query_md_graphify_query": {
+      "code_fingerprint": "e563ddcb1e155aa230f107e5ef9380bc1249c5cd8241128de7ed8a7bd9c20cf5",
+      "label": "graphify query",
+      "last": "2026-08-24T11:16:47.464838+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-24T11:16:47.464838+00:00",
+          "outcome": "useful",
+          "q": "補助ファイルについて教えてください。削除しても大丈夫なものですか？"
+        }
+      ],
+      "score": 0.737607642,
+      "source_file": ".claude/skills/graphify/references/query.md",
+      "status": "tentative",
+      "uses": 1
+    },
+    "claude_skills_graphify_references_query_md_graphify_reflect": {
+      "code_fingerprint": "e563ddcb1e155aa230f107e5ef9380bc1249c5cd8241128de7ed8a7bd9c20cf5",
+      "label": "graphify reflect",
+      "last": "2026-08-24T11:16:47.464838+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-24T11:16:47.464838+00:00",
+          "outcome": "useful",
+          "q": "補助ファイルについて教えてください。削除しても大丈夫なものですか？"
+        },
+        {
+          "date": "2026-08-24T10:33:16.673254+00:00",
+          "outcome": "useful",
+          "q": "graphify-out の生成物のコミットメッセージを作成してください。"
+        }
+      ],
+      "score": 1.474700486,
+      "source_file": ".claude/skills/graphify/references/query.md",
+      "status": "preferred",
+      "uses": 2
+    },
+    "claude_skills_graphify_references_update_graphify_reference_incremental_update_and_cluster_only": {
+      "code_fingerprint": "661f559b3ff4f3db7ba47bc2ba1c7e19f1c1d66a36f647e49221eecb174f2228",
+      "label": "graphify reference: incremental update and cluster-only",
+      "last": "2026-08-24T10:33:16.673254+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-24T10:33:16.673254+00:00",
+          "outcome": "useful",
+          "q": "graphify-out の生成物のコミットメッセージを作成してください。"
+        }
+      ],
+      "score": 0.737092844,
+      "source_file": ".claude/skills/graphify/references/update.md",
+      "status": "tentative",
+      "uses": 1
+    },
+    "promptvalidation_program_jpscratch_promptvalidation_program": {
+      "code_fingerprint": "c6c7720541259b8ed49e52ab39ebd70a721439d50d714608d7aa4960e83ec8ad",
+      "label": "Program",
+      "last": "2026-08-24T08:12:40.886087+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-24T08:12:40.886087+00:00",
+          "outcome": "useful",
+          "q": "レビューで見つかった4件を修正し、PromptValidationの有料API実行ルールをAGENTS.mdへ追加する"
+        }
+      ],
+      "score": 0.735431925,
+      "source_file": "PromptValidation/Program.cs",
+      "status": "tentative",
+      "uses": 1
+    },
+    "services_backuprestoreservice_jpscratch_services_backuprestoreservice": {
+      "code_fingerprint": "c9e0e3ecb63d7abeeb164491fb38e06fdb4389583031b425605d23453e92a2cd",
+      "label": "BackupRestoreService",
+      "last": "2026-08-24T10:20:50.592460+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-24T10:20:50.592460+00:00",
+          "outcome": "useful",
+          "q": "現在のGit変更に適したコミット範囲を判断する"
+        },
+        {
+          "date": "2026-08-24T08:12:40.886087+00:00",
+          "outcome": "useful",
+          "q": "レビューで見つかった4件を修正し、PromptValidationの有料API実行ルールをAGENTS.mdへ追加する"
+        },
+        {
+          "date": "2026-08-24T08:02:45.321298+00:00",
+          "outcome": "useful",
+          "q": "Gitの変更をレビューしてください。"
+        }
+      ],
+      "score": 2.207692529,
+      "source_file": "Services/BackupRestoreService.cs",
+      "status": "preferred",
+      "uses": 3
+    },
+    "services_backupservice_jpscratch_services_backupservice": {
+      "code_fingerprint": "9835196fb89dff9d197d4025c5809b809a344bcc6bfdfff5f859a717e0e5b2c2",
+      "label": "BackupService",
+      "last": "2026-08-24T08:12:40.886087+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-24T08:12:40.886087+00:00",
+          "outcome": "useful",
+          "q": "レビューで見つかった4件を修正し、PromptValidationの有料API実行ルールをAGENTS.mdへ追加する"
+        },
+        {
+          "date": "2026-08-24T08:02:45.321298+00:00",
+          "outcome": "useful",
+          "q": "Gitの変更をレビューしてください。"
+        }
+      ],
+      "score": 1.470746731,
+      "source_file": "Services/BackupService.cs",
+      "status": "preferred",
+      "uses": 2
+    },
+    "services_diagnosticinfoservice_jpscratch_services_diagnosticinfoservice": {
+      "code_fingerprint": "bc086ad8bb77b9e8470b48c8e80733caafa050aba87fa7775720383a19fbb6c0",
+      "label": "DiagnosticInfoService",
+      "last": "2026-08-24T10:20:50.592460+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-24T10:20:50.592460+00:00",
+          "outcome": "useful",
+          "q": "現在のGit変更に適したコミット範囲を判断する"
+        }
+      ],
+      "score": 0.736945798,
+      "source_file": "Services/DiagnosticInfoService.cs",
+      "status": "tentative",
+      "uses": 1
+    },
+    "tools_plot_model_benchmark": {
+      "code_fingerprint": "3ccf9e5d85a5ed9047235f02d8e6d50c7ecab020e89a764d5b9ac017b30ea169",
+      "label": "plot-model-benchmark.py",
+      "last": "2026-08-21T12:51:10.740458+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-21T12:51:10.740458+00:00",
+          "outcome": "useful",
+          "q": "model-benchmark-barsなども更新してください。"
+        }
+      ],
+      "score": 0.689255325,
+      "source_file": "tools/plot-model-benchmark.py",
+      "status": "tentative",
+      "uses": 1
+    },
+    "tools_plot_model_benchmark_draw_bars": {
+      "code_fingerprint": "3ccf9e5d85a5ed9047235f02d8e6d50c7ecab020e89a764d5b9ac017b30ea169",
+      "label": "draw_bars()",
+      "last": "2026-08-21T12:51:10.740458+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-21T12:51:10.740458+00:00",
+          "outcome": "useful",
+          "q": "model-benchmark-barsなども更新してください。"
+        }
+      ],
+      "score": 0.689255325,
+      "source_file": "tools/plot-model-benchmark.py",
+      "status": "tentative",
+      "uses": 1
+    },
+    "tools_plot_model_benchmark_draw_scatter": {
+      "code_fingerprint": "3ccf9e5d85a5ed9047235f02d8e6d50c7ecab020e89a764d5b9ac017b30ea169",
+      "label": "draw_scatter()",
+      "last": "2026-08-21T12:51:10.740458+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-21T12:51:10.740458+00:00",
+          "outcome": "useful",
+          "q": "model-benchmark-barsなども更新してください。"
+        }
+      ],
+      "score": 0.689255325,
+      "source_file": "tools/plot-model-benchmark.py",
+      "status": "tentative",
+      "uses": 1
+    },
+    "views_settingswindow_xaml_jpscratch_views_settingswindow": {
+      "code_fingerprint": "c611298b6e3145c140289838d62af8abb459435593868947ce4a6548aad67b4a",
+      "label": "SettingsWindow",
+      "last": "2026-08-24T10:20:50.592460+00:00",
+      "provenance": [
+        {
+          "date": "2026-08-24T10:20:50.592460+00:00",
+          "outcome": "useful",
+          "q": "現在のGit変更に適したコミット範囲を判断する"
+        },
+        {
+          "date": "2026-08-24T08:12:40.886087+00:00",
+          "outcome": "useful",
+          "q": "レビューで見つかった4件を修正し、PromptValidationの有料API実行ルールをAGENTS.mdへ追加する"
+        },
+        {
+          "date": "2026-08-24T08:02:45.321298+00:00",
+          "outcome": "useful",
+          "q": "Gitの変更をレビューしてください。"
+        }
+      ],
+      "score": 2.207692529,
+      "source_file": "Views/SettingsWindow.xaml.cs",
+      "status": "preferred",
+      "uses": 3
+    }
+  },
+  "version": 1
+}

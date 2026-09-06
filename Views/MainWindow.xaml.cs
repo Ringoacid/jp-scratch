@@ -3490,10 +3490,42 @@ public partial class MainWindow : Window
     private void JumpToHit(CrossTabHit hit)
     {
         var tab = _tabs.Tabs.FirstOrDefault(t => t.Id == hit.TabId);
+        if (tab is null && hit.IsTrash)
+        {
+            // 検索後に Ctrl+Shift+T やゴミ箱画面から復元されている可能性があるため、
+            // まず開いている一覧を見たあと、まだゴミ箱にある同じ ID の行だけを復元する。
+            var trashed = _repository.LoadTrash().FirstOrDefault(t => t.Id == hit.TabId);
+            if (trashed is null)
+            {
+                SetTransientStatus("このタブは検索後に復元または削除されました");
+                return;
+            }
+
+            try
+            {
+                tab = _tabs.Restore(trashed);
+            }
+            catch (Exception ex) when (
+                ex is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                SetTransientStatus("タブを復元できませんでした（本文ファイルを移動できません）");
+                return;
+            }
+
+            if (tab is null)
+            {
+                SetTransientStatus("このタブは壊れているため復元できません");
+                return;
+            }
+
+            // ゴミ箱画面も同時に開いていれば、復元済みの行を残さない。
+            _trashWindow?.Refresh();
+            SetTransientStatus($"タブ「{tab.Title}」を復元しました");
+        }
+
         if (tab is null)
         {
-            // ゴミ箱の中のタブは、まず開いているタブとして戻す必要がある
-            SetTransientStatus("ゴミ箱のタブです。Ctrl+Shift+T で復元してください");
+            SetTransientStatus("このタブは検索後に閉じられました");
             return;
         }
 
