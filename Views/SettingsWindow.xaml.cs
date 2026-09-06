@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using JpScratch.Editor;
 using JpScratch.Infrastructure;
 using JpScratch.Models;
@@ -15,7 +16,7 @@ using Microsoft.Win32;
 
 namespace JpScratch.Views;
 
-/// <summary>設定画面（要件 5 / v1）。設定の変更は OK またはウィンドウを閉じると保存する。</summary>
+/// <summary>設定画面（要件 5 / v1）。設定の変更は「保存して閉じる」で保存する。</summary>
 public partial class SettingsWindow : Window
 {
     private const string AutoFontLabel = "（自動: メイリオ → 游ゴシック）";
@@ -29,7 +30,7 @@ public partial class SettingsWindow : Window
     private readonly Func<IReadOnlyList<string>> _saveDirty;
     private readonly Func<bool> _isWorkInProgress;
     private readonly Func<string, bool> _requestRestore;
-    // 資格情報の欄はプロバイダーごとに複製せず、選択中モデルのプロバイダーへ切り替える1枚で扱う。
+    // 資格情報の欄はプロバイダーごとに複製せず、選択したプロバイダーへ切り替える1枚で扱う。
     // そのため「入力途中のキー」「削除指示」「取得元の選択」はプロバイダー別に持ち、
     // パネル切替時に退避・復元する。単一の bool のままだと、Gemini を選んで削除を押し
     // OpenAI へ切り替えて OK を押すと OpenAI のキーが消える。
@@ -50,6 +51,7 @@ public partial class SettingsWindow : Window
     private bool _loadingPricingControls;
     private bool _pricingControlsLoaded;
     private bool _discardSettings;
+    private HotkeyCapture? _hotkeyCapture;
 
     private sealed record PricingHistoryRow(
         DateOnly EffectiveFrom,
@@ -89,6 +91,13 @@ public partial class SettingsWindow : Window
         _requestRestore = requestRestore;
         InitializeComponent();
         LoadFrom(service.Current);
+        Deactivated += (_, _) => StopHotkeyCapture();
+        Activated += (_, _) =>
+        {
+            if (Keyboard.FocusedElement is TextBox box && (box == ToggleHotkeyBox || box == CopyHideHotkeyBox))
+                StartHotkeyCapture(box);
+        };
+        Closed += (_, _) => StopHotkeyCapture();
     }
 
     private void LoadFrom(AppSettings s)
@@ -159,16 +168,13 @@ public partial class SettingsWindow : Window
         LoadStyleGuideControls();
         LoadRejectionTrendControls();
 
-        string[] modelNames = ProofreadingModelCatalog.SupportedModels
-            .Select(ProofreadingModelCatalog.DisplayName)
-            .ToArray();
         _loadingProofreadingModelControls = true;
-        AutoProofreadingModelCombo.ItemsSource = modelNames;
-        AutoProofreadingModelCombo.SelectedItem =
-            ProofreadingModelCatalog.DisplayName(s.AutoProofreadingModel);
-        ManualProofreadingModelCombo.ItemsSource = modelNames;
-        ManualProofreadingModelCombo.SelectedItem =
-            ProofreadingModelCatalog.DisplayName(s.ManualProofreadingModel);
+        AutoModelFamilyCombo.ItemsSource = ModelFamilies;
+        ManualModelFamilyCombo.ItemsSource = ModelFamilies;
+        AutoModelFamilyCombo.SelectedItem = FamilyOf(s.AutoProofreadingModel);
+        ManualModelFamilyCombo.SelectedItem = FamilyOf(s.ManualProofreadingModel);
+        PopulateModels(AutoProofreadingModelCombo, FamilyOf(s.AutoProofreadingModel), s.AutoProofreadingModel);
+        PopulateModels(ManualProofreadingModelCombo, FamilyOf(s.ManualProofreadingModel), s.ManualProofreadingModel);
         AutoTimeoutBox.Text =
             s.AutoProofreadingTimeoutSeconds.ToString(CultureInfo.InvariantCulture);
         ManualTimeoutBox.Text =
@@ -180,6 +186,9 @@ public partial class SettingsWindow : Window
         // 上のコンボを埋めた後に読み込む。先に呼ぶと SelectedItem が未設定で、使用中バッジが
         // 既定モデル基準の誤った表示になる。
         LoadPricingControls();
+        CredentialProviderCombo.ItemsSource = Enum.GetValues<ApiProvider>()
+            .Select(provider => new ProviderOption(provider, ProofreadingModelCatalog.ProviderDisplayName(provider))).ToArray();
+        CredentialProviderCombo.SelectedValue = ProofreadingModelCatalog.ProviderOf(s.AutoProofreadingModel);
 
         AutoSaveBox.Text = s.AutoSaveDebounceMs.ToString(CultureInfo.InvariantCulture);
         TrashDaysBox.Text = s.TrashRetentionDays.ToString(CultureInfo.InvariantCulture);
@@ -275,90 +284,128 @@ public partial class SettingsWindow : Window
     }
 
     private static string ParseHotkeyOrKeep(string display, string fallback)
-        => HotkeySpec.TryParse(display.Replace(" ", ""), out var spec) ? spec.ToString() : fallback;
+        => string.IsNullOrWhiteSpace(display) ? ""
+            : HotkeySpec.TryParse(display.Replace(" ", ""), out var spec) ? spec.ToString() : fallback;
 
     private static double ParseNumber(string text, double fallback)
         => double.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
             ? value
             : fallback;
 
-    private const string HotkeyHintText = "（修飾キーと組み合わせてください）";
+    private TextBlock HotkeyStatus(TextBox box)
+        => box == ToggleHotkeyBox ? ToggleHotkeyStatus : CopyHideHotkeyStatus;
 
-    /// <summary>無効なキーを押した直後に欄内へ表示したヒントと、戻すべき元の値。</summary>
-    private (TextBox Box, string OriginalText)? _hotkeyHint;
-
-    /// <summary>ヒント表示中なら元の値へ戻す（次のキー操作・フォーカス喪失のとき）。</summary>
-    private void RestoreHotkeyHint(TextBox box)
+    private void SetHotkeyStatus(TextBox box, string text, bool error = false)
     {
-        if (_hotkeyHint is { } hint && ReferenceEquals(hint.Box, box))
+        TextBlock status = HotkeyStatus(box);
+        status.Text = text;
+        status.SetResourceReference(TextBlock.ForegroundProperty, error ? "DangerBrush" : "TextBrush");
+    }
+
+    private void HotkeyBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox box)
+            StartHotkeyCapture(box);
+    }
+
+    private void StartHotkeyCapture(TextBox box)
+    {
+        StopHotkeyCapture();
+        SetHotkeyStatus(box, "入力待ち：使いたいキーの組み合わせを押してください。");
+        try
         {
-            box.Text = hint.OriginalText;
-            box.ToolTip = null;
-            _hotkeyHint = null;
+            _hotkeyCapture = new HotkeyCapture(new WindowInteropHelper(this).EnsureHandle(), Dispatcher,
+                (key, modifiers) =>
+                {
+                    if (box.IsKeyboardFocused && IsActive) HandleHotkeyInput(box, key, modifiers);
+                });
+        }
+        catch (Win32Exception)
+        {
+            SetHotkeyStatus(box, "キー入力の監視を開始できません。別の欄を選んでから、もう一度選択してください。", true);
         }
     }
 
-    /// <summary>
-    /// ホットキーの入力欄。押されたキーをそのまま割り当てる。
-    /// 修飾キー単独では確定させない（Alt だけを登録しても意味がないため）。
-    /// </summary>
+    private void StopHotkeyCapture()
+    {
+        _hotkeyCapture?.Dispose();
+        _hotkeyCapture = null;
+    }
+
+    private string? HotkeyError(TextBox box, HotkeySpec spec)
+    {
+        TextBox other = box == ToggleHotkeyBox ? CopyHideHotkeyBox : ToggleHotkeyBox;
+        if (spec != HotkeySpec.None && HotkeySpec.TryParse(other.Text, out var otherSpec) && spec == otherSpec)
+            return box == ToggleHotkeyBox
+                ? "このアプリの「全文をコピーして隠す」と重複しています。"
+                : "このアプリの「表示 / 非表示」と重複しています。";
+        return HotkeyService.CheckAvailability(new WindowInteropHelper(this).EnsureHandle(), spec);
+    }
+
     private void HotkeyBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (sender is not TextBox box) return;
-
-        // 直前の無効キーで出したヒントが残っていれば、次の操作で元の値へ戻す。
-        RestoreHotkeyHint(box);
-
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
-
-        // ナビゲーションキーは、修飾キーが無いとき（Tab は Shift 付きも含む）だけ既定の動作
-        // （Tab で次の欄へ移動、Esc でダイアログを閉じるなど）を通す。修飾キーと組み合わされた
-        // 場合はホットキーとして割り当てる（Ctrl+Enter や Alt+← を登録できるようにする）。
-        // ここを無条件に吞み込むと、キーボードだけでフォーカスを外せなくなる（フォーカストラップ）。
-        bool noModifiers = Keyboard.Modifiers is ModifierKeys.None or ModifierKeys.Shift;
-        if (noModifiers &&
-            key is Key.Tab or Key.Escape or Key.Enter
-                or Key.Left or Key.Right or Key.Up or Key.Down
-                or Key.Home or Key.End or Key.PageUp or Key.PageDown)
-        {
-            return;
-        }
-
+        var modifiers = Keyboard.Modifiers;
+        // Tab navigation must remain available. Enter/Esc finish capture instead of saving/closing.
+        if (key == Key.Tab && modifiers is ModifierKeys.None or ModifierKeys.Shift) return;
         e.Handled = true;
-
-        if (key == Key.Back)
-        {
-            box.Text = "";
-            return;
-        }
-
-        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
-                or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin
-                or Key.System or Key.None or Key.ImeProcessed)
-        {
-            return;
-        }
-
-        var spec = new HotkeySpec(Keyboard.Modifiers, key);
-        if (!spec.IsValid)
-        {
-            // 欄の中身を永続的なエラー文で置き換えない（そのまま OK を押すまで表示にゴミが残る
-            // ため）。ツールチップに加えて欄内にも一時ヒントを表示し、次のキー操作かフォーカス
-            // 喪失で元の値へ戻す（ホバーしない限り無反応に見える、を防ぐ）。
-            box.ToolTip = "修飾キーと組み合わせてください";
-            if (_hotkeyHint is not { } hint || !ReferenceEquals(hint.Box, box))
-                _hotkeyHint = (box, box.Text);
-            box.Text = HotkeyHintText;
-            return;
-        }
-
-        box.ToolTip = null;
-        box.Text = spec.DisplayName;
+        HandleHotkeyInput(box, key, modifiers);
     }
 
-    private void HotkeyBox_LostFocus(object sender, RoutedEventArgs e)
+    private void HandleHotkeyInput(TextBox box, Key key, ModifierKeys modifiers)
     {
-        if (sender is TextBox box) RestoreHotkeyHint(box);
+        if (modifiers == ModifierKeys.None && key is Key.Enter or Key.Escape)
+        {
+            box.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
+            return;
+        }
+        if (key == Key.Back && modifiers == ModifierKeys.None)
+        {
+            box.Text = "";
+            SetHotkeyStatus(box, "解除予定：保存すると無効になります。");
+            return;
+        }
+        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt
+            or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin)
+        {
+            SetHotkeyStatus(box, "修飾キーを受け付けました。そのまま別のキーを押してください。");
+            return;
+        }
+        if (key is Key.System or Key.None or Key.ImeProcessed) return;
+        var spec = new HotkeySpec(modifiers, key);
+        string? error = HotkeyError(box, spec);
+        if (error is not null)
+        {
+            SetHotkeyStatus(box, $"{spec.DisplayName}：{error} 現在の設定は保持しています。", true);
+            return;
+        }
+        box.Text = spec.DisplayName;
+        SetHotkeyStatus(box, "使用できます。「保存して閉じる」で反映します。");
+    }
+
+    private void HotkeyBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        StopHotkeyCapture();
+        if (sender is TextBox box && !box.IsKeyboardFocused &&
+            (HotkeyStatus(box).Text.StartsWith("入力待ち") || HotkeyStatus(box).Text.StartsWith("修飾キー")))
+            SetHotkeyStatus(box, string.IsNullOrWhiteSpace(box.Text) ? "未設定" : "クリックして変更");
+    }
+
+    private bool ValidateHotkeys()
+    {
+        foreach (TextBox box in new[] { ToggleHotkeyBox, CopyHideHotkeyBox })
+        {
+            var spec = HotkeySpec.ParseOrDefault(box.Text, HotkeySpec.None);
+            string? error = HotkeyError(box, spec);
+            if (error is null) continue;
+            SettingsTabs.SelectedItem = GeneralTab;
+            box.BringIntoView();
+            box.Focus();
+            SetHotkeyStatus(box, error, true);
+            return false;
+        }
+        return true;
     }
 
     private void OkButton_Click(object sender, RoutedEventArgs e)
@@ -369,6 +416,7 @@ public partial class SettingsWindow : Window
     private bool TrySaveSettings()
     {
         // 現在値のコピーに書き込んでから差し替える。途中で例外が出ても設定が半端に壊れない。
+        if (!ValidateHotkeys()) return false;
         var updated = _service.Current.Clone();
         ApplyTo(updated);
 
@@ -471,24 +519,59 @@ public partial class SettingsWindow : Window
             SelectedModelId(ManualProofreadingModelCombo));
 
         TimeoutHintText.Text =
-            $"推奨: 自動 {auto.RecommendedTimeout.TotalSeconds:0} 秒 / " +
-            $"手動 {manual.RecommendedTimeout.TotalSeconds:0} 秒（5〜300 秒）。\n" +
-            "1 回の自動校正は段落ごとに分割し、同時送信数ずつまとめて送ります。実行時間の目安は" +
-            "「タイムアウト × まとめて送る回数（バッチ数）」で、まとめて送る回数は" +
-            "「分割数 ÷ 同時送信数」を切り上げた整数（最低 1 回）です。ただし、2,000 文字を超える" +
-            "段落の複数パートは同一段落内で順番待ちになるため、最大ではまとめて送る回数が" +
-            "分割数と同じになることがあります。さらに、実行開始時には最小送信間隔の待ちが" +
-            "加わる場合があります。レート制限や一時的な通信エラーで 1 回だけ再送したバッチには、" +
-            "タイムアウト 1 回分と 1〜5 秒の待ちが加わります。" +
-            "入力中の自動校正には応答の速いモデルをおすすめします。";
+            $"応答待ちの目安：自動 {auto.RecommendedTimeout.TotalSeconds:0} 秒 / 手動 {manual.RecommendedTimeout.TotalSeconds:0} 秒（設定範囲 5〜300 秒）";
+        TimeoutHintText.ToolTip = "自動校正は段落単位で送信します。長い本文・最小送信間隔の待ち・通信エラー時の再送により、全体の所要時間は設定値より長くなる場合があります。";
     }
 
-    private static string? SelectedModelId(System.Windows.Controls.ComboBox combo)
-        => combo.SelectedItem is not string displayName
-            ? null
-            : ProofreadingModelCatalog.SupportedModels
-                .FirstOrDefault(model =>
-                    ProofreadingModelCatalog.DisplayName(model) == displayName);
+    private sealed record ProviderOption(ApiProvider Provider, string Name)
+    {
+        public override string ToString() => Name;
+    }
+    private sealed record ModelOption(string Id, string DisplayName, string Family)
+    {
+        public override string ToString() => DisplayName;
+    }
+    private static readonly string[] ModelFamilies = ["GPT", "Claude", "Gemini", "PLaMo"];
+    private readonly Dictionary<(string Purpose, string Family), string> _familySelections = [];
+
+    private static string FamilyOf(string model) => ProofreadingModelCatalog.ProviderOf(model) switch
+    {
+        ApiProvider.OpenAi => "GPT",
+        ApiProvider.Anthropic => "Claude",
+        ApiProvider.Google => "Gemini",
+        _ => "PLaMo",
+    };
+
+    private static void PopulateModels(ComboBox combo, string family, string? selected)
+    {
+        var models = ProofreadingModelCatalog.SupportedModels.Where(model => FamilyOf(model) == family)
+            .Select(model => new ModelOption(model, ProofreadingModelCatalog.DisplayName(model), family)).ToArray();
+        combo.ItemsSource = models;
+        combo.SelectedValue = selected;
+        if (combo.SelectedIndex < 0) combo.SelectedIndex = 0;
+    }
+
+    private void ModelFamilyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingProofreadingModelControls || sender is not ComboBox familyCombo || familyCombo.SelectedItem is not string family) return;
+        ComboBox combo = familyCombo == AutoModelFamilyCombo ? AutoProofreadingModelCombo : ManualProofreadingModelCombo;
+        if (SelectedModelId(combo) is string previous)
+            _familySelections[(combo.Name, FamilyOf(previous))] = previous;
+        _familySelections.TryGetValue((combo.Name, family), out string? selected);
+        _loadingProofreadingModelControls = true;
+        PopulateModels(combo, family, selected);
+        _loadingProofreadingModelControls = false;
+        RefreshTimeoutHint();
+        RefreshCredentialStatus();
+    }
+
+    private static string? SelectedModelId(ComboBox combo) => combo.SelectedValue as string;
+
+    private void CredentialProviderCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        StashShownCredentialProvider();
+        UpdateCredentialPanelVisibility();
+    }
 
     private static ApiKeySource ApiKeySourceOf(AppSettings s, ApiProvider provider)
         => provider switch
@@ -516,7 +599,7 @@ public partial class SettingsWindow : Window
         if (CredentialStatusText is null || _shownCredentialProvider is not { } provider) return;
 
         string stored = _deleteStoredKeys.Contains(provider)
-            ? "保存済みキー: OKを押すと削除"
+            ? "保存済みキー: 保存すると削除"
             : _credentials.StoredKeyState(provider) switch
             {
                 StoredCredentialState.Available => "保存済みキー: あり（値は表示しません）",
@@ -529,11 +612,15 @@ public partial class SettingsWindow : Window
             ? $"環境変数 {variable}: 検出済み"
             : $"環境変数 {variable}: 見つかりません";
 
-        string pending = ApiKeyBox?.Password.Length > 0
-            ? "\n新しいキー: OKを押すと暗号化して保存"
+        string pending = ApiKeyBox.Password.Length > 0
+            ? "\n新しいキー: 保存すると暗号化して保存"
             : "";
 
-        CredentialStatusText.Text = $"{stored}\n{environment}{pending}";
+        bool useEnvironment = CredentialSourceCombo.SelectedIndex == 1;
+        ApiKeyBox.IsEnabled = !useEnvironment;
+        DeleteStoredKeyButton.IsEnabled = !useEnvironment;
+        CredentialStatusText.Text = useEnvironment ? environment : stored + pending;
+        CredentialStatusText.ToolTip = $"{stored}\n{environment}{pending}";
         RefreshCredentialUsage(provider);
     }
 
@@ -814,9 +901,16 @@ public partial class SettingsWindow : Window
         if (_pricingEvents.ContainsKey(PricingService.DefaultModel))
             models.Insert(0, PricingService.DefaultModel);
 
-        PricingModelCombo.ItemsSource = models;
-        _selectedPricingModel = models.Count > 0 ? models[0] : null;
-        PricingModelCombo.SelectedIndex = models.Count > 0 ? 0 : -1;
+        var choices = models.Select(model => new ModelOption(model,
+            ProofreadingModelCatalog.DisplayName(model),
+            ProofreadingModelCatalog.IsSupported(model) ? FamilyOf(model) : "その他")).ToArray();
+        var view = new System.Windows.Data.ListCollectionView(choices);
+        view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(ModelOption.Family)));
+        PricingModelCombo.ItemsSource = view;
+        _selectedPricingModel = SelectedModelId(AutoProofreadingModelCombo);
+        PricingModelCombo.SelectedValue = _selectedPricingModel;
+        if (PricingModelCombo.SelectedIndex < 0) PricingModelCombo.SelectedIndex = models.Count > 0 ? 0 : -1;
+        _selectedPricingModel = PricingModelCombo.SelectedValue as string;
 
         ShowSelectedPricingModel();
 
@@ -828,14 +922,12 @@ public partial class SettingsWindow : Window
     {
         if (_loadingPricingControls) return;
 
-        StashShownCredentialProvider();
-        _selectedPricingModel = PricingModelCombo.SelectedItem as string;
+        _selectedPricingModel = PricingModelCombo.SelectedValue as string;
         ShowSelectedPricingModel();
     }
 
     private void ShowSelectedPricingModel()
     {
-        UpdateCredentialPanelVisibility();
         PricingHistoryList.ItemsSource = null;
         PricingEditButton.IsEnabled = false;
         PricingDeleteButton.IsEnabled = false;
@@ -860,7 +952,7 @@ public partial class SettingsWindow : Window
         if (TryResolveStagedPricing(model, today, out ModelPricing? current))
         {
             PricingCurrentSummaryText.Text =
-                $"現在: 入力 {FormatPrice(current!.InputUsdPerMillion, currency)} / " +
+                $"100万トークンあたり：入力 {FormatPrice(current!.InputUsdPerMillion, currency)} / " +
                 $"出力 {FormatPrice(current.OutputUsdPerMillion, currency)}";
         }
         else
@@ -884,26 +976,24 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// 選択中モデルのプロバイダーへ資格情報パネルを切り替える。
+    /// 選択した提供元へ資格情報パネルを切り替える。
     /// **退避（<see cref="StashShownCredentialProvider"/>）は切り替えの前に済ませておくこと**。
     /// 順序を誤ると、入力途中のキーが別プロバイダーのスロットへ入る。
     /// </summary>
     private void UpdateCredentialPanelVisibility()
     {
-        if (_selectedPricingModel is null)
+        if (CredentialProviderCombo.SelectedValue is not ApiProvider provider)
         {
             CredentialPanel.Visibility = Visibility.Collapsed;
             _shownCredentialProvider = null;
             return;
         }
 
-        ApiProvider provider = ProofreadingModelCatalog.ProviderOf(_selectedPricingModel);
         CredentialPanel.Visibility = Visibility.Visible;
         _shownCredentialProvider = provider;
 
         _loadingCredentialControls = true;
-        CredentialSourceLabel.Text =
-            $"{ProofreadingModelCatalog.ProviderDisplayName(provider)} APIキーの取得元";
+        CredentialSourceLabel.Text = "キーの取得元";
         CredentialSourceCombo.ItemsSource = new[]
         {
             "アプリに保存したキー",

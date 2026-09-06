@@ -67,7 +67,9 @@ public sealed record HotkeySpec(ModifierKeys Modifiers, Key Key)
     }
 
     public static HotkeySpec ParseOrDefault(string? text, HotkeySpec fallback)
-        => TryParse(text, out var spec) ? spec : fallback;
+        => text is not null && string.IsNullOrWhiteSpace(text)
+            ? None
+            : TryParse(text, out var spec) ? spec : fallback;
 
     public override string ToString()
     {
@@ -78,7 +80,7 @@ public sealed record HotkeySpec(ModifierKeys Modifiers, Key Key)
         if (Modifiers.HasFlag(ModifierKeys.Alt)) sb.Append("Alt+");
         if (Modifiers.HasFlag(ModifierKeys.Shift)) sb.Append("Shift+");
         if (Modifiers.HasFlag(ModifierKeys.Windows)) sb.Append("Win+");
-        sb.Append(Key);
+        sb.Append(Key == Key.Return ? "Enter" : Key.ToString());
         return sb.ToString();
     }
 

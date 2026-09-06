@@ -3342,6 +3342,7 @@ public partial class MainWindow : Window
         if (!IsVisible) ShowAndFocus();
 
         SuppressAutoHide();
+        _hotkeys.Suspend();
         try
         {
             var dialog = new SettingsWindow(
@@ -3366,6 +3367,9 @@ public partial class MainWindow : Window
         }
         finally
         {
+            var hotkeyFailures = _hotkeys.Resume(_settings.Current);
+            if (hotkeyFailures.Count > 0)
+                SetTransientStatus(string.Join(" / ", hotkeyFailures));
             ReleaseAutoHide();
         }
 

@@ -16,6 +16,38 @@ internal sealed class HotkeyService : IDisposable
     private readonly List<int> _registered = [];
     private IntPtr _hwnd;
     private HwndSource? _source;
+    private bool _suspended;
+
+    // 設定中は既存の割り当てを解除し、入力したキーで本体が動くのを防ぐ。
+    public void Suspend()
+    {
+        _suspended = true;
+        UnregisterAll();
+    }
+
+    public IReadOnlyList<string> Resume(AppSettings settings)
+    {
+        _suspended = false;
+        return Reregister(settings);
+    }
+
+    public static string? CheckAvailability(IntPtr hwnd, HotkeySpec spec)
+    {
+        if (spec == HotkeySpec.None) return null;
+        if (!spec.IsValid) return "Ctrl・Alt・Shift・Win と別のキーを組み合わせてください。";
+        if (spec.Key == System.Windows.Input.Key.F12)
+            return "F12 は Windows の予約キーのため使用できません。";
+        const int probeId = 0xA003;
+        if (!NativeMethods.RegisterHotKey(hwnd, probeId, spec.Win32Modifiers, spec.VirtualKey))
+        {
+            int error = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
+            return error == 1409
+                ? "別のアプリまたは Windows が使用中です。別の組み合わせを押してください。"
+                : $"登録できません（エラー {error}）。別の組み合わせを押してください。";
+        }
+        NativeMethods.UnregisterHotKey(hwnd, probeId);
+        return null;
+    }
 
     /// <summary>押されたホットキーの ID を通知する。</summary>
     public event Action<int>? Pressed;
@@ -33,6 +65,7 @@ internal sealed class HotkeyService : IDisposable
     public IReadOnlyList<string> Reregister(AppSettings settings)
     {
         UnregisterAll();
+        if (_suspended) return [];
 
         var failures = new List<string>();
         TryRegister(IdToggle, settings.ToggleHotkey, "表示 / 非表示トグル", failures);
@@ -43,6 +76,7 @@ internal sealed class HotkeyService : IDisposable
     private void TryRegister(int id, HotkeySpec spec, string label, List<string> failures)
     {
         if (_hwnd == IntPtr.Zero) return;
+        if (spec == HotkeySpec.None) return;
 
         if (!spec.IsValid)
         {
@@ -87,5 +121,6 @@ internal sealed class HotkeyService : IDisposable
         UnregisterAll();
         _source?.RemoveHook(WndProc);
         _source = null;
+        _hwnd = IntPtr.Zero;
     }
 }
