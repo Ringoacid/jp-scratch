@@ -44,6 +44,8 @@ internal static class ProofreadingModelCatalogValidation
 
         ModelDescriptor? gemini37 = ProofreadingModelCatalog.All
             .SingleOrDefault(descriptor => descriptor.Id == "gemini-3.7-flash");
+        ModelDescriptor? astra = ProofreadingModelCatalog.All
+            .SingleOrDefault(descriptor => descriptor.Id == "gpt-6-astra");
         ModelDescriptor? gemini38 = ProofreadingModelCatalog.All
             .SingleOrDefault(descriptor => descriptor.Id == "gemini-3.8-flash");
         ModelDescriptor? gemini31Lite = ProofreadingModelCatalog.All
@@ -51,7 +53,7 @@ internal static class ProofreadingModelCatalogValidation
         ModelDescriptor? fable51 = ProofreadingModelCatalog.All
             .SingleOrDefault(descriptor => descriptor.Id == "claude-fable-5-1");
         bool gemini37Pass =
-            ProofreadingModelCatalog.All.Count == 15 &&
+            ProofreadingModelCatalog.All.Count == 16 &&
             gemini37 is not null &&
             gemini37.Provider == ApiProvider.Google &&
             gemini37.RecommendedTimeout == TimeSpan.FromSeconds(30) &&
@@ -61,6 +63,12 @@ internal static class ProofreadingModelCatalogValidation
             ProofreadingModelCatalog.DefaultAutomaticModel != "gemini-3.7-flash";
 
         bool newModelsPass =
+            astra is { Provider: ApiProvider.OpenAi, RecommendedTimeout: var astraTimeout } &&
+            astraTimeout == TimeSpan.FromSeconds(90) &&
+            astra.EffortFor(ProofreadingPurpose.Automatic) == "low" &&
+            astra.EffortFor(ProofreadingPurpose.Manual) == "medium" &&
+            astra.InputPricePerMillion == 10.00m &&
+            astra.OutputPricePerMillion == 50.00m &&
             gemini38 is { Provider: ApiProvider.Google, RecommendedTimeout: var gemini38Timeout } &&
             gemini38Timeout == TimeSpan.FromSeconds(30) &&
             gemini38.EffortFor(ProofreadingPurpose.Manual) == "medium" &&
@@ -74,6 +82,13 @@ internal static class ProofreadingModelCatalogValidation
             fable51.InputPricePerMillion == 10.00m &&
             fable51.OutputPricePerMillion == 50.00m &&
             ProofreadingModelCatalog.SupportsAdaptiveThinking(fable51.Id);
+
+        bool highCostWarningPass =
+            ProofreadingModelCatalog.IsHighCostForProofreading("gpt-6-astra") &&
+            ProofreadingModelCatalog.IsHighCostForProofreading("claude-fable-5") &&
+            ProofreadingModelCatalog.IsHighCostForProofreading("claude-fable-5-1") &&
+            !ProofreadingModelCatalog.IsHighCostForProofreading("gpt-5.6-sol") &&
+            !ProofreadingModelCatalog.IsHighCostForProofreading("claude-opus-5");
 
         // 用途別の思考量は、Haiku 4.5（effort 非対応）以外のすべてで定義されていること。
         bool effortPass = ProofreadingModelCatalog.All.All(descriptor =>
@@ -99,12 +114,13 @@ internal static class ProofreadingModelCatalogValidation
         Console.WriteLine($"モデルカタログ（新規は既定のまま）: {(freshPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（未知IDは引き継がない）: {(unknownPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（既定モデルが収録済み）: {(defaultsPass ? "PASS" : "FAIL")}");
-        Console.WriteLine($"モデルカタログ（新規3モデルのID・単価・思考量）: {(newModelsPass ? "PASS" : "FAIL")}");
+        Console.WriteLine($"モデルカタログ（新規4モデルのID・単価・思考量）: {(newModelsPass ? "PASS" : "FAIL")}");
+        Console.WriteLine($"モデルカタログ（高価格モデルの注意判定）: {(highCostWarningPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（用途別の思考量）: {(effortPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（通貨はPLaMoのみJPY）: {(currencyPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（タイムアウトの丸め）: {(clampPass ? "PASS" : "FAIL")}");
 
-        return legacyPass && freshPass && unknownPass && defaultsPass && gemini37Pass && newModelsPass &&
+        return legacyPass && freshPass && unknownPass && defaultsPass && gemini37Pass && newModelsPass && highCostWarningPass &&
             effortPass && currencyPass && clampPass;
     }
 }

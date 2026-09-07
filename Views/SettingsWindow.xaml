@@ -530,6 +530,31 @@
                                                               SelectedValuePath="Id"
                                                               SelectionChanged="ProofreadingModelCombo_SelectionChanged" />
                                                 </Grid>
+                                                <Border x:Name="HighCostModelWarningBorder"
+                                                        Margin="0,6,0,2"
+                                                        Padding="9,7"
+                                                        BorderBrush="{DynamicResource UsageProgressWarningBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="4"
+                                                        Visibility="Collapsed"
+                                                        AutomationProperties.Name="高価格な校正モデルの注意">
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock FontFamily="Segoe MDL2 Assets"
+                                                                   FontSize="15"
+                                                                   Foreground="{DynamicResource UsageProgressWarningBrush}"
+                                                                   Text="&#xE7BA;"
+                                                                   VerticalAlignment="Top"
+                                                                   Margin="0,1,8,0" />
+                                                        <TextBlock x:Name="HighCostModelWarningText"
+                                                                   Grid.Column="1"
+                                                                   Style="{StaticResource SettingsDescription}"
+                                                                   AutomationProperties.LiveSetting="Polite" />
+                                                    </Grid>
+                                                </Border>
                                             </StackPanel>
                                         </Border>
                                         <Border Style="{StaticResource SettingsRow}">

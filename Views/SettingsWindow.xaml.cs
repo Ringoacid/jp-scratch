@@ -181,6 +181,7 @@ public partial class SettingsWindow : Window
             s.ManualProofreadingTimeoutSeconds.ToString(CultureInfo.InvariantCulture);
         _loadingProofreadingModelControls = false;
         RefreshTimeoutHint();
+        RefreshHighCostModelWarning();
 
         // 単価・資格情報パネルは「自動用／手動用のどちらで使うか」をモデルのコンボから読むため、
         // 上のコンボを埋めた後に読み込む。先に呼ぶと SelectedItem が未設定で、使用中バッジが
@@ -502,7 +503,33 @@ public partial class SettingsWindow : Window
     {
         if (_loadingProofreadingModelControls) return;
         RefreshTimeoutHint();
+        RefreshHighCostModelWarning();
         RefreshCredentialStatus();
+    }
+
+    private void RefreshHighCostModelWarning()
+    {
+        if (HighCostModelWarningBorder is null || HighCostModelWarningText is null) return;
+
+        (string Purpose, ModelDescriptor Model)[] selected =
+        [
+            ("自動", ProofreadingModelCatalog.Get(SelectedModelId(AutoProofreadingModelCombo))),
+            ("手動", ProofreadingModelCatalog.Get(SelectedModelId(ManualProofreadingModelCombo))),
+        ];
+        var highCost = selected
+            .Where(item => ProofreadingModelCatalog.IsHighCostForProofreading(item.Model.Id))
+            .ToArray();
+
+        HighCostModelWarningBorder.Visibility = highCost.Length == 0
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        if (highCost.Length == 0) return;
+
+        string models = string.Join("、", highCost.Select(item =>
+            $"{item.Purpose}：{item.Model.DisplayName}（入力 ${item.Model.InputPricePerMillion:0.##} / 出力 ${item.Model.OutputPricePerMillion:0.##}）"));
+        HighCostModelWarningText.Text =
+            $"高価格なモデルが選択されています。{models} / 100万トークン。" +
+            "校正用途では性能を持て余しやすく、特に自動校正では繰り返し呼び出すため、高い料金が発生することがあります。";
     }
 
     /// <summary>
@@ -562,6 +589,7 @@ public partial class SettingsWindow : Window
         PopulateModels(combo, family, selected);
         _loadingProofreadingModelControls = false;
         RefreshTimeoutHint();
+        RefreshHighCostModelWarning();
         RefreshCredentialStatus();
     }
 

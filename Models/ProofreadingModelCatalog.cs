@@ -140,6 +140,8 @@ public static class ProofreadingModelCatalog
     private static readonly ModelDescriptor[] Descriptors =
     [
         // ---- OpenAI（Responses API）----
+        new("gpt-6-astra", "GPT 6 Astra", ApiProvider.OpenAi, Slow,
+            "low", "medium", 10.00m, 50.00m, "USD", "2026-09-04"),
         // Sol は「少なくとも 2026-11-21 まで」の割引中で終了日が確定していない。期限付きの
         // PromotionalPricing にすると延長された場合にその日以降を過大見積もりするため、
         // 通常単価として持ち、値上げが公表されたら差し替える。
@@ -225,6 +227,18 @@ public static class ProofreadingModelCatalog
 
     public static string DisplayName(string model)
         => TryGet(model, out ModelDescriptor descriptor) ? descriptor.DisplayName : model;
+
+    /// <summary>
+    /// 校正用途では性能を持て余しやすく、継続利用時の料金も大きくなりやすい高価格モデル。
+    /// 個別IDではなく単価で判定し、同等価格のモデルが追加されたときも注意表示を漏らさない。
+    /// </summary>
+    public static bool IsHighCostForProofreading(string? model)
+    {
+        ModelDescriptor descriptor = Get(model);
+        return descriptor.Currency == "USD" &&
+               (descriptor.InputPricePerMillion >= 10m ||
+                descriptor.OutputPricePerMillion >= 50m);
+    }
 
     public static EffectiveModelPricing GetEffectivePricing(string? model, DateOnly utcDate)
         => Get(model).PricingFor(utcDate);
