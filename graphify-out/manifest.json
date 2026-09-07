@@ -912,9 +912,9 @@
     "semantic_hash": ""
   },
   "jp-scratch.csproj": {
-    "mtime": 1787572226.2596838,
-    "seen": 1787572301.937375,
-    "ast_hash": "f90bcd41a3147768d0acf798199afa66",
+    "mtime": 1788752229.31327,
+    "seen": 1788752670.4913797,
+    "ast_hash": "8a23fc3e034f5b109c75784fb371f476",
     "semantic_hash": ""
   },
   "jp-scratch.slnx": {
@@ -954,8 +954,8 @@
     "semantic_hash": "bd6d2fdf2c2b04f3228d1df76326a8b1"
   },
   "tools/smoke-test.ps1": {
-    "mtime": 1787549072.5635448,
-    "seen": 1787549490.6749837,
+    "mtime": 1788752580.7740119,
+    "seen": 1788752670.491387,
     "ast_hash": "9b78518ee0afc69e609cf321ba673886",
     "semantic_hash": ""
   },
@@ -1038,9 +1038,9 @@
     "semantic_hash": "689cbc9e193834ad02002fbccbadc4eb"
   },
   "README.md": {
-    "mtime": 1788748852.9120884,
-    "seen": 1788749055.7207975,
-    "ast_hash": "c26158bb24a03c165eadc1a35556af11",
+    "mtime": 1788750255.5301611,
+    "seen": 1788752670.4914043,
+    "ast_hash": "4b06135218235657dc7c2dc5a39295e2",
     "semantic_hash": ""
   },
   "requirements.md": {
@@ -1086,27 +1086,27 @@
     "semantic_hash": ""
   },
   "docs/images/model-benchmark-bars-dark.png": {
-    "mtime": 1788492361.7985106,
-    "seen": 1788704612.746194,
-    "ast_hash": "00c7f9cbb8f3caa435a0b20dd5852699",
+    "mtime": 1788750137.1196811,
+    "seen": 1788752670.4914231,
+    "ast_hash": "326b159d742281f7f0c6bc100a6f623d",
     "semantic_hash": ""
   },
   "docs/images/model-benchmark-bars-light.png": {
-    "mtime": 1788492361.1865938,
-    "seen": 1788704612.7461946,
-    "ast_hash": "e79bf3f608eb5e05b51cabbc71410dd7",
+    "mtime": 1788750136.6322665,
+    "seen": 1788752670.491424,
+    "ast_hash": "e5d45474c1d0fa0133a90911305dc20d",
     "semantic_hash": ""
   },
   "docs/images/model-benchmark-scatter-dark.png": {
-    "mtime": 1788492361.456531,
-    "seen": 1788704612.7461953,
-    "ast_hash": "a10ba0812bcb34b960d6e8d80363872d",
+    "mtime": 1788750136.8621013,
+    "seen": 1788752670.4914246,
+    "ast_hash": "cafa9f4d735d96188d12f9fbddf517c0",
     "semantic_hash": ""
   },
   "docs/images/model-benchmark-scatter-light.png": {
-    "mtime": 1788492360.8363729,
-    "seen": 1788704612.746196,
-    "ast_hash": "b3f24a50eb6666c9004bc3c1317020a8",
+    "mtime": 1788750136.3664606,
+    "seen": 1788752670.4914253,
+    "ast_hash": "2195b2b415fd7341953f76cd2b6a829e",
     "semantic_hash": ""
   },
   "docs/images/proofreading-suggestion.png": {
@@ -1359,6 +1359,18 @@
     "mtime": 1788748464.9913068,
     "seen": 1788749055.7208169,
     "ast_hash": "90d41385acc9c817a782da2cf3f2e55d",
+    "semantic_hash": ""
+  },
+  "PromptValidation/results/model-benchmark-2026-09-07-gpt-6-astra-r3.json": {
+    "mtime": 1788750095.8410838,
+    "seen": 1788752670.4913182,
+    "ast_hash": "965b06f397bd94afa043bc02c2ae1db3",
+    "semantic_hash": ""
+  },
+  "PromptValidation/gpt-6-astra-benchmark-2026-09-07.md": {
+    "mtime": 1788750298.7313368,
+    "seen": 1788752670.4914005,
+    "ast_hash": "f878d6c76506bee3be46bdba67660558",
     "semantic_hash": ""
   }
 }

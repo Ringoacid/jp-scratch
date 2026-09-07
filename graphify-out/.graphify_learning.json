@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-06T15:24:48.549258+00:00",
+  "generated_at": "2026-09-07T03:36:43.623030+00:00",
   "nodes": {
     "agents_md": {
       "code_fingerprint": "5d8d1bfa3404e0cfc27b4a48e450f5907d6243cd31c09bd0391b6e3708c9b1f1",
@@ -12,7 +12,7 @@
           "q": "次のコミットメッセージを作成してください。"
         }
       ],
-      "score": 0.737024995,
+      "score": 0.728420237,
       "source_file": "AGENTS.md",
       "status": "tentative",
       "uses": 1
@@ -33,7 +33,7 @@
           "q": "Gitの変更をレビューしてください。"
         }
       ],
-      "score": 1.470746731,
+      "score": 1.45357578,
       "source_file": "App.xaml.cs",
       "status": "preferred",
       "uses": 2
@@ -49,7 +49,7 @@
           "q": "補助ファイルについて教えてください。削除しても大丈夫なものですか？"
         }
       ],
-      "score": 0.737607642,
+      "score": 0.728996081,
       "source_file": ".claude/skills/graphify/references/query.md",
       "status": "tentative",
       "uses": 1
@@ -70,7 +70,7 @@
           "q": "graphify-out の生成物のコミットメッセージを作成してください。"
         }
       ],
-      "score": 1.474700486,
+      "score": 1.457483374,
       "source_file": ".claude/skills/graphify/references/query.md",
       "status": "preferred",
       "uses": 2
@@ -86,8 +86,40 @@
           "q": "graphify-out の生成物のコミットメッセージを作成してください。"
         }
       ],
-      "score": 0.737092844,
+      "score": 0.728487294,
       "source_file": ".claude/skills/graphify/references/update.md",
+      "status": "tentative",
+      "uses": 1
+    },
+    "docs_gpt_5_6_luna": {
+      "code_fingerprint": "14f7a80e47d037fa8271571bbfd39989583648b9b89568ee0d537d3fd431284b",
+      "label": "gpt-5.6-luna.md",
+      "last": "2026-09-07T02:34:24.991050+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-07T02:34:24.991050+00:00",
+          "outcome": "useful",
+          "q": "モデルに更新が必要か調べてください。（新しいモデルや料金など）"
+        }
+      ],
+      "score": 0.999000723,
+      "source_file": "docs/gpt-5.6-luna.md",
+      "status": "tentative",
+      "uses": 1
+    },
+    "promptvalidation_modelbenchmarkcommand_jpscratch_promptvalidation_modelbenchmarkcommand": {
+      "code_fingerprint": "c72ddd49f3f9333dcf5f112ce3a838a1d37c9397c770e301bf7729b697f07793",
+      "label": "ModelBenchmarkCommand",
+      "last": "2026-09-07T02:34:24.991050+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-07T02:34:24.991050+00:00",
+          "outcome": "useful",
+          "q": "モデルに更新が必要か調べてください。（新しいモデルや料金など）"
+        }
+      ],
+      "score": 0.999000723,
+      "source_file": "PromptValidation/ModelBenchmarkCommand.cs",
       "status": "tentative",
       "uses": 1
     },
@@ -102,7 +134,7 @@
           "q": "レビューで見つかった4件を修正し、PromptValidationの有料API実行ルールをAGENTS.mdへ追加する"
         }
       ],
-      "score": 0.735431925,
+      "score": 0.726845766,
       "source_file": "PromptValidation/Program.cs",
       "status": "tentative",
       "uses": 1
@@ -128,7 +160,7 @@
           "q": "Gitの変更をレビューしてください。"
         }
       ],
-      "score": 2.207692529,
+      "score": 2.181917743,
       "source_file": "Services/BackupRestoreService.cs",
       "status": "preferred",
       "uses": 3
@@ -149,7 +181,7 @@
           "q": "Gitの変更をレビューしてください。"
         }
       ],
-      "score": 1.470746731,
+      "score": 1.45357578,
       "source_file": "Services/BackupService.cs",
       "status": "preferred",
       "uses": 2
@@ -165,8 +197,40 @@
           "q": "現在のGit変更に適したコミット範囲を判断する"
         }
       ],
-      "score": 0.736945798,
+      "score": 0.728341964,
       "source_file": "Services/DiagnosticInfoService.cs",
+      "status": "tentative",
+      "uses": 1
+    },
+    "services_pricingservice_jpscratch_services_modelpricing": {
+      "code_fingerprint": "2c05bff4a7936fab50a36b9e3b9a2604c6bb0c37d31441dac3f8125a0924cde4",
+      "label": "ModelPricing",
+      "last": "2026-09-07T02:34:24.991050+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-07T02:34:24.991050+00:00",
+          "outcome": "useful",
+          "q": "モデルに更新が必要か調べてください。（新しいモデルや料金など）"
+        }
+      ],
+      "score": 0.999000723,
+      "source_file": "Services/PricingService.cs",
+      "status": "tentative",
+      "uses": 1
+    },
+    "services_tabmanager_jpscratch_services_tabmanager": {
+      "code_fingerprint": "05d70a491167352060db9bd7300f56cb273ff55684e7eee8413d7e47216a79c4",
+      "label": "TabManager",
+      "last": "2026-09-06T15:30:34.157769+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-06T15:30:34.157769+00:00",
+          "outcome": "useful",
+          "q": "全タブ検索から、ごみ箱のタブを復元できるようにしてください。"
+        }
+      ],
+      "score": 0.988416358,
+      "source_file": "Services/TabManager.cs",
       "status": "tentative",
       "uses": 1
     },
@@ -181,7 +245,7 @@
           "q": "model-benchmark-barsなども更新してください。"
         }
       ],
-      "score": 0.689255325,
+      "score": 0.681208277,
       "source_file": "tools/plot-model-benchmark.py",
       "status": "tentative",
       "uses": 1
@@ -197,7 +261,7 @@
           "q": "model-benchmark-barsなども更新してください。"
         }
       ],
-      "score": 0.689255325,
+      "score": 0.681208277,
       "source_file": "tools/plot-model-benchmark.py",
       "status": "tentative",
       "uses": 1
@@ -213,13 +277,45 @@
           "q": "model-benchmark-barsなども更新してください。"
         }
       ],
-      "score": 0.689255325,
+      "score": 0.681208277,
       "source_file": "tools/plot-model-benchmark.py",
       "status": "tentative",
       "uses": 1
     },
+    "views_crosstabsearchwindow_xaml_jpscratch_views_crosstabsearchwindow": {
+      "code_fingerprint": "de315731e0ea46c8c0badb1fd26bb524b8bb53c432f5a20152f0462444d7f383",
+      "label": "CrossTabSearchWindow",
+      "last": "2026-09-06T15:30:34.157769+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-06T15:30:34.157769+00:00",
+          "outcome": "useful",
+          "q": "全タブ検索から、ごみ箱のタブを復元できるようにしてください。"
+        }
+      ],
+      "score": 0.988416358,
+      "source_file": "Views/CrossTabSearchWindow.xaml.cs",
+      "status": "tentative",
+      "uses": 1
+    },
+    "views_mainwindow_xaml_jpscratch_views_mainwindow": {
+      "code_fingerprint": "d84580e03b72bb3db601fd5dcb197dccb1b9930eb3d16b5bc366f42d0ff2467e",
+      "label": "MainWindow",
+      "last": "2026-09-06T15:30:34.157769+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-06T15:30:34.157769+00:00",
+          "outcome": "useful",
+          "q": "全タブ検索から、ごみ箱のタブを復元できるようにしてください。"
+        }
+      ],
+      "score": 0.988416358,
+      "source_file": "Views/MainWindow.xaml.cs",
+      "status": "tentative",
+      "uses": 1
+    },
     "views_settingswindow_xaml_jpscratch_views_settingswindow": {
-      "code_fingerprint": "c611298b6e3145c140289838d62af8abb459435593868947ce4a6548aad67b4a",
+      "code_fingerprint": "c3f6cfbcf96029d797a83b1b07e55a9a48f4b551f892b96e321e91b141821d61",
       "label": "SettingsWindow",
       "last": "2026-08-24T10:20:50.592460+00:00",
       "provenance": [
@@ -239,7 +335,7 @@
           "q": "Gitの変更をレビューしてください。"
         }
       ],
-      "score": 2.207692529,
+      "score": 2.181917743,
       "source_file": "Views/SettingsWindow.xaml.cs",
       "status": "preferred",
       "uses": 3
