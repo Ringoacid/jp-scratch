@@ -17,7 +17,7 @@ internal readonly record struct StatusBarDisplayOptions(
 
 /// <summary>
 /// ステータスバー下段の課金表示を組み立てる純粋関数。
-/// <c>Views/MainWindow.xaml.cs</c> の <c>RefreshUsageDisplay</c> が唯一の呼び出し元で、
+/// <c>Views/Main/MainWindow.xaml.cs</c> の <c>RefreshUsageDisplay</c> が唯一の呼び出し元で、
 /// 表示項目のON/OFF・通貨形式の切り替えをWPF非依存のまま検証できる。
 ///
 /// 既定（当月＋為替、円表示）の表示例:

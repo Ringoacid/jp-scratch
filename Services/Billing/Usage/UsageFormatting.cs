@@ -4,8 +4,8 @@ namespace JpScratch.Services;
 
 /// <summary>
 /// USD / JPY / 為替レートの表示書式（要件 3.5.2〜3.5.3）を一箇所に集約する。
-/// ステータスバー下段（<c>Views/MainWindow.xaml.cs</c> の <c>RefreshUsageDisplay</c>）と
-/// 課金履歴画面（<c>Views/BillingHistoryWindow.xaml.cs</c>）が同じ書式を必ず共有するために存在する。
+/// ステータスバー下段（<c>Views/Main/MainWindow.xaml.cs</c> の <c>RefreshUsageDisplay</c>）と
+/// 課金履歴画面（<c>Views/Billing/BillingHistoryWindow.xaml.cs</c>）が同じ書式を必ず共有するために存在する。
 /// 丸めは表示時のみ行い、内部計算・永続化は常に <see cref="decimal"/> のまま扱う。
 /// </summary>
 internal static class UsageFormatting

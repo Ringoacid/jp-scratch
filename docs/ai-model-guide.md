@@ -6,7 +6,7 @@ JP Scratch で選べる固定の API モデル **19種類**を、料金と校正
 
 下の図と表には、アプリに登録された**固定モデルをすべて**掲載しています。図は手動校正の待ち時間です。表の「入力／出力」はそれぞれ**100万トークン当たりのアプリ登録単価**で、「引用維持」は引用中の意図的な誤字を変えなかった回数を表します。`3/3` は3回とも維持した意味です。
 
-![固定19モデルすべての手動校正にかかった時間。](images/ai-model-guide-speed.png)
+![固定19モデルすべての手動校正にかかった時間。](images/benchmarks/ai-model-guide-speed.png)
 
 | モデル | 提供元 | 入力／出力 | 待ち時間の中央値 | 引用維持 |
 |---|---|---:|---:|---:|
@@ -36,7 +36,7 @@ JP Scratch で選べる固定の API モデル **19種類**を、料金と校正
 
 ## どれを選ぶ？
 
-**最初に選ぶなら GPT 6 Luna** を勧めます。9月23日に GPT 6 Sol・Claude Sonnet 5 と同じ文章で比較したところ、主な誤字の修正では Sonnet 5 と同程度の結果で、修正不要の文章も維持しました。Sol は混在文の誤りを取りこぼし、Sonnet 5 は手動校正で不要な説明文を加えることがありました。単独で追加計測した Opus 5.5 も、混在文の同じ2箇所を残しました。Luna の校正1回の概算料金の中央値は Sonnet 5 の約20分の1、Opus 5.5 の約47分の1でした。4モデルとも、試した二重敬語は修正できていません。[3モデルの比較](../PromptValidation/model-benchmark-2026-09-23.md)と[Opus 5.5 の単独追補](../PromptValidation/claude-opus-5-5-benchmark-2026-09-23.md)で詳細を確認できます。
+**最初に選ぶなら GPT 6 Luna** を勧めます。9月23日に GPT 6 Sol・Claude Sonnet 5 と同じ文章で比較したところ、主な誤字の修正では Sonnet 5 と同程度の結果で、修正不要の文章も維持しました。Sol は混在文の誤りを取りこぼし、Sonnet 5 は手動校正で不要な説明文を加えることがありました。単独で追加計測した Opus 5.5 も、混在文の同じ2箇所を残しました。Luna の校正1回の概算料金の中央値は Sonnet 5 の約20分の1、Opus 5.5 の約47分の1でした。4モデルとも、試した二重敬語は修正できていません。[3モデルの比較](../PromptValidation/reports/model-benchmark-2026-09-23.md)と[Opus 5.5 の単独追補](../PromptValidation/reports/claude-opus-5-5-benchmark-2026-09-23.md)で詳細を確認できます。
 
 Google の API キーを使うなら **Gemini 3.7 Flash または 3.8 Flash**、Anthropic なら **Claude Haiku 4.5** が候補です。それぞれの短文テストでは誤字を直し、引用中の意図的な誤字を維持しました。これらは GPT 6 Luna と同日には比べていないため、品質や速度でどちらが上かは断定できません。
 
@@ -51,4 +51,4 @@ Google の API キーを使うなら **Gemini 3.7 Flash または 3.8 Flash**、
 
 単価を確認する：[OpenAI](https://developers.openai.com/api/docs/pricing)、[Google](https://ai.google.dev/gemini-api/docs/pricing)、[Anthropic](https://platform.claude.com/docs/en/about-claude/pricing)、[PLaMo](https://plamo.preferredai.jp/api)。表の元データは[アプリのモデル一覧](../Models/ProofreadingModelCatalog.cs)です。
 
-計測の詳細：[初回11モデル](../PromptValidation/model-benchmark-2026-08-06.md)／[Gemini 3.7 Flash](../PromptValidation/gemini-3.7-flash-benchmark-2026-08-21.md)／[9月4日の追補データ](../PromptValidation/results/model-benchmark-2026-09-04-supplement-r3.json)／[GPT 6 Astra](../PromptValidation/gpt-6-astra-benchmark-2026-09-07.md)／[9月23日の3モデル比較](../PromptValidation/model-benchmark-2026-09-23.md)／[Opus 5.5 単独追補](../PromptValidation/claude-opus-5-5-benchmark-2026-09-23.md)。
+計測の詳細：[初回11モデル](../PromptValidation/reports/model-benchmark-2026-08-06.md)／[Gemini 3.7 Flash](../PromptValidation/reports/gemini-3.7-flash-benchmark-2026-08-21.md)／[9月4日の追補データ](../PromptValidation/results/benchmarks/model-benchmark-2026-09-04-supplement-r3.json)／[GPT 6 Astra](../PromptValidation/reports/gpt-6-astra-benchmark-2026-09-07.md)／[9月23日の3モデル比較](../PromptValidation/reports/model-benchmark-2026-09-23.md)／[Opus 5.5 単独追補](../PromptValidation/reports/claude-opus-5-5-benchmark-2026-09-23.md)。

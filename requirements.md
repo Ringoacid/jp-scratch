@@ -66,7 +66,7 @@
 - タスクトレイに常駐する。左クリックでウィンドウをトグル表示。
 - 右クリックメニュー: `表示` / `設定` / `課金履歴` / `終了`。
 - アイコンで状態を示す（通常 / 校正リクエスト中 / API エラー / 月間上限到達）。**実装済み。実機確認済み**。
-  - 状態の決定は `Services/TrayIconStateResolver.cs` の純粋関数。同時に成り立つ条件からは
+  - 状態の決定は `Services/Shell/TrayIconStateResolver.cs` の純粋関数。同時に成り立つ条件からは
     **校正中 > API エラー > 上限到達 > 通常**の順で 1 つを選ぶ。校正中を最優先にするのは、
     これだけが応答が返れば自分で消える一時的な状態だから（消えた時点で残りの条件が再計算される）。
     上限到達中でも手動校正は実行できるため、ここを逆にすると通信中かどうかが分からなくなる。
@@ -175,7 +175,7 @@ Notepad++ 相当。
   2. 前回の校正実行開始から `M` 秒以上経過（既定 10 秒、設定可）— **最小送信間隔の強制**
   3. 対象段落の内容ハッシュが前回送信時と異なる
   4. IME 変換が確定済み（未確定文字列がない）
-  5. 月間上限に達していない（実装済み。`Services/UsageLimitService.cs`、`Views/MainWindow.xaml.cs`。実機確認済み）
+  5. 月間上限に達していない（実装済み。`Services/Billing/Usage/UsageLimitService.cs`、`Views/Main/MainWindow.xaml.cs`。実機確認済み）
 - `Ctrl + Enter` でデバウンスを待たず即時実行できる。
 - 自動チェックは設定で OFF にできる（OFF 時は手動のみ）。
 - 最小送信間隔は 1 回の校正実行を開始する前にだけ適用する。開始後に段落・パートごとの
@@ -633,7 +633,7 @@ LLM に文字オフセットや個別置換を返させると、日本語（サ�
 - `gemini-3.7-flash` を既存比較と同じ7文章・3試行・手動用 effort で実API計測した。21/21件完走し、
   中央値2.4秒、1回あたり料金の中央値 `$0.002875`、合計 `$0.05923725`。引用保護・指示耐性の
   違反、失敗、安全検査での破棄、再試行はいずれも0件。詳細は
-  [`PromptValidation/gemini-3.7-flash-benchmark-2026-08-21.md`](PromptValidation/gemini-3.7-flash-benchmark-2026-08-21.md)。
+  [`PromptValidation/reports/gemini-3.7-flash-benchmark-2026-08-21.md`](PromptValidation/reports/gemini-3.7-flash-benchmark-2026-08-21.md)。
 
 **未確認**:
 
@@ -691,14 +691,14 @@ USD/JPYスナップショットを合算して結果を表示する。使用量�
   期間合計・ステータスバーには確定分の合計と「未確認 N件」を併記する。
 - 「未確認料金を補完」ボタンから 3.5.3 の日付別 API 取得・手入力ダイアログを開く。補完後は
   明細一覧、期間合計、ステータスバー、月間上限判定を再集計する。
-- CSV エクスポート。**実装済み**（`Services/BillingCsvExporter.cs`）。現在の期間・種別フィルタに合致する明細を
+- CSV エクスポート。**実装済み**（`Services/Billing/History/BillingCsvExporter.cs`）。現在の期間・種別フィルタに合致する明細を
   BOM 付き UTF-8・CRLF の RFC 4180 形式で書き出す。一覧の表示上限（2,000件）は適用せず全件を書く。
   USD/JPY/レートは表示書式で丸めず保存済みの `decimal` をそのまま出す（表計算ソフトで再集計するため）。
   モデル名・エラー文は外部由来の自由文字列なので、`= + - @` などで始まる場合に `'` を前置して
   CSV インジェクションを防ぐ。
 - 保持期間は既定 12 か月（設定画面 `ApiLogRetentionMonths`、0 で無期限）。それ以前の月の明細は
   バックグラウンドで日次サマリ `api_call_daily` へ圧縮し、`api_calls` から削除する。**実装済み**
-  （`Services/ApiLogRetention.cs`、`ApiCallRepository.Compact`、`MainWindow.CompactApiLogsInBackground`）。
+  （`Services/Billing/History/ApiLogRetention.cs`、`ApiCallRepository.Compact`、`MainWindow.CompactApiLogsInBackground`）。
   実行契機は**起動後・設定変更後・日付が変わったとき**の3つ。境界は月初のローカル 0 時に丸めるので、
   削除されるのは必ず「保持期間以上前」の明細に限られる（保持期間 1 か月・現在 2026-07 なら境界は
   2026-06-01 で、前月の明細は残る）。
@@ -717,7 +717,7 @@ USD/JPYスナップショットを合算して結果を表示する。使用量�
 
 | ガード | 既定 | 挙動 |
 |---|---|---|
-| **月間上限額** | $2.00 | 到達したら**自動チェックを停止**。トレイアイコンで通知。手動実行は「上限を超えます」の確認ダイアログを挟んで実行可。翌月 1 日 00:00（ローカル時間）にリセット。**実装済み**（`Services/UsageLimitService.cs`、`Views/MainWindow.xaml.cs`、`Views/SettingsWindow.xaml`）。設定画面から `MonthlyLimitUsd` を編集でき、0 は無制限として扱う |
+| **月間上限額** | $2.00 | 到達したら**自動チェックを停止**。トレイアイコンで通知。手動実行は「上限を超えます」の確認ダイアログを挟んで実行可。翌月 1 日 00:00（ローカル時間）にリセット。**実装済み**（`Services/Billing/Usage/UsageLimitService.cs`、`Views/Main/MainWindow.xaml.cs`、`Views/Settings/SettingsWindow.xaml`）。設定画面から `MonthlyLimitUsd` を編集でき、0 は無制限として扱う |
 | 上限接近の警告 | 80% | ステータスバーの進捗バーを警告色に変える。**実装済み**（`Themes/Styles.xaml` の `UsageProgressBar`、`UsageLimitWarningRatio` を設定画面から編集可） |
 | 課金 API 実行前の確認 | ON | 設定画面の「課金API実行前の確認を表示する」。ON では入力停止後の自動校正・手動校正・理由付き別案生成の前に確認し、OFF ではこれらの確認を表示せず実行する。既定 ON |
 | **最小送信間隔** | 10 秒 | 前回の校正実行開始からこの秒数が経つまで次の自動チェックを開始しない。実行内の個別リクエストには適用しない |
@@ -930,15 +930,15 @@ CREATE TABLE app_metadata (
 - [x] 月額上限の進捗表示・ガード（発火条件5、確認ダイアログ、進捗バー、トレイ通知、設定画面編集）。
       実機確認済み（進捗バーの配色・上限0時のレイアウト・トレイ通知の実発行・再解禁をダークテーマで
       確認し、ライトテーマでの進捗バーも 2026-07-31 に確認）。設定画面の数値欄は往復不変性のある書式へ
-      修正済み（`Services/SettingsFieldFormatting.cs`）
-- [x] CSV エクスポートと保持期限後の明細圧縮（3.6.2）。`Services/BillingCsvExporter.cs`、
-      `Services/ApiLogRetention.cs`、`ApiCallRepository.Compact`、DB v4で作成された `api_call_daily`。
+      修正済み（`Services/Settings/SettingsFieldFormatting.cs`）
+- [x] CSV エクスポートと保持期限後の明細圧縮（3.6.2）。`Services/Billing/History/BillingCsvExporter.cs`、
+      `Services/Billing/History/ApiLogRetention.cs`、`ApiCallRepository.Compact`、DB v4で作成された `api_call_daily`。
       2026-07-31 に実機確認済み（CSV の文字化け無し。保持期間 12 → 3 → 1 で圧縮件数が
       0 → 3 → 5 と増える一方、件数・トークン数・USD・提案/破棄数・`¥—` はすべて不変）。
       同日の実機確認で「設定画面の補足文が右端で切れる」「保持期間を変えても圧縮が走らない
       （起動時のみ実行していた）」の2件が見つかり、いずれも修正のうえ再確認済み
 - [x] トレイアイコンの状態表示（3.1.1、通常/校正中/APIエラー/月間上限到達の4状態）。
-      `Services/TrayIconStateResolver.cs`（優先順位の純粋関数）、`Services/TrayIconService.cs`
+      `Services/Shell/TrayIconStateResolver.cs`（優先順位の純粋関数）、`Services/Shell/TrayIconService.cs`
       （遅延読み込みと差し替え）、`Assets/app-{proofreading,error,limit}.ico`
       （`tools/build-tray-icons.py` が `app.ico` から生成）。月間上限ガードの実装中に
       未実装であることが判明し、別WIPとして切り出したもの。2026-07-31 に実機確認済み
@@ -952,13 +952,13 @@ CREATE TABLE app_metadata (
 
 ### v3 — 学習（P-3 の解決）
 
-- [x] リアクション履歴の蓄積と few-shot 選定ロジック（`Proofreading/FewShotSelector.cs`）
-- [x] スタイルガイドの自動生成（閾値到達時、確認ダイアログつき。`Views/MainWindow.xaml.cs`
+- [x] リアクション履歴の蓄積と few-shot 選定ロジック（`Proofreading/Pipeline/FewShotSelector.cs`）
+- [x] スタイルガイドの自動生成（閾値到達時、確認ダイアログつき。`Views/Main/MainWindow.xaml.cs`
       `MaybeOfferStyleGuideGeneration` / `RunStyleGuideGenerationAsync`）
-- [x] スタイルガイドの閲覧・編集・世代管理・無効化（`Services/StyleGuideRepository.cs`、
+- [x] スタイルガイドの閲覧・編集・世代管理・無効化（`Services/Data/StyleGuideRepository.cs`、
       設定画面「学習（文体の適応）」セクション）
 - [x] ユーザー手書きカスタム指示欄（`AppSettings.CustomInstruction`、設定画面）
-- [x] プロンプト構成の統合（`Proofreading/ProofreadingPrompt.BuildSystemInstruction`、要件3.4.4の送信順）
+- [x] プロンプト構成の統合（`Proofreading/Pipeline/ProofreadingPrompt.BuildSystemInstruction`、要件3.4.4の送信順）
 - [ ] コンテキストキャッシュの適用（対応していれば）— **意図的に見送り**（3.5.4の「未確認」＝Gemini
       の明示的キャッシュ（`cachedContents`）の最小トークン数が分からないままでは実装できず、
       これを確認するには実APIへの疎通が要る。加えて、キャッシュ済みトークンの割引後単価も
@@ -971,7 +971,7 @@ CREATE TABLE app_metadata (
       （`PromptValidation --probe-openai-cache`、詳細は3.5.4参照）でOpenAI（GPT-5.6 Luna）側の
       暗黙キャッシュが実際に働くことは確認できたが、これはGemini側の未確認事項（最小トークン数・
       割引単価）には回答しないため、上のGemini向けの見送り判断自体は変わらない。**
-- [x] 学習効果の可視化（`Services/ReactionRepository.GetRejectionRateTrend`、設定画面「学習」
+- [x] 学習効果の可視化（`Services/Data/ReactionRepository.GetRejectionRateTrend`、設定画面「学習」
       タブの「学習効果」セクション）
 
 **2026-07-31 実装・実機確認済み**: few-shot選定は要件3.4.1どおり

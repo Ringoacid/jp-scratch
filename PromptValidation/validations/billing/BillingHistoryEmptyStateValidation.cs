@@ -3,7 +3,7 @@ using JpScratch.Services;
 namespace JpScratch.PromptValidation;
 
 /// <summary>
-/// 課金履歴画面（<c>Views/BillingHistoryWindow.xaml.cs</c>）が起動直後の既定状態
+/// 課金履歴画面（<c>Views/Billing/BillingHistoryWindow.xaml.cs</c>）が起動直後の既定状態
 /// （期間=当月、種別=4つとも選択）でロードする経路を、<c>api_calls</c> が0件の状態で再現する。
 /// </summary>
 /// <remarks>
@@ -29,7 +29,7 @@ namespace JpScratch.PromptValidation;
 /// <see cref="UsageFormatting"/> がクラッシュせず正しい既定表示を作れること — をここで確認する。
 /// これはレビューで挙げられた別の疑わしい候補（ログ0件特有の経路）を潰すものであり、
 /// 実際のBAML読み込み順序バグそのものの回帰検知にはならない。そちらは
-/// <c>Views/BillingHistoryWindow.xaml.cs</c> の <c>_initializing = true;</c> の位置を
+/// <c>Views/Billing/BillingHistoryWindow.xaml.cs</c> の <c>_initializing = true;</c> の位置を
 /// 目視で確認する運用に頼る（コンストラクタ冒頭のコメント参照）。
 /// </remarks>
 internal static class BillingHistoryEmptyStateValidation

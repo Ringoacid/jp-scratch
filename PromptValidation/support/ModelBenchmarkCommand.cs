@@ -584,6 +584,7 @@ internal static class ModelBenchmarkCommand
         => Path.Combine(
             "PromptValidation",
             "results",
+            "benchmarks",
             $"model-benchmark-{DateTime.Now:yyyy-MM-dd}-{purpose.ToString().ToLowerInvariant()}-r{trials}.json");
 
     private static string DataDirectory()
@@ -619,7 +620,7 @@ internal static class ModelBenchmarkCommand
               --purpose P       automatic または manual（既定: manual）
               --texts a,b       対象文章IDを絞る（既定: benchmark-texts.json の全件）
               --timeout S       全モデル共通のタイムアウト秒（既定: 120）
-              --output PATH     保存先（既定: PromptValidation/results/model-benchmark-{日付}-{用途}-r{試行}.json）
+              --output PATH     保存先（既定: PromptValidation/results/benchmarks/model-benchmark-{日付}-{用途}-r{試行}.json）
               --yes             実行前の確認を省略する
               --help            このヘルプを表示
 

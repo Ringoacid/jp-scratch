@@ -11,7 +11,7 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
     <Version>2.0.0</Version>
     <Product>JP Scratch</Product>
     <!-- 常駐アプリなので起動時間を優先する（2.1 非機能要件） -->
@@ -44,6 +44,11 @@
          TrayIconService だけが明示的に using する。 -->
     <Using Remove="System.Drawing" />
     <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Remove="Application\App.xaml" />
+    <ApplicationDefinition Include="Application\App.xaml" />
   </ItemGroup>
 
   <ItemGroup>

@@ -47,7 +47,7 @@ MODELS = {
 def main() -> None:
     latest: dict[str, tuple[str, float]] = {}
     for filename in REPORTS:
-        path = ROOT / "PromptValidation" / "results" / filename
+        path = ROOT / "PromptValidation" / "results" / "benchmarks" / filename
         report = json.loads(path.read_text(encoding="utf-8"))
         if report["purpose"] != "Manual":
             raise ValueError(f"手動校正の結果ではありません: {path}")
@@ -97,7 +97,8 @@ def main() -> None:
     fig.text(0.05, 0.018, "計測日：2026年8月6日～9月23日。別の日・時間帯の結果をまとめた目安です。", ha="left", fontsize=9.5, color="#59636d")
     fig.subplots_adjust(left=0.31, right=0.95, top=0.92, bottom=0.09)
 
-    output = ROOT / "docs" / "images" / "ai-model-guide-speed.png"
+    output = ROOT / "docs" / "images" / "benchmarks" / "ai-model-guide-speed.png"
+    output.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output, dpi=160, facecolor="#ffffff")
     plt.close(fig)
     print(output)

@@ -7,7 +7,7 @@ JP Scratch は `Alt + Space` で手前に呼び出せるメモ帳で、 `Ctrl + 
 
 書いた文章は AI に校正させることもできます。APIキー、キー不要のOpenAI API互換接続先、ChatGPT / GitHub Copilotのサブスクを使用できます。
 
-![JP Scratch のメインウィンドウ。](docs/images/jp-scratch-demo.gif)
+![JP Scratch のメインウィンドウ。](docs/images/app/jp-scratch-demo.gif)
 
 ## 機能
 
@@ -39,6 +39,6 @@ AI校正を使うには、APIキー、キー不要の互換接続先、または
 * [ChatGPT / GitHub Copilotのサブスクを使う](docs/subscription-backends.md)
 * [保存場所・バックアップ・困ったとき](docs/data-and-support.md)
 * [AI校正モデルの選び方（全モデルの比較とおすすめ）](docs/ai-model-guide.md)
-* [AI校正モデルの比較データ（検証結果）](PromptValidation/model-benchmark-2026-09-23.md)
+* [AI校正モデルの比較データ（検証結果）](PromptValidation/reports/model-benchmark-2026-09-23.md)
 
 ソースコードからビルドする場合は、[ビルド方法・インストーラー作成方法](docs/how-to-build.md)を参照してください。

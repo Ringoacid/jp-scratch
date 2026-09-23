@@ -3205,7 +3205,7 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// App.OnStartup が tray アイコンを初期化した直後に呼ぶ。<c>MainWindow</c> のコンストラクタは
-    /// <c>TrayIconService.Initialize()</c>（<c>App.xaml.cs</c>）より先に走るため、起動時点で
+    /// <c>TrayIconService.Initialize()</c>（<c>Application/App.xaml.cs</c>）より先に走るため、起動時点で
     /// 月間上限に既に到達していても、コンストラクタ内の初回 <see cref="RefreshUsageDisplay"/> では
     /// 通知を発行できない。上のコメントの通り未発行なら通知済みとして記録していないので、
     /// ここでもう一度評価し直すだけで「tray が使えるようになった後に必ず1回通知される」を満たせる。
@@ -3296,7 +3296,7 @@ public partial class MainWindow : Window
         return new DateOnly(local.Year, local.Month, local.Day);
     }
 
-    // ローカル日/月の境界計算は Services/UsagePeriod.cs に集約し、課金履歴画面のクエリと共有する。
+    // ローカル日/月の境界計算は Services/Billing/Usage/UsagePeriod.cs に集約し、課金履歴画面のクエリと共有する。
     private static DateTimeOffset LocalStartOfDay(DateTimeOffset value) => UsagePeriod.StartOfDay(value);
 
     private static DateTimeOffset LocalStartOfMonth(DateTimeOffset value) => UsagePeriod.StartOfMonth(value);

@@ -3,15 +3,15 @@
 既存の全モデル比較と同じ7文章・システム指示・手動用 effort で、`gpt-6-astra`だけを
 単独計測した。
 
-生データ: [`results/model-benchmark-2026-09-07-gpt-6-astra-r3.json`](results/model-benchmark-2026-09-07-gpt-6-astra-r3.json)
+生データ: [`../results/benchmarks/model-benchmark-2026-09-07-gpt-6-astra-r3.json`](../results/benchmarks/model-benchmark-2026-09-07-gpt-6-astra-r3.json)
 
-図: [`docs/images/model-benchmark-*.png`](../docs/images/)（既存計測へ「9/7追補」と明示し、全16モデルとして統合）
+図: [`docs/images/benchmarks/model-benchmark-*.png`](../../docs/images/benchmarks/)（既存計測へ「9/7追補」と明示し、全16モデルとして統合）
 
 ## 実行条件
 
 | | |
 |---|---|
-| コマンド | `dotnet run --project PromptValidation -- --model-benchmark --models gpt-6-astra --trials 3 --timeout 120 --max-cost 1.00 --output PromptValidation/results/model-benchmark-2026-09-07-gpt-6-astra-r3.json --yes` |
+| コマンド | `dotnet run --project PromptValidation -- --model-benchmark --models gpt-6-astra --trials 3 --timeout 120 --max-cost 1.00 --output PromptValidation/results/benchmarks/model-benchmark-2026-09-07-gpt-6-astra-r3.json --yes` |
 | 対象 | GPT 6 Astra × 7文章 × 3試行 = **21リクエスト** |
 | 用途枠 | **手動用**（`ManualEffort=medium`） |
 | タイムアウト | **120秒** |

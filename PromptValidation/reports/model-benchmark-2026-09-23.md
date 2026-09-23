@@ -4,7 +4,7 @@
 
 **追補：** 新規追加の Claude Opus 5.5 は、後から同じ条件で[単独計測](claude-opus-5-5-benchmark-2026-09-23.md)した。結果の要約も[この文書の末尾](#claude-opus-55-の単独追補)に追記している。
 
-生データ：[自動用 JSON](results/model-benchmark-2026-09-23-automatic-r3.json)／[手動用 JSON](results/model-benchmark-2026-09-23-manual-r3.json)。各モデル・各文章・各試行の修正後本文もこの JSON に含む。
+生データ：[自動用 JSON](../results/benchmarks/model-benchmark-2026-09-23-automatic-r3.json)／[手動用 JSON](../results/benchmarks/model-benchmark-2026-09-23-manual-r3.json)。各モデル・各文章・各試行の修正後本文もこの JSON に含む。
 
 ## 計測条件
 
@@ -24,15 +24,15 @@
 
 ### 自動用
 
-![自動用：1回あたりの所要時間と概算料金の散布図。GPT 6 Lunaは他の2モデルより大幅に安い。](../docs/images/model-comparison-2026-09-23/automatic/model-benchmark-scatter-light.png)
+![自動用：1回あたりの所要時間と概算料金の散布図。GPT 6 Lunaは他の2モデルより大幅に安い。](../../docs/images/model-comparison-2026-09-23/automatic/model-benchmark-scatter-light.png)
 
-[ダーク版の図](../docs/images/model-comparison-2026-09-23/automatic/model-benchmark-scatter-dark.png)
+[ダーク版の図](../../docs/images/model-comparison-2026-09-23/automatic/model-benchmark-scatter-dark.png)
 
 ### 手動用
 
-![手動用：1回あたりの所要時間と概算料金の散布図。GPT 6 Lunaは他の2モデルより大幅に安い。](../docs/images/model-comparison-2026-09-23/manual/model-benchmark-scatter-light.png)
+![手動用：1回あたりの所要時間と概算料金の散布図。GPT 6 Lunaは他の2モデルより大幅に安い。](../../docs/images/model-comparison-2026-09-23/manual/model-benchmark-scatter-light.png)
 
-[ダーク版の図](../docs/images/model-comparison-2026-09-23/manual/model-benchmark-scatter-dark.png)
+[ダーク版の図](../../docs/images/model-comparison-2026-09-23/manual/model-benchmark-scatter-dark.png)
 
 | 用途 | モデル | 所要時間中央値 | 1回あたり概算料金中央値 | 21回の概算合計 |
 |---|---|---:|---:|---:|
@@ -49,13 +49,13 @@ Sonnet 5 の中央値は Luna より自動用で約0.23秒、手動用で約0.32
 
 点は所要時間の中央値、横線は最小～最大。右側の棒は7文章での**提案件数の平均**であり、正解数ではない。原文に不要な説明を足した場合も提案として数えられる。
 
-![自動用：モデル別の所要時間の範囲と平均提案件数。](../docs/images/model-comparison-2026-09-23/automatic/model-benchmark-bars-light.png)
+![自動用：モデル別の所要時間の範囲と平均提案件数。](../../docs/images/model-comparison-2026-09-23/automatic/model-benchmark-bars-light.png)
 
-[ダーク版の図](../docs/images/model-comparison-2026-09-23/automatic/model-benchmark-bars-dark.png)
+[ダーク版の図](../../docs/images/model-comparison-2026-09-23/automatic/model-benchmark-bars-dark.png)
 
-![手動用：モデル別の所要時間の範囲と平均提案件数。](../docs/images/model-comparison-2026-09-23/manual/model-benchmark-bars-light.png)
+![手動用：モデル別の所要時間の範囲と平均提案件数。](../../docs/images/model-comparison-2026-09-23/manual/model-benchmark-bars-light.png)
 
-[ダーク版の図](../docs/images/model-comparison-2026-09-23/manual/model-benchmark-bars-dark.png)
+[ダーク版の図](../../docs/images/model-comparison-2026-09-23/manual/model-benchmark-bars-dark.png)
 
 ## 修正内容の比較
 
@@ -98,8 +98,8 @@ Luna はこの7文章で Sonnet 5 と同等の主要な修正を行い、手動�
 既存JSONから図を作る操作はAPIを呼ばず、料金も発生しない。
 
 ```powershell
-python tools/plot-model-benchmark.py --input PromptValidation/results/model-benchmark-2026-09-23-automatic-r3.json --output-dir docs/images/model-comparison-2026-09-23/automatic
-python tools/plot-model-benchmark.py --input PromptValidation/results/model-benchmark-2026-09-23-manual-r3.json --output-dir docs/images/model-comparison-2026-09-23/manual
+python tools/plot-model-benchmark.py --input PromptValidation/results/benchmarks/model-benchmark-2026-09-23-automatic-r3.json --output-dir docs/images/model-comparison-2026-09-23/automatic
+python tools/plot-model-benchmark.py --input PromptValidation/results/benchmarks/model-benchmark-2026-09-23-manual-r3.json --output-dir docs/images/model-comparison-2026-09-23/manual
 ```
 
-計測コマンドと料金上限の扱いは[PromptValidation の README](README.md)を参照。ベンチマークの再実行は有料APIを呼ぶ。
+計測コマンドと料金上限の扱いは[PromptValidation の README](../README.md)を参照。ベンチマークの再実行は有料APIを呼ぶ。

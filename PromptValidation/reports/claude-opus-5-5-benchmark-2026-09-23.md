@@ -2,7 +2,7 @@
 
 新しく追加した Claude Opus 5.5 を、既存の [GPT 6 Luna・GPT 6 Sol・Claude Sonnet 5 比較](model-benchmark-2026-09-23.md)と同じ文章・システム指示・試行数で**単独計測**した。自動用と手動用を別々に実行している。既存3モデルとは別の時間帯の計測なので、所要時間の小さな差を厳密な順位とは扱わない。
 
-生データ：[自動用 JSON](results/model-benchmark-2026-09-23-opus-5-5-automatic-r3.json)／[手動用 JSON](results/model-benchmark-2026-09-23-opus-5-5-manual-r3.json)。全42回の修正後本文と使用量を含む。
+生データ：[自動用 JSON](../results/benchmarks/model-benchmark-2026-09-23-opus-5-5-automatic-r3.json)／[手動用 JSON](../results/benchmarks/model-benchmark-2026-09-23-opus-5-5-manual-r3.json)。全42回の修正後本文と使用量を含む。
 
 ## 条件と実行結果
 

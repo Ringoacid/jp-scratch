@@ -31,7 +31,7 @@ python tools/plot-model-benchmark.py   # 上の結果から README 用の比較�
 
 ## ディレクトリ構成
 
-- `App.xaml.cs` 起動・常駐・単一インスタンス・クラッシュ時保存
+- `Application/App.xaml.cs` 起動・常駐・単一インスタンス・クラッシュ時保存
 - `Controls/` 検索・置換パネル / `Editor/` AvalonEdit の拡張（検索・不可視文字・校正提案の描画）
 - `Infrastructure/` Win32 相互運用・原子的ファイル書き込み・パス解決
 - `Models/` 設定・タブ・ホットキー / `Proofreading/` 校正クライアント・プロンプト・段落計画・差分・提案セッション
@@ -42,10 +42,10 @@ python tools/plot-model-benchmark.py   # 上の結果から README 用の比較�
 
 ## 重要な実装上の注意
 
-- **ウィンドウ位置は物理ピクセルで扱う**（`Services/WindowPlacer.cs`）。混在 DPI では WPF の `Window.Left/Top` を使わず `SetWindowPos` を直接呼ぶ。
+- **ウィンドウ位置は物理ピクセルで扱う**（`Services/Shell/WindowPlacer.cs`）。混在 DPI では WPF の `Window.Left/Top` を使わず `SetWindowPos` を直接呼ぶ。
 - **WinForms の暗黙 using を追加しない**（`Brush` / `Point` / `KeyEventArgs` が WPF 側と全面衝突する）。
 - **IME 変換中は自動非表示を止める**（`NativeMethods.HasImeComposition`）。
-- **テーマ辞書は `ThemeService` だけが差し込む**。App.xaml で読むと二重マージになり切り替えが効かない。
+- **テーマ辞書は `ThemeService` だけが差し込む**。Application/App.xaml で読むと二重マージになり切り替えが効かない。
 - **二重起動の呼び戻しは名前付きイベント**（`Infrastructure/SingleInstance.cs`）。`PostMessage(HWND_BROADCAST)` は不可。
 - **`Assets/app.ico` は手作りの正典**。小サイズは DIB、256px のみ PNG 圧縮（`NotifyIcon` が PNG を展開できないため）。
 - **PowerShell スクリプトは UTF-8 BOM 付きで保存**（BOM なしだと CP932 として読まれコメントが壊れる）。
@@ -66,7 +66,7 @@ python tools/plot-model-benchmark.py   # 上の結果から README 用の比較�
 ## コーディング規約
 
 - UI 文言はすべて日本語ハードコード。サテライトリソースは使わない。
-- 校正プロンプトは `Proofreading/ProofreadingPrompt.cs` が正典。本体と検証アプリで共有する。
+- 校正プロンプトは `Proofreading/Pipeline/ProofreadingPrompt.cs` が正典。本体と検証アプリで共有する。
 - 変更後は `dotnet build` と `PromptValidation --self-test` で確認する。
 
 ## graphify

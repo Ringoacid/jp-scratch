@@ -5,6 +5,13 @@ Gemini の校正精度と文体保護を比較し、JP Scratch 本体と共有�
 既定のテストセットは、誤り検出5本と文体保護25本を `cases.json` に収録している。
 既定のプロンプト案は、文脈を含む全文を渡して修正版全文を受け取る `full-rewrite-safe`。
 
+## ファイル構成
+
+- `validations/`: アプリ、課金、使用量、保存、接続先、校正、ベンチマークのオフライン検証。
+- `support/`: 検証アプリのコマンドと共通処理。
+- `reports/`: 検証・モデル比較の記録。
+- `results/`: 精度検証の JSON。モデル比較の JSON は `results/benchmarks/`。
+
 ## 実行
 
 外部APIを使わずに確認する場合は、以下を実行してください。APIキーは必要ありません。
@@ -96,9 +103,9 @@ dotnet run --project PromptValidation -- --model-benchmark --models claude-sonne
 dotnet run --project PromptValidation -- --model-benchmark --models claude-sonnet-5,gpt-6-luna,gpt-6-sol --purpose manual --trials 3 --max-cost 3
 ```
 
-2026-09-23 の比較結果（7文章×3試行／用途、計126リクエスト）に基づき、新規設定の既定を自動・手動とも GPT 6 Luna にした。図表、修正内容、判断の限界は[比較レポート](model-benchmark-2026-09-23.md)を参照。生データは `results/model-benchmark-2026-09-23-automatic-r3.json` と `results/model-benchmark-2026-09-23-manual-r3.json` に保存している。
+2026-09-23 の比較結果（7文章×3試行／用途、計126リクエスト）に基づき、新規設定の既定を自動・手動とも GPT 6 Luna にした。図表、修正内容、判断の限界は[比較レポート](reports/model-benchmark-2026-09-23.md)を参照。生データは `results/benchmarks/model-benchmark-2026-09-23-automatic-r3.json` と `results/benchmarks/model-benchmark-2026-09-23-manual-r3.json` に保存している。
 
-追加した Claude Opus 5.5 も同じ文章・試行数で単独計測した（自動・手動の計42リクエスト）。結果と既存3モデルとの比較は[Opus 5.5 追補レポート](claude-opus-5-5-benchmark-2026-09-23.md)を参照。
+追加した Claude Opus 5.5 も同じ文章・試行数で単独計測した（自動・手動の計42リクエスト）。結果と既存3モデルとの比較は[Opus 5.5 追補レポート](reports/claude-opus-5-5-benchmark-2026-09-23.md)を参照。
 
 プロンプト案:
 
@@ -120,7 +127,7 @@ dotnet run --project PromptValidation -- --model-benchmark --models claude-sonne
 
 ## 全文から個別提案への変換
 
-本体の `Proofreading/DocumentDiff.cs` を検証プロジェクトからリンクして使用する。
+本体の `Proofreading/Pipeline/DocumentDiff.cs` を検証プロジェクトからリンクして使用する。
 `DocumentDiff` は原文とモデルの修正版全文を Unicode の書記素単位で比較し、各変更を
 AvalonEdit と同じ UTF-16 オフセットの局所置換へ変換する。絵文字・結合文字を途中で分割せず、
 同じ語の中で最大2書記素だけ離れた変更は1提案へまとめる。脱字のような純粋な挿入は、
@@ -128,7 +135,7 @@ AvalonEdit と同じ UTF-16 オフセットの局所置換へ変換する。絵�
 
 全提案を原文に再適用して修正版を再現できない場合、変更範囲が重なる場合、または変更量が
 安全上限を超える場合は応答全体を破棄する。詳細と検証結果は
-`algorithm-validation-2026-07-29.md` を参照。
+`reports/algorithm-validation-2026-07-29.md` を参照。
 
 `ProofreadingSession` も同じ方法でリンクし、`--self-test` で TextAnchor の前方編集追従、
 範囲編集時の失効、境界挿入、複数提案の順次適用を検査する。

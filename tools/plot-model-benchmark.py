@@ -3,12 +3,12 @@
 
     pip install matplotlib
     python tools/plot-model-benchmark.py
-    python tools/plot-model-benchmark.py --input PromptValidation/results/xxx.json --markdown table.md
+    python tools/plot-model-benchmark.py --input PromptValidation/results/benchmarks/xxx.json --markdown table.md
     python tools/plot-model-benchmark.py --input base.json --input supplement.json
 
-入力を省略すると PromptValidation/results/*benchmark-*.json から、同じ計測名の最新リビジョンを
+入力を省略すると PromptValidation/results/benchmarks/*benchmark-*.json から、同じ計測名の最新リビジョンを
 すべて読み込む。複数の実行を混ぜる場合は、文章・試行数・タイムアウト・システム指示が同じものに限る。
-出力は docs/images/ へ、ライト用とダーク用を別々に書き出す（GitHub の README から
+出力は docs/images/benchmarks/ へ、ライト用とダーク用を別々に書き出す（GitHub の README から
 <picture> で出し分ける前提。自動反転ではなく、ダーク面に合わせて選んだ色を使う）。
 
 図のルール（意図的な設計なので変更時は理由を持って変えること）:
@@ -36,8 +36,8 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_DIR = REPO_ROOT / "PromptValidation" / "results"
-IMAGES_DIR = REPO_ROOT / "docs" / "images"
+RESULTS_DIR = REPO_ROOT / "PromptValidation" / "results" / "benchmarks"
+IMAGES_DIR = REPO_ROOT / "docs" / "images" / "benchmarks"
 
 # 日本語を明示しないと matplotlib の既定（DejaVu Sans）で豆腐になる。
 FONT_STACK = ["Yu Gothic", "Noto Sans JP", "Meiryo", "BIZ UDGothic", "MS Gothic"]

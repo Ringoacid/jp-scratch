@@ -7,7 +7,7 @@ namespace JpScratch.PromptValidation;
 /// <summary>
 /// 課金履歴のCSVエクスポート（<see cref="BillingCsvExporter"/>、要件 3.6.2）の自己テスト。
 ///
-/// 実際のファイル書き込みとダイアログは <c>Views/BillingHistoryWindow.xaml.cs</c> 側にあり、
+/// 実際のファイル書き込みとダイアログは <c>Views/Billing/BillingHistoryWindow.xaml.cs</c> 側にあり、
 /// ここでは組み立てたCSV本文だけを検査する。中心にあるのは
 /// **「行 → CSV → パース → 同じ値」の往復不変性**で、`SettingsFieldFormatting` や
 /// `CustomDateRangeParser.FormatInclusive` と同じ考え方。

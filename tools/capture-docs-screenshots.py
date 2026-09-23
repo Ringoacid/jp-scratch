@@ -605,7 +605,8 @@ def app_is_running() -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description="README 用スクショの一括撮影")
     parser.add_argument("--exe", type=Path, default=Path("publish/fdd/JpScratch.exe"))
-    parser.add_argument("--out", type=Path, default=Path("docs/images"))
+    parser.add_argument("--out", type=Path, default=Path("docs/images"),
+                        help="画像ルート（app/ と settings/ に分類して保存）")
     parser.add_argument("--shots", default=",".join(DEFAULT_SHOTS),
                         help=f"撮る対象をカンマ区切りで。all で全部。候補: {','.join(ALL_SHOTS)}")
     parser.add_argument("--keep-data", action="store_true",
@@ -620,10 +621,13 @@ def main() -> int:
         return 2
 
     out = args.out.resolve()
-    out.mkdir(parents=True, exist_ok=True)
+    app_out = out / "app"
+    settings_out = out / "settings"
+    app_out.mkdir(parents=True, exist_ok=True)
+    settings_out.mkdir(parents=True, exist_ok=True)
 
     if shots == ["settings"]:
-        scenario_settings(out)
+        scenario_settings(settings_out)
         return 0
 
     if not exe.exists():
@@ -652,15 +656,15 @@ def main() -> int:
                 # 検索系は最後に回す。検索語の入力が本文へ流れ込んだ場合でも
                 # 先に撮った本文のスクショが汚れないようにするため。
                 if "main" in shots:
-                    scenario_main(app, out)
+                    scenario_main(app, app_out)
                 if "contextmenu" in shots:
-                    scenario_context_menu(app, out)
+                    scenario_context_menu(app, app_out)
                 if "settings" in shots:
-                    scenario_settings(out)
+                    scenario_settings(settings_out)
                 if "find" in shots:
-                    scenario_find(app, out)
+                    scenario_find(app, app_out)
                 if "crosstab" in shots:
-                    scenario_cross_tab_search(app, out)
+                    scenario_cross_tab_search(app, app_out)
 
         if "dark" in shots:
             dark_dir = workdir / "dark"
@@ -668,7 +672,7 @@ def main() -> int:
             with AppSession(exe, dark_dir) as app:
                 build_tabs(app, tabs)
                 activate_first_tab(app)
-                app.shot(out / "main-dark.png")
+                app.shot(app_out / "main-dark.png")
 
         if "proofreading" in shots:
             proof_dir = workdir / "proof"
@@ -676,8 +680,8 @@ def main() -> int:
             with AppSession(exe, proof_dir) as app:
                 type_text(app.hwnd, TAB_PROOFREAD)
                 time.sleep(0.5)
-                scenario_proofreading(app, out)
-                scenario_billing(app, out)
+                scenario_proofreading(app, app_out)
+                scenario_billing(app, app_out)
 
         return 0
     finally:

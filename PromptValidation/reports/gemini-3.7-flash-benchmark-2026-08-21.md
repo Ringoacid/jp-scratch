@@ -3,15 +3,15 @@
 2026-08-06 の[全11モデル比較](model-benchmark-2026-08-06.md)後に追加した
 `gemini-3.7-flash`を、同じ7文章・システム指示・手動用 effort で追補計測した。
 
-生データ: [`results/gemini-3.7-flash-benchmark-2026-08-21-r3.json`](results/gemini-3.7-flash-benchmark-2026-08-21-r3.json)
+生データ: [`../results/benchmarks/gemini-3.7-flash-benchmark-2026-08-21-r3.json`](../results/benchmarks/gemini-3.7-flash-benchmark-2026-08-21-r3.json)
 
-図: [`docs/images/model-benchmark-*.png`](../docs/images/)（2026-08-06一斉計測へ「8/21追補」と明示して統合）
+図: [`docs/images/benchmarks/model-benchmark-*.png`](../../docs/images/benchmarks/)（2026-08-06一斉計測へ「8/21追補」と明示して統合）
 
 ## 実行条件
 
 | | |
 |---|---|
-| コマンド | `dotnet run --project PromptValidation -- --model-benchmark --models gemini-3.7-flash --trials 3 --max-cost 1 --timeout 120 --output PromptValidation/results/gemini-3.7-flash-benchmark-2026-08-21-r3.json --yes` |
+| コマンド | `dotnet run --project PromptValidation -- --model-benchmark --models gemini-3.7-flash --trials 3 --max-cost 1 --timeout 120 --output PromptValidation/results/benchmarks/gemini-3.7-flash-benchmark-2026-08-21-r3.json --yes` |
 | 対象 | Gemini 3.7 Flash × 7文章 × 3試行 = **21リクエスト** |
 | 用途枠 | **手動用**（`ManualEffort=medium`） |
 | タイムアウト | **120秒** |

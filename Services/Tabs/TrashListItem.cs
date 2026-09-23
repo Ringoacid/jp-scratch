@@ -5,7 +5,7 @@ namespace JpScratch.Services;
 
 /// <summary>
 /// ゴミ箱一覧の 1 行（ゴミ箱一覧ウィンドウ）。行数と日時の整形は WPF に依存しない純粋関数に
-/// して、ウィンドウ本体（Views/TrashWindow）から分離し検証アプリ（PromptValidation）に
+/// して、ウィンドウ本体（Views/Tabs/TrashWindow）から分離し検証アプリ（PromptValidation）に
 /// 取り込めるようにする（CrossTabSearchPreview と同じ方針）。
 /// </summary>
 public sealed class TrashListItem

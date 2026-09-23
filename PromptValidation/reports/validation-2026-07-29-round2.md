@@ -13,8 +13,8 @@
 
 `full-rewrite-safe` 単体の結果ファイル:
 
-- `results/full-rewrite-safe-errors-r10.json`
-- `results/full-rewrite-safe-style-r5.json`
+- `../results/full-rewrite-safe-errors-r10.json`
+- `../results/full-rewrite-safe-style-r5.json`
 
 ## 比較
 
