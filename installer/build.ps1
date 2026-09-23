@@ -139,7 +139,9 @@ if ($Sign) {
 Write-Host '==> wix build' -ForegroundColor Cyan
 New-Item -ItemType Directory -Force $outputDir | Out-Null
 
-wix build (Join-Path $PSScriptRoot 'Package.wxs') -arch x64 -d Version=$Version -d PublishDir=$publishDir -d IconFile=$iconFile -o $msiPath
+wix build (Join-Path $PSScriptRoot 'Package.wxs') -arch x64 -culture ja-JP `
+    -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext `
+    -d Version=$Version -d PublishDir=$publishDir -d IconFile=$iconFile -o $msiPath
 if ($LASTEXITCODE -ne 0) { throw 'wix build に失敗しました' }
 
 if ($Sign) {

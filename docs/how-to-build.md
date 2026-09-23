@@ -1,6 +1,11 @@
 # ビルド方法・インストーラー作成方法
 
-ビルドには`.NET SDK 10.0.400`を導入し、インストーラーの作成には`WiX Toolset 5.0.2`を導入してください。
+ビルドには`.NET SDK 10.0.400`を導入し、インストーラーの作成には`WiX Toolset 5.0.2`を導入してください。WiX拡張も一度だけ追加します。
+
+```powershell
+wix extension add WixToolset.UI.wixext/5.0.2
+wix extension add WixToolset.Util.wixext/5.0.2
+```
 
 Windowsで、プロジェクト直下から実行してください。
 
