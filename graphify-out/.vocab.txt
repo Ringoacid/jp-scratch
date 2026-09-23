@@ -1,3 +1,4 @@
+abstractions
 accept
 accepts
 accounting
@@ -34,6 +35,7 @@ append
 application
 applied
 apply
+architecture
 archive
 area
 args
@@ -41,6 +43,7 @@ argument
 arrow
 assembly
 assert
+astra
 async
 atomic
 attach
@@ -54,6 +57,8 @@ available
 avalon
 axes
 back
+backend
+backends
 background
 backoff
 backtrack
@@ -80,6 +85,7 @@ bitmapinfoheader
 bits
 blank
 block
+blocking
 blocks
 blt
 body
@@ -111,6 +117,7 @@ cache
 cached
 calculate
 call
+callback
 called
 calls
 can
@@ -132,6 +139,7 @@ change
 changed
 changes
 changing
+channel
 char
 character
 characters
@@ -144,7 +152,9 @@ clamped
 class
 claude
 clause
+cleanup
 clear
+cli
 click
 client
 clipboard
@@ -155,6 +165,7 @@ closed
 closing
 cluster
 code
+codex
 collapsed
 collect
 collection
@@ -179,9 +190,11 @@ completion
 composition
 compute
 concurrent
+config
 configure
 confirm
 confirmed
+connect
 connection
 constrained
 construct
@@ -196,6 +209,7 @@ conversion
 convert
 converter
 converters
+copilot
 copy
 core
 corrected
@@ -213,6 +227,7 @@ create
 credential
 credentials
 cross
+csproj
 csv
 ctrl
 culture
@@ -271,6 +286,7 @@ dirty
 disabled
 discard
 discarded
+disconnect
 dispatch
 dispatcher
 display
@@ -286,11 +302,13 @@ dots
 double
 down
 dpi
+drain
 draw
 drawing
 drop
 due
 duration
+economy
 edit
 edited
 editing
@@ -315,6 +333,7 @@ enumerable
 environment
 equivalent
 error
+errors
 esc
 escape
 escapes
@@ -333,6 +352,7 @@ existing
 exists
 exit
 expand
+expander
 expansion
 expect
 expected
@@ -349,6 +369,7 @@ factory
 failed
 failure
 failures
+fake
 fallback
 families
 family
@@ -386,6 +407,7 @@ forward
 frame
 framework
 frankfurter
+fresh
 from
 full
 func
@@ -461,6 +483,7 @@ includes
 inclusive
 incomplete
 incremental
+independent
 index
 indexes
 indicator
@@ -469,13 +492,18 @@ infrastructure
 ingest
 init
 initial
+initialization
 initialize
 initialized
+initializing
+injection
 inline
 input
 insert
 inserted
+install
 installed
+installer
 instance
 instruction
 int
@@ -521,6 +549,7 @@ legacy
 legend
 length
 level
+lifecycle
 light
 like
 limit
@@ -536,6 +565,9 @@ locate
 lock
 locked
 log
+logging
+login
+logout
 logs
 long
 lost
@@ -555,6 +587,7 @@ matches
 matching
 maximum
 maybe
+mcp
 meaningful
 measure
 median
@@ -574,6 +607,7 @@ migration
 milliseconds
 missed
 missing
+mock
 mode
 model
 models
@@ -644,6 +678,7 @@ overlap
 override
 overview
 owned
+package
 page
 paid
 panel
@@ -681,11 +716,13 @@ planner
 plot
 png
 point
+policy
 popen
 populate
 popup
 pos
 position
+post
 preceding
 precision
 preferred
@@ -719,13 +756,16 @@ proposals
 propose
 protected
 protection
+protocol
 provider
 providers
 ptr
+pump
 purge
 purpose
 quarantine
 query
+quota
 quote
 randomized
 range
@@ -789,10 +829,12 @@ reported
 reports
 repository
 request
+require
 requirements
 reregister
 reschedule
 reset
+resets
 resolve
 resolved
 resolver
@@ -800,6 +842,7 @@ resource
 response
 responses
 restore
+restricted
 result
 results
 resume
@@ -817,6 +860,7 @@ routed
 router
 row
 rows
+rpc
 run
 running
 runtime
@@ -875,6 +919,7 @@ show
 shown
 sign
 signal
+signed
 single
 size
 sizes
@@ -892,6 +937,7 @@ specific
 split
 spread
 sqlite
+sta
 stack
 stage
 staged
@@ -906,6 +952,7 @@ states
 status
 step
 stop
+stops
 storage
 store
 stored
@@ -915,7 +962,10 @@ strip
 structural
 stub
 style
+styled
 styles
+subscription
+subscriptions
 success
 successful
 suffix
@@ -928,10 +978,13 @@ supported
 supports
 suppress
 suppression
+surface
 survive
 suspend
+suspended
 swapped
 sync
+synchronization
 system
 tab
 table
@@ -960,6 +1013,7 @@ thumb
 time
 timeout
 timer
+tip
 title
 titles
 tmp
@@ -968,6 +1022,7 @@ toggle
 token
 tokenize
 tokens
+tool
 tooltip
 topmost
 total
@@ -997,6 +1052,7 @@ trips
 truncate
 truncated
 try
+turn
 two
 type
 uint
@@ -1033,6 +1089,7 @@ validate
 validation
 value
 variable
+variables
 verdict
 verify
 version
@@ -1093,12 +1150,14 @@ zip
 と同じく
 と本文ファイルを用意する
 にする
+について
 にフォールバック
 に属する
 のように書く
 のキー入力だけで次を確認する
 のメインウィンドウ単体のスクリーンショットを撮るスクリプト
 の共通契約
+の契約接続
 の状態別
 の生成物のコミットメッセージを作成してください
 の空振り判定に使う
@@ -1127,7 +1186,6 @@ zip
 サイズ構成と
 サポート機能一覧
 サードパーティー通知
-サービスについて
 スキーマ
 スクラッチパッド型
 スタイルガイドの自動生成
@@ -1172,6 +1230,7 @@ zip
 全タブ検索から
 円のバッジと形で区別できるようにする
 別実行の値を同じ図に載せても比較条件が崩れないことを確認する
+利用枠と履歴
 削除しても大丈夫なものですか
 削除の判定
 前面化の権利が無い場合に備えて入力キューを一時的に繋ぐ
@@ -1180,6 +1239,7 @@ zip
 回で先頭へ戻る
 図と表で共有する
 失敗時のフォールバック
+契約サービスと
 学習機能
 完了判定
 完了条件
@@ -1212,6 +1272,7 @@ zip
 料金表示形式
 新しいモデルや料金など
 既存の
+既存計測との位置関係
 既定値
 日付順に返す
 日本語スクラッチパッド
@@ -1263,6 +1324,7 @@ zip
 計測との位置関係
 計測名ごとに最新の
 設計原則
+認証と実行環境
 誤入力を避けるため撮影を中止する
 課金ガード
 課金ステータスバーを設定可能にする
