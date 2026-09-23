@@ -6,6 +6,8 @@
 撮影は Win32 の PrintWindow(PW_RENDERFULLCONTENT) で「ウィンドウの枠だけ」を切り出す
 （tools/screenshot-main.py と同じ方式）。操作はキーボード入力とマウスクリックの合成で行い、
 UI 自動化ライブラリには依存しない（Pillow のみ使用）。
+設定画面は tools/SettingsCapture (.NET SDK) で実際のWPF部品を直接描画する。
+マウス座標に依存せず、デスクトップをキャプチャできない環境でも更新できる。
 
 注意:
   * スタートアップ登録（HKCU\\...\\Run）はアプリ起動時に settings.json の値へ同期される。
@@ -342,6 +344,7 @@ BASE_SETTINGS = {
     "theme": "Light",
     # 環境変数のキーをそのまま使う（初回起動時の取得元確認ダイアログを出さない）
     "openAiApiKeySource": "EnvironmentVariable",
+    "anthropicApiKeySource": "EnvironmentVariable",
     "geminiApiKeySource": "EnvironmentVariable",
     "plamoApiKeySource": "EnvironmentVariable",
     # 既定の手動用モデル（Anthropic）はキーが無い環境があるので OpenAI に寄せる
@@ -533,29 +536,13 @@ def scenario_cross_tab_search(app: AppSession, out: Path) -> None:
     focus(app.hwnd)
 
 
-# 設定ウィンドウのタブ見出し（左から）と、その中心の X 座標（DIP）。
-# TabControl は見出しに直接フォーカスが乗らないので、→ キーではなくクリックで切り替える。
-SETTINGS_TABS = [
-    ("general", 52),
-    ("editor", 134),
-    ("proofreading", 215),
-    ("learning", 289),
-    ("billing", 384),
-]
-SETTINGS_TAB_Y = 65
-
-
-def scenario_settings(app: AppSession, out: Path) -> None:
-    click(app.hwnd, BASE_SETTINGS["windowWidth"] - 45, 16)  # タイトルバーの歯車ボタン
-    hwnd = app.wait_for("JP Scratch の設定")
-    focus(hwnd)
-    time.sleep(1.2)
-    for name, x in SETTINGS_TABS:
-        click(hwnd, x, SETTINGS_TAB_Y)
-        time.sleep(0.8)
-        app.shot(out / f"settings-{name}.png", hwnd)
-    close_window(hwnd)
-    focus(app.hwnd)
+def scenario_settings(out: Path) -> None:
+    # The helper selects real TabItems by their Japanese header and verifies the
+    # inventory. No CLI, network, app startup registration, or real data is used.
+    subprocess.run(
+        ["dotnet", "run", "--project", str(Path(__file__).parent / "SettingsCapture"), "--", str(out)],
+        check=True,
+    )
 
 
 def scenario_context_menu(app: AppSession, out: Path) -> None:
@@ -626,10 +613,6 @@ def main() -> int:
     args = parser.parse_args()
 
     exe = args.exe.resolve()
-    if not exe.exists():
-        print(f"実行ファイルがありません: {exe}", file=sys.stderr)
-        return 2
-
     shots = ALL_SHOTS if args.shots == "all" else [s.strip() for s in args.shots.split(",") if s.strip()]
     unknown = [s for s in shots if s not in ALL_SHOTS]
     if unknown:
@@ -638,6 +621,14 @@ def main() -> int:
 
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
+
+    if shots == ["settings"]:
+        scenario_settings(out)
+        return 0
+
+    if not exe.exists():
+        print(f"実行ファイルがありません: {exe}", file=sys.stderr)
+        return 2
 
     if app_is_running():
         print(
@@ -665,7 +656,7 @@ def main() -> int:
                 if "contextmenu" in shots:
                     scenario_context_menu(app, out)
                 if "settings" in shots:
-                    scenario_settings(app, out)
+                    scenario_settings(out)
                 if "find" in shots:
                     scenario_find(app, out)
                 if "crosstab" in shots:

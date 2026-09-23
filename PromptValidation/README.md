@@ -7,7 +7,13 @@ Gemini の校正精度と文体保護を比較し、JP Scratch 本体と共有�
 
 ## 実行
 
-PowerShell で API キーを現在のプロセスだけに設定して実行する。
+外部APIを使わずに確認する場合は、以下を実行してください。APIキーは必要ありません。
+
+```powershell
+dotnet run --project PromptValidation -- --self-test
+```
+
+実際のモデルで校正精度を確認する場合は、PowerShellでAPIキーを現在のプロセスだけに設定して実行してください。以下はAPIを呼ぶため、料金が発生します。
 
 ```powershell
 $env:GEMINI_API_KEY = "..."
@@ -30,7 +36,7 @@ dotnet run --project PromptValidation -- --input "この文章を校正して"
 # APIを呼ばず、実際のプロンプトとJSON Schemaを確認
 dotnet run --project PromptValidation -- --dry-run --case style-01
 
-# 提案位置・全文差分・資格情報・料金/ログ/為替・DB移行をオフライン検査
+# 提案位置・全文差分・資格情報・料金/ログ/為替・DB移行・契約接続をオフライン検査
 dotnet run --project PromptValidation -- --self-test
 
 # 保存済みの全文応答から個別提案を抽出（APIは呼ばない）
@@ -45,6 +51,12 @@ dotnet run --project PromptValidation -- --suite error --repeat 10 --variant phr
 # 1回の実行に費用上限を設定
 dotnet run --project PromptValidation -- --max-cost 0.25
 ```
+
+`--self-test` は外部 AI API や実際の契約サービスへ接続せず、ローカルの模擬サーバーと模擬応答で
+Codex / Copilot 契約経路の4機能、Copilotの認証ライフサイクル、利用枠・モデルのガード、キャンセル、
+DB v6 の移行・集計・圧縮、CSVを検査する。実契約での認証・生成確認は含めない。
+実契約の生成確認は利用枠を消費するため、別途承認を得て行う。
+契約接続の前提と検証方針は [契約サービスの導入手順](../docs/subscription-backends.md) を参照。
 
 終了コードは、全件合格なら `0`、検証失敗なら `1`、設定・通信エラーなら `2`。
 各API呼び出しと集計には、`usageMetadata` と現行単価に基づく推定USD料金を表示する。

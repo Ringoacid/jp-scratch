@@ -14,6 +14,10 @@ JP Scratch は以下のサードパーティーコンポーネントを利用し
 | `SQLitePCLRaw.core.dll` | SQLitePCLRaw.core |
 | `SQLitePCLRaw.provider.e_sqlite3.dll` | SQLitePCLRaw.provider.e_sqlite3 |
 | `e_sqlite3.dll` | SQLitePCLRaw.lib.e_sqlite3（中身は SQLite 本体） |
+| `GitHub.Copilot.SDK.dll` | GitHub.Copilot.SDK |
+| `Microsoft.Extensions.AI.Abstractions.dll` | Microsoft.Extensions.AI.Abstractions |
+| `Microsoft.Extensions.Logging.Abstractions.dll` | Microsoft.Extensions.Logging.Abstractions |
+| `Microsoft.Extensions.DependencyInjection.Abstractions.dll` | Microsoft.Extensions.DependencyInjection.Abstractions |
 
 ---
 
@@ -339,7 +343,97 @@ a legal notice, here is a blessing:
 
 ---
 
-## 6. ビルド時のみ使用するもの（頒布物には含まれない）
+## 6. GitHub.Copilot.SDK 1.0.13
+
+- 用途: GitHub Copilot の契約接続に使う .NET SDK
+- 発行者: GitHub
+- プロジェクト: <https://github.com/github/copilot-sdk>
+- ライセンス: MIT
+- 原文: [パッケージに記録されたコミットの LICENSE](https://github.com/github/copilot-sdk/blob/f13e4a2cc7e4e220974d2333142234e162a3252e/LICENSE)
+
+NuGet パッケージの著作権メタデータは `Copyright (c) Microsoft Corporation. All rights reserved.` です。
+リポジトリのライセンス原文は次のとおりです。
+
+```
+MIT License
+
+Copyright GitHub, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
+## 7. Microsoft.Extensions.AI.Abstractions 10.2.0
+
+- 用途: Copilot SDK が参照する AI クライアントの共通インターフェース
+- 発行者: Microsoft
+- パッケージの著作権表示: © Microsoft Corporation. All rights reserved.
+- プロジェクト: <https://github.com/dotnet/extensions>
+- ライセンス: MIT
+- 原文: [パッケージに記録されたコミットの LICENSE](https://github.com/dotnet/extensions/blob/7c82ecb60925d76e53b65e290a33bef46f285cae/LICENSE)
+
+```
+The MIT License (MIT)
+
+Copyright (c) .NET Foundation. All rights reserved.
+
+All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+---
+
+## 8. Microsoft.Extensions.Logging.Abstractions / Microsoft.Extensions.DependencyInjection.Abstractions 10.0.2
+
+- 用途: Copilot SDK の推移的依存として使うログ・依存性注入の共通インターフェース
+- 発行者: Microsoft
+- 両パッケージの著作権表示: © Microsoft Corporation. All rights reserved.
+- プロジェクト: <https://github.com/dotnet/dotnet>
+- ライセンス: MIT
+- 原文: [両パッケージに記録されたコミットの LICENSE.TXT](https://github.com/dotnet/dotnet/blob/44525024595742ebe09023abe709df51de65009b/LICENSE.TXT)
+
+両ライブラリには、上記「2. Microsoft.Data.Sqlite」に掲載した MIT ライセンス原文
+（`Copyright (c) .NET Foundation and Contributors`）と同一の原文が適用されます。
+これらはフレームワーク依存版にも同梱する NuGet ライブラリであり、「5. .NET / .NET Desktop Runtime」
+のランタイム同梱有無とは別に扱います。
+
+---
+
+## 9. ビルド時のみ使用するもの（頒布物には含まれない）
 
 以下は開発・ビルド・検証にのみ使うツールで、生成される実行ファイルや MSI には一切含まれません。参考として記載します。
 
@@ -353,15 +447,17 @@ a legal notice, here is a blessing:
 
 WiX でビルドした MSI に WiX 自身のコードは埋め込まれないため、MS-RL の頒布条件は成果物には及びません。
 
-`PromptValidation`（オフライン回帰テスト・モデル比較用のコンソールアプリ）は本体と同じ NuGet パッケージ（AvalonEdit / Microsoft.Data.Sqlite / SQLitePCLRaw）を参照しますが、これも頒布物には含まれません。
+`PromptValidation`（オフライン回帰テスト・モデル比較用のコンソールアプリ）は本体と同じ NuGet パッケージ（AvalonEdit / Microsoft.Data.Sqlite / SQLitePCLRaw / GitHub.Copilot.SDK とその推移的依存）を参照しますが、これも頒布物には含まれません。`tools/SettingsCapture` は本体を参照して設定画面の画像を生成する開発用ツールで、頒布物には含まれません。
 
 Graphify のプロジェクト用スキルは `.claude\skills\graphify\` に含まれます。著作権表示と再配布条件は、同ディレクトリの `NOTICE`、`LICENSE`、`LICENSE-MIT` を参照してください。
 
 ---
 
-## 7. 外部 API サービスについて
+## 10. 外部 API・契約サービスと CLI について
 
-本アプリケーションは校正機能で Google（Gemini）・OpenAI・Anthropic・Preferred Networks（PLaMo）の各 API を HTTP で呼び出しますが、これらのベンダーが提供するクライアント SDK やライブラリは一切利用しておらず、`System.Net.Http` による自前実装です。したがって、これらのサービスに関してソフトウェアライセンス上の同梱物はありません。API の利用条件は各ベンダーの利用規約に従います。
+APIキー経路では Google（Gemini）・OpenAI・Anthropic・Preferred Networks（PLaMo）の各 API を `System.Net.Http` による自前実装で呼び出し、これらの API クライアント SDK は同梱しません。API の利用条件は各ベンダーの利用規約に従います。
+
+契約接続では、上記「6. GitHub.Copilot.SDK」の .NET SDK を本体に同梱します。Codex CLI と Copilot CLI は本体・MSIに同梱せず、利用者の操作により公式配布元から別途取得するか、手動で指定した実行ファイルを使います。導入したCLIはそれぞれの配布物のライセンス・利用条件に従います。導入・専用ホーム・対応版の詳細は [docs/subscription-backends.md](docs/subscription-backends.md) を参照してください。
 
 ---
 
