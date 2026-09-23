@@ -12,6 +12,7 @@ using JpScratch.Infrastructure;
 using JpScratch.Models;
 using JpScratch.Services;
 using JpScratch.Controls;
+using JpScratch.Proofreading;
 using Microsoft.Win32;
 
 namespace JpScratch.Views;
@@ -78,7 +79,8 @@ public partial class SettingsWindow : Window
         Database database,
         Func<IReadOnlyList<string>> saveDirty,
         Func<bool> isWorkInProgress,
-        Func<string, bool> requestRestore)
+        Func<string, bool> requestRestore,
+        SubscriptionService subscriptions)
     {
         _service = service;
         _credentials = credentials;
@@ -89,15 +91,23 @@ public partial class SettingsWindow : Window
         _saveDirty = saveDirty;
         _isWorkInProgress = isWorkInProgress;
         _requestRestore = requestRestore;
+        _subscriptions = subscriptions;
         InitializeComponent();
+        InitializeSubscriptionControls();
         LoadFrom(service.Current);
+        _subscriptions.StateChanged += OnSubscriptionStateChanged;
         Deactivated += (_, _) => StopHotkeyCapture();
         Activated += (_, _) =>
         {
             if (Keyboard.FocusedElement is TextBox box && (box == ToggleHotkeyBox || box == CopyHideHotkeyBox))
                 StartHotkeyCapture(box);
         };
-        Closed += (_, _) => StopHotkeyCapture();
+        Closed += (_, _) =>
+        {
+            _subscriptionControlsClosed = true;
+            _subscriptions.StateChanged -= OnSubscriptionStateChanged;
+            StopHotkeyCapture(); _connectionCancellation?.Cancel();
+        };
     }
 
     private void LoadFrom(AppSettings s)
@@ -171,10 +181,15 @@ public partial class SettingsWindow : Window
         _loadingProofreadingModelControls = true;
         AutoModelFamilyCombo.ItemsSource = ModelFamilies;
         ManualModelFamilyCombo.ItemsSource = ModelFamilies;
-        AutoModelFamilyCombo.SelectedItem = FamilyOf(s.AutoProofreadingModel);
-        ManualModelFamilyCombo.SelectedItem = FamilyOf(s.ManualProofreadingModel);
-        PopulateModels(AutoProofreadingModelCombo, FamilyOf(s.AutoProofreadingModel), s.AutoProofreadingModel);
-        PopulateModels(ManualProofreadingModelCombo, FamilyOf(s.ManualProofreadingModel), s.ManualProofreadingModel);
+        string autoFamily = SelectionFamily(s.AutoBackend, s.AutoProofreadingModel);
+        string manualFamily = SelectionFamily(s.ManualBackend, s.ManualProofreadingModel);
+        AutoModelFamilyCombo.SelectedItem = autoFamily;
+        ManualModelFamilyCombo.SelectedItem = manualFamily;
+        PopulateModels(AutoProofreadingModelCombo, autoFamily, s.AutoProofreadingModel);
+        PopulateModels(ManualProofreadingModelCombo, manualFamily, s.ManualProofreadingModel);
+        _codexPath.Text = s.CodexCliPath;
+        _copilotPath.Text = s.CopilotCliPath;
+        _subscriptionAuto.IsChecked = s.SubscriptionAutomaticEnabled;
         AutoTimeoutBox.Text =
             s.AutoProofreadingTimeoutSeconds.ToString(CultureInfo.InvariantCulture);
         ManualTimeoutBox.Text =
@@ -228,6 +243,11 @@ public partial class SettingsWindow : Window
         s.ShowEndOfLine = EndOfLineCheck.IsChecked == true;
         s.AutoProofreadingEnabled = AutoProofreadingCheck.IsChecked == true;
         s.ConfirmPaidApiCalls = ConfirmPaidApiCallsCheck.IsChecked == true;
+        s.AutoBackend = FamilyBackend(AutoModelFamilyCombo.SelectedItem as string);
+        s.ManualBackend = FamilyBackend(ManualModelFamilyCombo.SelectedItem as string);
+        s.CodexCliPath = _codexPath.Text.Trim();
+        s.CopilotCliPath = _copilotPath.Text.Trim();
+        s.SubscriptionAutomaticEnabled = _subscriptionAuto.IsChecked == true;
         s.AutoProofreadingModel =
             SelectedModelId(AutoProofreadingModelCombo) ?? s.AutoProofreadingModel;
         s.ManualProofreadingModel =
@@ -416,6 +436,17 @@ public partial class SettingsWindow : Window
 
     private bool TrySaveSettings()
     {
+        if (_connectionCancellation is not null)
+        {
+            MessageBox.Show(this, "ログイン・接続確認が完了してから保存してください。", "JP Scratch");
+            return false;
+        }
+        if (AutoModelFamilyCombo.SelectedItem is null || ManualModelFamilyCombo.SelectedItem is null ||
+            SelectedModelId(AutoProofreadingModelCombo) is null || SelectedModelId(ManualProofreadingModelCombo) is null)
+        {
+            MessageBox.Show(this, "自動用・手動用それぞれの接続方式とモデルを選択してください。契約サービスはログインしてモデル一覧を取得してください。", "JP Scratch");
+            return false;
+        }
         // 現在値のコピーに書き込んでから差し替える。途中で例外が出ても設定が半端に壊れない。
         if (!ValidateHotkeys()) return false;
         var updated = _service.Current.Clone();
@@ -511,25 +542,31 @@ public partial class SettingsWindow : Window
     {
         if (HighCostModelWarningBorder is null || HighCostModelWarningText is null) return;
 
-        (string Purpose, ModelDescriptor Model)[] selected =
-        [
-            ("自動", ProofreadingModelCatalog.Get(SelectedModelId(AutoProofreadingModelCombo))),
-            ("手動", ProofreadingModelCatalog.Get(SelectedModelId(ManualProofreadingModelCombo))),
-        ];
-        var highCost = selected
-            .Where(item => ProofreadingModelCatalog.IsHighCostForProofreading(item.Model.Id))
-            .ToArray();
-
-        HighCostModelWarningBorder.Visibility = highCost.Length == 0
-            ? Visibility.Collapsed
-            : Visibility.Visible;
-        if (highCost.Length == 0) return;
-
-        string models = string.Join("、", highCost.Select(item =>
-            $"{item.Purpose}：{item.Model.DisplayName}（入力 ${item.Model.InputPricePerMillion:0.##} / 出力 ${item.Model.OutputPricePerMillion:0.##}）"));
-        HighCostModelWarningText.Text =
-            $"高価格なモデルが選択されています。{models} / 100万トークン。" +
-            "校正用途では性能を持て余しやすく、特に自動校正では繰り返し呼び出すため、高い料金が発生することがあります。";
+        var warnings = new List<string>();
+        foreach (var (purpose, family, combo) in new[] {
+            ("自動", AutoModelFamilyCombo, AutoProofreadingModelCombo),
+            ("手動", ManualModelFamilyCombo, ManualProofreadingModelCombo) })
+        {
+            string? id = SelectedModelId(combo);
+            if (id is null) continue;
+            BackendKind backend = FamilyBackend(family.SelectedItem as string);
+            if (backend == BackendKind.Api)
+            {
+                if (!ProofreadingModelCatalog.IsHighCostForProofreading(id)) continue;
+                var model = ProofreadingModelCatalog.Get(id);
+                warnings.Add($"{purpose}：{model.DisplayName} は高価格です（100万トークンあたり入力 ${model.InputPricePerMillion:0.##} / 出力 ${model.OutputPricePerMillion:0.##}）。");
+            }
+            else
+            {
+                var model = _subscriptions.State(backend)?.Models.FirstOrDefault(m => m.Id == id) ?? new SubscriptionModel(id, id);
+                if (!SubscriptionModelSelection.IsHighCost(model)) continue;
+                warnings.Add($"{purpose}：{BackendNames.Display(backend)} の {model.Name} は利用枠の消費量に注意が必要です。" +
+                    (model.Multiplier is { } multiplier ? $"サービスから取得した利用倍率は {multiplier:0.##}x です。" : "モデル系統をもとにした注意表示で、実際の消費量・追加請求額は未取得です。"));
+            }
+        }
+        HighCostModelWarningBorder.Visibility = warnings.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        HighCostModelWarningText.Text = string.Join("\n", warnings) +
+            (warnings.Count > 0 ? "\n特に自動校正は繰り返し実行されます。消費を抑えるには軽量モデルを選んでください。" : "");
     }
 
     /// <summary>
@@ -539,6 +576,11 @@ public partial class SettingsWindow : Window
     private void RefreshTimeoutHint()
     {
         if (TimeoutHintText is null) return;
+        if (FamilyBackend(AutoModelFamilyCombo.SelectedItem as string) != BackendKind.Api || FamilyBackend(ManualModelFamilyCombo.SelectedItem as string) != BackendKind.Api)
+        {
+            TimeoutHintText.Text = "契約接続の応答待ち時間はモデルによって異なります。タイムアウトが続く場合は90秒以上を指定してください（5〜300秒）。送信間隔の待ち時間は含みません。";
+            return;
+        }
 
         ModelDescriptor auto = ProofreadingModelCatalog.Get(
             SelectedModelId(AutoProofreadingModelCombo));
@@ -558,7 +600,7 @@ public partial class SettingsWindow : Window
     {
         public override string ToString() => DisplayName;
     }
-    private static readonly string[] ModelFamilies = ["GPT", "Claude", "Gemini", "PLaMo"];
+    private static readonly string[] ModelFamilies = ["GPT", "Claude", "Gemini", "PLaMo", "Codex", "Copilot"];
     private readonly Dictionary<(string Purpose, string Family), string> _familySelections = [];
 
     private static string FamilyOf(string model) => ProofreadingModelCatalog.ProviderOf(model) switch
@@ -569,9 +611,21 @@ public partial class SettingsWindow : Window
         _ => "PLaMo",
     };
 
-    private static void PopulateModels(ComboBox combo, string family, string? selected)
+    private void PopulateModels(ComboBox combo, string family, string? selected)
     {
+        BackendKind backend = FamilyBackend(family);
+        if (backend != BackendKind.Api)
+        {
+            var options = SubscriptionModelSelection.Order(_subscriptions.State(backend)?.Models ?? [])
+                .Select(m => new ModelOption(m.Id, SubscriptionModelSelection.Label(m), family)).ToList();
+            if (!string.IsNullOrEmpty(selected) && !options.Any(m => m.Id == selected)) options.Insert(0, new(selected, selected + "（未確認）", family));
+            combo.ItemsSource = options;
+            combo.SelectedValue = selected;
+            if (selected is null && options.Count > 0) combo.SelectedIndex = 0;
+            return;
+        }
         var models = ProofreadingModelCatalog.SupportedModels.Where(model => FamilyOf(model) == family)
+            .OrderBy(model => { var price = ProofreadingModelCatalog.GetEffectivePricing(model, DateOnly.FromDateTime(DateTime.UtcNow)); return price.InputPricePerMillion + price.OutputPricePerMillion; })
             .Select(model => new ModelOption(model, ProofreadingModelCatalog.DisplayName(model), family)).ToArray();
         combo.ItemsSource = models;
         combo.SelectedValue = selected;
@@ -583,7 +637,7 @@ public partial class SettingsWindow : Window
         if (_loadingProofreadingModelControls || sender is not ComboBox familyCombo || familyCombo.SelectedItem is not string family) return;
         ComboBox combo = familyCombo == AutoModelFamilyCombo ? AutoProofreadingModelCombo : ManualProofreadingModelCombo;
         if (SelectedModelId(combo) is string previous)
-            _familySelections[(combo.Name, FamilyOf(previous))] = previous;
+            _familySelections[(combo.Name, e.RemovedItems.Count > 0 ? e.RemovedItems[0]?.ToString() ?? FamilyOf(previous) : FamilyOf(previous))] = previous;
         _familySelections.TryGetValue((combo.Name, family), out string? selected);
         _loadingProofreadingModelControls = true;
         PopulateModels(combo, family, selected);
@@ -660,9 +714,9 @@ public partial class SettingsWindow : Window
     {
         if (CredentialUsageText is null) return;
 
-        bool usedByAuto = ProofreadingModelCatalog.ProviderOf(
+        bool usedByAuto = FamilyBackend(AutoModelFamilyCombo.SelectedItem as string) == BackendKind.Api && ProofreadingModelCatalog.ProviderOf(
             SelectedModelId(AutoProofreadingModelCombo)) == provider;
-        bool usedByManual = ProofreadingModelCatalog.ProviderOf(
+        bool usedByManual = FamilyBackend(ManualModelFamilyCombo.SelectedItem as string) == BackendKind.Api && ProofreadingModelCatalog.ProviderOf(
             SelectedModelId(ManualProofreadingModelCombo)) == provider;
 
         string name = ProofreadingModelCatalog.ProviderDisplayName(provider);
@@ -1358,6 +1412,10 @@ public partial class SettingsWindow : Window
         {
             PricingErrorText.Text = ex.Message;
             PricingErrorText.Visibility = Visibility.Visible;
+            SettingsTabs.SelectedItem = PricingTab;
+            PricingHistoryExpander.IsExpanded = true;
+            UpdateLayout();
+            PricingErrorText.BringIntoView();
             return false;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

@@ -295,6 +295,9 @@ public partial class BillingHistoryWindow : Window
 
         ResultsList.ItemsSource = page.Rows.Select(ToDisplayRow).ToArray();
         RenderSummary(summary, page, periodLabel, noTriggerSelected: false);
+        long contractCalls = _apiCalls.GetSubscriptionCallCount(range.Value.From, range.Value.To, selectedTriggers);
+        if (contractCalls > 0)
+            SummaryHeaderText.Text += $" ／ 契約枠 {contractCalls:N0}件（圧縮済みを含む・追加請求額不明）";
     }
 
     private List<ApiCallTrigger> CollectSelectedTriggers()
@@ -385,7 +388,7 @@ public partial class BillingHistoryWindow : Window
         string statusCounts = UsageFormatting.FormatStatusCounts(summary);
 
         string text =
-            $"{periodLabel}: {summary.TotalCalls:N0}件（{statusCounts}）　" +
+            $"{periodLabel} API: {summary.TotalCalls:N0}件（{statusCounts}）　" +
             $"入力 {summary.PromptTokens:N0} / 出力 {summary.OutputTokens:N0} tokens　" +
             $"${usd} ({jpy})　提案 {summary.SuggestionCount:N0} / 破棄 {summary.DiscardedCount:N0}";
 
@@ -409,11 +412,11 @@ public partial class BillingHistoryWindow : Window
         row.Id,
         row.CalledAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
         UsageFormatting.FormatTrigger(row.Trigger),
-        row.Model,
-        row.PromptTokens.ToString("N0", CultureInfo.InvariantCulture),
-        row.OutputTokens.ToString("N0", CultureInfo.InvariantCulture),
-        UsageFormatting.FormatUsd(row),
-        UsageFormatting.FormatJpy(row),
+        row.Backend == Models.BackendKind.Api ? row.Model : Models.BackendNames.Display(row.Backend) + " / " + row.Model,
+        row.IsUsageKnown ? row.PromptTokens.ToString("N0", CultureInfo.InvariantCulture) : "不明",
+        row.IsUsageKnown ? row.OutputTokens.ToString("N0", CultureInfo.InvariantCulture) : "不明",
+        row.Backend == Models.BackendKind.Api ? UsageFormatting.FormatUsd(row) : "契約枠",
+        row.Backend == Models.BackendKind.Api ? UsageFormatting.FormatJpy(row) : "追加請求額不明",
         UsageFormatting.FormatRateDate(row.RateDate),
         row.DurationMilliseconds.ToString("N0", CultureInfo.InvariantCulture) + " ms",
         UsageFormatting.FormatStatus(row.Status),

@@ -190,6 +190,24 @@ internal sealed class Database : IDisposable
 
             ExecuteInternal("PRAGMA user_version=5;");
         }
+        if (version < 6)
+        {
+            if (!HasColumnInternal("api_calls", "backend")) ExecuteInternal("ALTER TABLE api_calls ADD COLUMN backend INTEGER NOT NULL DEFAULT 0;");
+            if (!HasColumnInternal("api_calls", "usage_known")) ExecuteInternal("ALTER TABLE api_calls ADD COLUMN usage_known INTEGER NOT NULL DEFAULT 1;");
+            if (!HasColumnInternal("api_calls", "subscription_units")) ExecuteInternal("ALTER TABLE api_calls ADD COLUMN subscription_units REAL;");
+            if (!HasColumnInternal("api_calls", "subscription_unit")) ExecuteInternal("ALTER TABLE api_calls ADD COLUMN subscription_unit TEXT;");
+            ExecuteInternal("""
+                CREATE TABLE IF NOT EXISTS subscription_daily (
+                    day TEXT NOT NULL, backend INTEGER NOT NULL, model TEXT NOT NULL,
+                    trigger_type TEXT NOT NULL, status TEXT NOT NULL, call_cnt INTEGER NOT NULL,
+                    prompt_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
+                    unknown_usage_calls INTEGER NOT NULL, suggestion_cnt INTEGER NOT NULL,
+                    discarded_cnt INTEGER NOT NULL, subscription_units REAL, subscription_unit TEXT NOT NULL,
+                    PRIMARY KEY(day, backend, model, trigger_type, status, subscription_unit)
+                );
+                """);
+            ExecuteInternal("PRAGMA user_version=6;");
+        }
     }
 
     public SqliteCommand CreateCommand(string sql)

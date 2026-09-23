@@ -51,6 +51,7 @@ public partial class MainWindow : Window
         bool IsCostConfirmed,
         bool IsUsageKnown)
     {
+        internal BackendKind Backend { get; init; }
         internal decimal? JpyCost => !IsCostConfirmed &&
             (OriginalCurrency != PricingCurrency.Jpy || OriginalCost is null)
                 ? null
@@ -374,7 +375,7 @@ public partial class MainWindow : Window
     }
 
     public bool IsProofreadingOrAlternativeInProgress =>
-        _proofreadingRunInProgress || _alternativeInProgress;
+        _preparingBackend || _paidApiDialogOpen || _proofreadingRunInProgress || _alternativeInProgress || _styleGuideGenerationInProgress;
 
     public void ShowAndFocus()
     {
@@ -999,6 +1000,8 @@ public partial class MainWindow : Window
                 continue;
             if (menuItem.Tag is "upper" or "lower")
                 menuItem.IsEnabled = hasSelection;
+            if (menuItem.Tag is "cancel-generation")
+                menuItem.IsEnabled = CanCancelGeneration;
         }
     }
 
@@ -1206,16 +1209,11 @@ public partial class MainWindow : Window
             if (TryGetReason(generatesAlternative: true, out reason))
             {
                 // 別案生成は自動側のモデルを使う（要件3.5.1）。ピン留めより前に呼ぶので用途を明示する。
-                if (string.IsNullOrWhiteSpace(GetActiveApiKey(ProofreadingPurpose.Automatic)))
+                if (!await EnsureBackendAsync(ProofreadingPurpose.Automatic, automatic: false))
                 {
-                    MessageBox.Show(
-                        this,
-                        $"{ActiveProviderName(ProofreadingPurpose.Automatic)} APIキーが設定されていません。設定画面で登録してください。",
-                        "JP Scratch",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information);
+                    confirmed = false;
                 }
-                else if (!_settings.Current.ConfirmPaidApiCalls)
+                else if (BackendFor(ProofreadingPurpose.Automatic) != BackendKind.Api || !_settings.Current.ConfirmPaidApiCalls)
                 {
                     confirmed = true;
                 }
@@ -1261,7 +1259,7 @@ public partial class MainWindow : Window
             GeminiAlternativeResult result;
             try
             {
-                result = await _proofreadingClient.GenerateAlternativeAsync(proposal, reason);
+                result = await _proofreadingClient.GenerateAlternativeAsync(proposal, reason, _generationCancellation.Token);
             }
             catch (GeminiClientException ex)
             {
@@ -1340,9 +1338,9 @@ public partial class MainWindow : Window
         }
         catch (GeminiClientException ex)
         {
-            ApiUsageDisplayCost? failureCost = failedApiCost?.ToDisplay();
+            ApiUsageDisplayCost? failureCost = BackendFor() == BackendKind.Api ? failedApiCost?.ToDisplay() : null;
             string knownUsage =
-                ApiUsageDisplayFormatter.BuildFailureUsageText(failureCost);
+                BackendFor() == BackendKind.Api ? ApiUsageDisplayFormatter.BuildFailureUsageText(failureCost) : "契約枠の消費量・追加請求額は確認できませんでした。";
             MessageBox.Show(
                 this,
                 ex.Message + FormatAccountingErrorNotice(failedAccountingError) +
@@ -1356,6 +1354,10 @@ public partial class MainWindow : Window
                     failureCost,
                     failedAccountingError?.Message),
                 force: true);
+        }
+        catch (OperationCanceledException)
+        {
+            SetProofreadingStatus("別案生成を中断しました（送信済みの利用量は不明）", force: true);
         }
         catch (Exception ex)
         {
@@ -1603,8 +1605,7 @@ public partial class MainWindow : Window
         message = AppendAccountingErrorNotice(message, accountingError);
         string costText = cost is null ? "確認できませんでした" : FormatCostWithJpy(cost);
         string summary =
-            $"{message}\n\n入力 {result.Usage.PromptTokens:N0}、" +
-            $"出力・推論 {result.Usage.BillableOutputTokens:N0} tokens\n" +
+            $"{message}\n\n{FormatTokenUsage(result.Usage)}\n" +
             $"料金 {costText}";
 
         MessageBox.Show(
@@ -1614,8 +1615,7 @@ public partial class MainWindow : Window
             MessageBoxButton.OK,
             MessageBoxImage.Information);
         SetProofreadingStatus(
-            $"別案 ↑{result.Usage.PromptTokens:N0} " +
-            $"↓{result.Usage.BillableOutputTokens:N0} tok  " +
+            $"別案 {FormatTokenUsage(result.Usage)}  " +
             (cost is null ? "料金未確認" : FormatCostWithJpy(cost)) +
             FormatAccountingErrorNotice(accountingError),
             force: true);
@@ -1676,9 +1676,9 @@ public partial class MainWindow : Window
     {
         AppSettings settings = _settings.Current;
         _proofreadingSchedule.Debounce =
-            TimeSpan.FromMilliseconds(settings.ProofreadingDebounceMs);
+            settings.AutoBackend == BackendKind.Api ? TimeSpan.FromMilliseconds(settings.ProofreadingDebounceMs) : SubscriptionPolicy.Debounce(settings.ProofreadingDebounceMs);
         _proofreadingSchedule.MinimumSendInterval =
-            TimeSpan.FromSeconds(settings.ProofreadingMinimumIntervalSeconds);
+            settings.AutoBackend == BackendKind.Api ? TimeSpan.FromSeconds(settings.ProofreadingMinimumIntervalSeconds) : SubscriptionPolicy.Interval(settings.ProofreadingMinimumIntervalSeconds);
         if (!settings.AutoProofreadingEnabled)
             _proofreadingTimer.Stop();
     }
@@ -1690,7 +1690,7 @@ public partial class MainWindow : Window
         // 「発火 → RunProofreadingAsync の入口ガードで却下 → 再スケジュール」を100ms間隔で
         // 繰り返すビジーループになる（月間上限のガードと同じ理由）。
         // 止めたぶんは、各処理の finally が完了時にこのメソッドを呼び直して必ず戻す。
-        if (!_settings.Current.AutoProofreadingEnabled ||
+        if (_preparingBackend || SubscriptionAutomaticBlocked || !_settings.Current.AutoProofreadingEnabled ||
             _proofreadingRunInProgress ||
             _alternativeInProgress ||
             _styleGuideGenerationInProgress ||
@@ -1703,13 +1703,13 @@ public partial class MainWindow : Window
         // 発火条件5（月間上限）。ここでタイマーの再開始そのものを止めないと、
         // NotifyChanged 済みの変更が残ったまま「タイマー発火→ガードで却下→
         // ScheduleAutomaticProofreadingを再度呼ぶ」を100ms間隔で繰り返すビジーループになる。
-        if (IsMonthlyLimitReached())
+        if (IsMonthlyLimitReached(ProofreadingPurpose.Automatic))
             return;
 
         // 当月累計が一度も読めていない（起動時の集計読み取りが失敗した）間は、自動送信を
         // fail-close で見送る。0 のまま走らせると月間上限が効かずに課金され続けるため。
         // 次の RefreshUsageDisplay が成功した時点で _monthUsageKnown が立ち、再開される。
-        if (!_monthUsageKnown)
+        if (BackendFor(ProofreadingPurpose.Automatic) == BackendKind.Api && !_monthUsageKnown)
             return;
 
         DateTimeOffset? due = _proofreadingSchedule.GetAutomaticDueAt(tab.Id);
@@ -1735,7 +1735,11 @@ public partial class MainWindow : Window
     /// 高速な自動側、スタイルガイド自動生成は品質を優先して手動側を使う。
     /// </summary>
     private void PinModelForRun(ProofreadingPurpose purpose)
-        => (_proofreadingClient as ProofreadingClientRouter)?.PinModel(purpose);
+    {
+        _generationCancellation.Dispose();
+        _generationCancellation = new();
+        Router.PinModel(purpose, _allowUnknownQuota);
+    }
 
     private void UnpinModelAfterRun()
         => (_proofreadingClient as ProofreadingClientRouter)?.UnpinModel();
@@ -1806,7 +1810,7 @@ public partial class MainWindow : Window
     /// </summary>
     private async Task RunStyleGuideGenerationAsync(long totalReactionsAtCheck)
     {
-        if (IsMonthlyLimitReached())
+        if (BackendFor(ProofreadingPurpose.Manual) == BackendKind.Api && UsageLimitService.IsReached(_monthUsageUsd, _settings.Current.MonthlyLimitUsd))
         {
             TryAdvanceReviewCursor(totalReactionsAtCheck);
             return;
@@ -1823,7 +1827,7 @@ public partial class MainWindow : Window
             MessageBoxResult confirmation = MessageBox.Show(
                 this,
                 $"リアクションが{_settings.Current.StyleGuideGenerationThreshold}件以上たまりました。" +
-                $"{ActiveProviderName(ProofreadingPurpose.Manual)} APIを1回呼び出して、あなたの文体ルール（スタイルガイド）を生成しますか？\n\n" +
+                $"{ActiveProviderName(ProofreadingPurpose.Manual)} を1回呼び出して、あなたの文体ルール（スタイルガイド）を生成しますか？\n\n" +
                 BuildPricingSummary(ProofreadingPurpose.Manual) + "\n" +
                 "実行後に使用トークン数と料金を表示します。生成後は設定画面でいつでも閲覧・編集・削除できます。",
                 "スタイルガイドの自動生成",
@@ -1844,15 +1848,8 @@ public partial class MainWindow : Window
         if (!confirmed)
             return;
 
-        string? apiKey = GetActiveApiKey();
-        if (string.IsNullOrWhiteSpace(apiKey))
+        if (!await EnsureBackendAsync(ProofreadingPurpose.Manual, automatic: false))
         {
-            MessageBox.Show(
-                this,
-                $"{ActiveProviderName(ProofreadingPurpose.Manual)} APIキーが設定されていません。設定画面で登録してください。",
-                "JP Scratch",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
             return;
         }
 
@@ -1893,7 +1890,7 @@ public partial class MainWindow : Window
             GeminiStyleGuideResult result;
             try
             {
-                result = await _proofreadingClient.GenerateStyleGuideAsync(source.Examples);
+                result = await _proofreadingClient.GenerateStyleGuideAsync(source.Examples, _generationCancellation.Token);
             }
             catch (GeminiClientException ex)
             {
@@ -1969,7 +1966,7 @@ public partial class MainWindow : Window
                 MessageBox.Show(
                     this,
                     "スタイルガイドを生成しました。設定画面で内容を確認・編集できます。\n\n" +
-                    $"入力 {result.Usage.PromptTokens:N0}、出力・推論 {result.Usage.BillableOutputTokens:N0} tokens\n" +
+                    $"{FormatTokenUsage(result.Usage)}\n" +
                     $"料金 {costText}" + FormatAccountingErrorNotice(successfulAccountingError),
                     "スタイルガイドの生成",
                     MessageBoxButton.OK,
@@ -1984,7 +1981,7 @@ public partial class MainWindow : Window
                 MessageBox.Show(
                     this,
                     "スタイルガイドは生成されましたが、保存に失敗しました。" +
-                    "料金は発生済みです。内容を手元に控えてください。\n\n" +
+                    "送信に伴う利用量は消費済みです。内容を手元に控えてください。\n\n" +
                     result.Content + FormatAccountingErrorNotice(successfulAccountingError),
                     "スタイルガイドを保存できませんでした",
                     MessageBoxButton.OK,
@@ -1994,6 +1991,10 @@ public partial class MainWindow : Window
                     FormatAccountingErrorNotice(successfulAccountingError),
                     force: true);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            SetProofreadingStatus("スタイルガイド生成を中断しました（送信済みの利用量は不明）", force: true);
         }
         catch (Exception ex)
         {
@@ -2047,8 +2048,9 @@ public partial class MainWindow : Window
         => _tray.SetState(TrayIconStateResolver.Resolve(
             proofreading: _proofreadingRunInProgress || _alternativeInProgress ||
                           _styleGuideGenerationInProgress,
-            apiError: _apiErrorSticky,
-            limitReached: IsMonthlyLimitReached()));
+            apiError: _apiErrorSticky || (BackendFor() != BackendKind.Api &&
+                Router.Subscriptions.Suspended(BackendFor()) && Router.Subscriptions.State(BackendFor())?.Exhausted != true),
+            limitReached: IsMonthlyLimitReached(ProofreadingPurpose.Automatic) || (BackendFor() != BackendKind.Api && Router.Subscriptions.State(BackendFor())?.Exhausted == true)));
 
     /// <summary>
     /// 他の課金処理と競合して自動校正が弾かれたとき、短い間隔で再挑戦させる。
@@ -2071,7 +2073,7 @@ public partial class MainWindow : Window
 
     private async Task RunProofreadingAsync(bool manual)
     {
-        if (_proofreadingRunInProgress ||
+        if (_preparingBackend || _proofreadingRunInProgress ||
             _alternativeInProgress ||
             _styleGuideGenerationInProgress ||
             _paidApiDialogOpen ||
@@ -2090,8 +2092,8 @@ public partial class MainWindow : Window
             (!_settings.Current.AutoProofreadingEnabled ||
              !_proofreadingSchedule.IsAutomaticDue(tab.Id, DateTimeOffset.Now) ||
              // 当月累計が一度も読めていない間は自動送信を見送る（fail-close。ScheduleAutomaticProofreading と同じ判定）。
-             !_monthUsageKnown ||
-             IsMonthlyLimitReached()))
+             (BackendFor(ProofreadingPurpose.Automatic) == BackendKind.Api && !_monthUsageKnown) || SubscriptionAutomaticBlocked ||
+             IsMonthlyLimitReached(ProofreadingPurpose.Automatic)))
         {
             // 発火条件5（月間上限）を含め、ここで弾かれた場合もScheduleAutomaticProofreadingを
             // 呼ぶが、そちら側も同じ判定を持つため、上限到達中はタイマーが再始動しない。
@@ -2137,14 +2139,10 @@ public partial class MainWindow : Window
         // 実行開始（ピン留め）より前なので、用途を明示してモデルを解決する。
         ProofreadingPurpose runPurpose =
             manual ? ProofreadingPurpose.Manual : ProofreadingPurpose.Automatic;
-        string? apiKey = GetActiveApiKey(runPurpose);
-        if (string.IsNullOrWhiteSpace(apiKey))
+        if (!await EnsureBackendAsync(runPurpose, automatic: !manual))
         {
-            if (!manual)
+            if (!manual && BackendFor(runPurpose) == BackendKind.Api)
                 _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
-            SetProofreadingStatus(
-                $"{ActiveProviderName(runPurpose)} APIキーを設定してください",
-                force: true);
             return;
         }
 
@@ -2228,8 +2226,8 @@ public partial class MainWindow : Window
         Exception? representativeApiError = null;
         Exception? unexpectedError = null;
         Exception? accountingErrorForRun = null;
-        int runParallelism = ProofreadingDispatchPlanner.ClampParallelism(
-            _settings.Current.ProofreadingParallelism);
+        int runParallelism = BackendFor(runPurpose) == BackendKind.Api ? ProofreadingDispatchPlanner.ClampParallelism(
+            _settings.Current.ProofreadingParallelism) : 1;
 
         async Task<ProofreadingSendOutcome> SendRequestAsync(
             ProofreadingRequest request,
@@ -2245,13 +2243,15 @@ public partial class MainWindow : Window
                     request.SourceText);
                 effectiveRequest = request with
                 {
+                    IsCurrentBeforeSend = () => ReferenceEquals(tab, _tabs.Active) &&
+                        string.Equals(tab.Document.Text, snapshot, StringComparison.Ordinal),
                     SystemInstructionOverride = ProofreadingPrompt.BuildSystemInstruction(
                         styleGuideContent,
                         customInstruction,
                         fewShotSelection.Examples),
                 };
                 result =
-                    await _proofreadingClient.ProofreadAsync(effectiveRequest);
+                    await _proofreadingClient.ProofreadAsync(effectiveRequest, _generationCancellation.Token);
             }
             catch (Exception ex)
             {
@@ -2343,7 +2343,7 @@ public partial class MainWindow : Window
             {
                 SetProofreadingStatus(
                     $"次の校正送信まで {Math.Ceiling(intervalDelay.TotalSeconds):0} 秒");
-                await Task.Delay(intervalDelay);
+                await Task.Delay(intervalDelay, _generationCancellation.Token);
             }
 
             SetProofreadingStatus(
@@ -2359,6 +2359,11 @@ public partial class MainWindow : Window
                 List<Task<ProofreadingSendOutcome>> sends = [];
                 foreach (ProofreadingRequest request in batch)
                 {
+                    if (BackendFor() != BackendKind.Api)
+                    {
+                        TimeSpan wait = Router.Subscriptions.DelayBeforeSend(_settings.Current.ProofreadingMinimumIntervalSeconds);
+                        if (wait > TimeSpan.Zero) await Task.Delay(wait, _generationCancellation.Token);
+                    }
                     if (stopDispatch)
                         continue;
 
@@ -2404,6 +2409,12 @@ public partial class MainWindow : Window
                 ProofreadingSendOutcome[] outcomes = await Task.WhenAll(sends);
                 foreach (ProofreadingSendOutcome outcome in outcomes)
                 {
+                    if (outcome.Error is SubscriptionRequestStaleException)
+                    {
+                        editDiscardHappened = true;
+                        stopDispatch = true;
+                        continue;
+                    }
                     if (outcome.AccountingError is { } accountingError)
                     {
                         accountingErrorForRun ??= accountingError;
@@ -2514,10 +2525,19 @@ public partial class MainWindow : Window
             SetProofreadingStatus((responseCosts.Count == 0
                 ? "校正に失敗しました（応答前のため、使用量と料金は確認できませんでした）"
                 : "校正に失敗しました " +
-                  ApiUsageDisplayFormatter.FormatCostText(
-                      responseCosts.Select(cost => cost.ToDisplay()).ToArray())) +
+                  BuildUsageText(responseCosts)) +
                 FormatAccountingErrorNotice(accountingErrorForRun),
                 force: true);
+        }
+        catch (OperationCanceledException)
+        {
+            if (!resultsApplied && completed.Count > 0)
+            {
+                try { TryApplyCompletedResults(out _); } catch { }
+            }
+            if (!resultsApplied) MarkApiCallsDiscarded(successfulApiCallIds);
+            if (!selectionRun) _proofreadingSchedule.MarkAutomaticHandled(tab.Id);
+            SetProofreadingStatus("校正を中断しました。完了済みの有効な結果は保持します（中断した送信の利用量は不明）", force: true);
         }
         catch (Exception ex)
         {
@@ -2564,8 +2584,7 @@ public partial class MainWindow : Window
             SetProofreadingStatus((responseCosts.Count == 0
                 ? "校正処理で予期しないエラーが発生しました"
                 : "校正処理でエラーが発生しました " +
-                  ApiUsageDisplayFormatter.FormatCostText(
-                      responseCosts.Select(cost => cost.ToDisplay()).ToArray())) +
+                  BuildUsageText(responseCosts)) +
                 FormatAccountingErrorNotice(accountingErrorForRun),
                 force: true);
         }
@@ -2703,6 +2722,7 @@ public partial class MainWindow : Window
 
     private bool ConfirmProofreadingApiUse(int requestCount, bool manual)
     {
+        if (BackendFor(manual ? ProofreadingPurpose.Manual : ProofreadingPurpose.Automatic) != BackendKind.Api) return true;
         if (!_settings.Current.ConfirmPaidApiCalls)
             return true;
 
@@ -2716,7 +2736,7 @@ public partial class MainWindow : Window
             decimal limit = _settings.Current.MonthlyLimitUsd;
             // 自動実行はScheduleAutomaticProofreading/RunProofreadingAsyncの発火条件5で
             // 到達時点で既に止めてあるため、ここまで到達するのは基本的に手動実行のときだけ。
-            string limitWarning = IsMonthlyLimitReached()
+            string limitWarning = IsMonthlyLimitReached(purpose)
                 ? $"月間上限（${UsageFormatting.FormatUsd(limit)}）に達しています" +
                   $"（当月累計 ${UsageFormatting.FormatUsd(_monthUsageUsd)}）。" +
                   "このまま実行すると上限を超えます。\n\n"
@@ -2752,6 +2772,7 @@ public partial class MainWindow : Window
     {
         ApiUsageCost cost = CreateUsageCost(
             usage.PromptTokens, usage.BillableOutputTokens);
+        cost = cost with { IsUsageKnown = usage.IsKnown };
         return new RecordedApiCall(RecordApiCall(new ApiCallLogEntry(
             trigger,
             _proofreadingClient.Model,
@@ -2766,7 +2787,7 @@ public partial class MainWindow : Window
             cost.FxRate,
             cost.OriginalCurrency,
             cost.OriginalCost,
-            cost.IsCostConfirmed)), cost);
+            cost.IsCostConfirmed, BackendFor(), usage.IsKnown, usage.SubscriptionUnits, usage.SubscriptionUnit)), cost);
     }
 
     private FailedApiCallRecord RecordFailedApiCall(
@@ -2775,7 +2796,7 @@ public partial class MainWindow : Window
         TimeSpan elapsed)
     {
         // キー未設定はHTTP送信より前の失敗なので、API呼び出しログには含めない（正しい除外）。
-        if (exception.Error == GeminiClientError.MissingApiKey)
+        if (exception.Error is GeminiClientError.MissingApiKey or GeminiClientError.AuthenticationRequired or GeminiClientError.QuotaUnavailable or GeminiClientError.QuotaExhausted)
             return new(null, null);
 
         GeminiUsage? usage = exception.Usage;
@@ -2815,6 +2836,8 @@ public partial class MainWindow : Window
                 IsCostConfirmed: true,
                 IsUsageKnown: false);
         }
+        if (BackendFor() != BackendKind.Api)
+            cost = cost with { Backend = BackendFor(), IsCostConfirmed = false, OriginalCost = null, OriginalCurrency = null, FxRate = null };
 
         long? apiCallId = RecordApiCall(new ApiCallLogEntry(
             trigger,
@@ -2832,7 +2855,7 @@ public partial class MainWindow : Window
             cost.FxRate,
             cost.OriginalCurrency,
             cost.OriginalCost,
-            cost.IsCostConfirmed));
+            cost.IsCostConfirmed, BackendFor(), usage?.IsKnown ?? false, usage?.SubscriptionUnits, usage?.SubscriptionUnit));
         if (apiCallId is null)
         {
             // RecordApiCall が null を返す現在の原因は DB 挿入失敗だけである。
@@ -2852,6 +2875,11 @@ public partial class MainWindow : Window
 
     private long? RecordApiCall(ApiCallLogEntry entry)
     {
+        entry = BackendFor() == BackendKind.Api ? entry : entry with
+        {
+            Backend = BackendFor(), UsdCost = 0m, FxRate = null, OriginalCurrency = null,
+            OriginalCost = null, IsUsdCostConfirmed = false,
+        };
         long id;
         try
         {
@@ -2891,6 +2919,11 @@ public partial class MainWindow : Window
 
     private void ShowProofreadingUsage(int proposals, IReadOnlyList<ApiUsageCost> costs)
     {
+        if (BackendFor() != BackendKind.Api)
+        {
+            SetProofreadingStatus($"提案 {proposals}件 ／ {BackendNames.Display(BackendFor())} の契約枠を使用（追加請求額不明）", force: true);
+            return;
+        }
         string usage = BuildUsageText(costs);
         int dollarIndex = usage.LastIndexOf('$');
         string compactUsage = usage.Contains("使用量未確認", StringComparison.Ordinal)
@@ -2903,11 +2936,12 @@ public partial class MainWindow : Window
     }
 
     private static string BuildUsageText(IReadOnlyList<ApiUsageCost> costs)
-        => ApiUsageDisplayFormatter.BuildUsageText(
+        => costs.Any(cost => cost.Backend != BackendKind.Api) ? "契約枠を使用（追加請求額不明）" : ApiUsageDisplayFormatter.BuildUsageText(
             costs.Select(cost => cost.ToDisplay()).ToArray());
 
     private ApiUsageCost CreateUsageCost(int promptTokens, int outputTokens)
     {
+        if (BackendFor() != BackendKind.Api) return new(promptTokens, outputTokens, 0m, null, null, null, false, true) { Backend = BackendFor() };
         PricingQuote quote = _pricing.Calculate(
             _proofreadingClient.Model, promptTokens, outputTokens);
         // 応答単位で一度だけキャッシュを読む。このsnapshotをログと全ての応答表示で共有する。
@@ -2935,6 +2969,7 @@ public partial class MainWindow : Window
 
     private string BuildPricingSummary(ProofreadingPurpose? purpose = null)
     {
+        if (BackendFor(purpose) != BackendKind.Api) return "契約枠を消費します。追加請求の有無は契約側の設定によります。";
         string model = ModelForPurpose(purpose);
         ModelPricing pricing = _pricing.GetPricing(model);
         string unit = string.Equals(pricing.Currency, PricingCurrency.Jpy, StringComparison.Ordinal)
@@ -2998,7 +3033,7 @@ public partial class MainWindow : Window
     }
 
     private static string FormatCostWithJpy(ApiUsageCost cost)
-        => ApiUsageDisplayFormatter.FormatCostText(cost.ToDisplay());
+        => cost.Backend != BackendKind.Api ? "契約枠を使用（追加請求額不明）" : ApiUsageDisplayFormatter.FormatCostText(cost.ToDisplay());
 
     /// <summary>
     /// 永続ログから常設の利用状況を更新する。DB読み取りや表示更新が失敗した場合は、
@@ -3044,9 +3079,14 @@ public partial class MainWindow : Window
             // CharacterEllipsis により省略されても、「自動停止」の理由が読めなくなることがないように
             // するため（実機で幅480px程度のとき、末尾に連結した文言ごと消えていた）。
             bool limitReached =
-                limitState == UsageLimitState.Reached && _settings.Current.AutoProofreadingEnabled;
+                _settings.Current.AutoProofreadingEnabled && (BackendFor(ProofreadingPurpose.Automatic) == BackendKind.Api
+                    ? limitState == UsageLimitState.Reached
+                    : Router.Subscriptions.State(BackendFor(ProofreadingPurpose.Automatic))?.Exhausted == true);
+            if (_settings.Current.AutoBackend != BackendKind.Api || _settings.Current.ManualBackend != BackendKind.Api)
+                StatusUsage.Text = "API: " + StatusUsage.Text + $" ／ 契約枠: 当月 {_apiCalls.GetSubscriptionCallCount(monthStart, LocalStartOfNextMonth(now)):N0}回";
             StatusUsageLimitWarning.Visibility = limitReached ? Visibility.Visible : Visibility.Collapsed;
-            StatusUsageLimitWarning.ToolTip = limitReached ? FormatUsageLimitTooltip(limit, limitState) : null;
+            StatusUsageLimitWarning.ToolTip = !limitReached ? null : BackendFor(ProofreadingPurpose.Automatic) == BackendKind.Api
+                ? FormatUsageLimitTooltip(limit, limitState) : "契約枠に達したため停止中です。設定画面で残量の回復を確認してください。";
             StatusUsage.ToolTip = string.Join(
                 Environment.NewLine,
                 FormatUsageTooltip("直近", latest),
@@ -3061,7 +3101,7 @@ public partial class MainWindow : Window
             // 当月累計と上限額はここでしか更新されないので、トレイアイコンの再計算もここに置く
             // （起動時・校正後・日付や月の切替・設定変更のいずれもこの経路を通る）。
             UpdateTrayIconState();
-            NotifyMonthlyLimitReachedIfNeeded(now, limitState, limit);
+            if (BackendFor(ProofreadingPurpose.Automatic) == BackendKind.Api) NotifyMonthlyLimitReachedIfNeeded(now, limitState, limit);
 
             _usageDisplayDate = LocalDate(now);
             return true;
@@ -3074,8 +3114,13 @@ public partial class MainWindow : Window
     }
 
     /// <summary>発火条件5（月間上限）: 送信前の当月累計が上限以上かどうか。事前見積りはしない。</summary>
-    private bool IsMonthlyLimitReached()
-        => UsageLimitService.IsReached(_monthUsageUsd, _settings.Current.MonthlyLimitUsd);
+    private bool IsMonthlyLimitReached(ProofreadingPurpose purpose)
+        => UsageLimitService.IsReachedForPurpose(
+            purpose,
+            _settings.Current.AutoBackend,
+            _settings.Current.ManualBackend,
+            _monthUsageUsd,
+            _settings.Current.MonthlyLimitUsd);
 
     /// <summary>
     /// ステータスバーの進捗バーへ反映する。上限が無制限（0以下）ならバーごと隠す
@@ -3354,8 +3399,11 @@ public partial class MainWindow : Window
                 _database,
                 () => _tabs.SaveDirty(),
                 () => IsProofreadingOrAlternativeInProgress,
-                _requestRestore) { Owner = this };
+                _requestRestore, Router.Subscriptions) { Owner = this };
             dialog.ShowDialog();
+            // A connection refresh/login may have recovered automatic proofreading even when settings were cancelled.
+            RefreshUsageDisplay();
+            ScheduleAutomaticProofreading();
 
             // GUI smoke test only: after the settings dialog has completed, exercise the
             // same Application shutdown path as the tray's Exit command.
@@ -3611,6 +3659,7 @@ public partial class MainWindow : Window
 
     private string? GetActiveApiKey(ProofreadingPurpose? purpose = null)
     {
+        if (BackendFor(purpose) != BackendKind.Api) return null;
         ApiProvider provider =
             ProofreadingModelCatalog.ProviderOf(ModelForPurpose(purpose));
         return _credentials.GetApiKey(provider, ApiKeySourceFor(provider));
@@ -3627,7 +3676,7 @@ public partial class MainWindow : Window
         };
 
     private string ActiveProviderName(ProofreadingPurpose? purpose = null)
-        => ProofreadingModelCatalog.ProviderDisplayName(
+        => BackendFor(purpose) != BackendKind.Api ? BackendNames.Display(BackendFor(purpose)) : ProofreadingModelCatalog.ProviderDisplayName(
             ProofreadingModelCatalog.ProviderOf(ModelForPurpose(purpose)));
 
     private void ScheduleStatusUpdate()

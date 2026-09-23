@@ -218,6 +218,7 @@
                             <MenuItem Tag="missed" Header="校正漏れを報告…"
                                       InputGestureText="Ctrl+Shift+M"
                                       Click="MissedCorrectionMenuItem_Click" />
+                            <MenuItem Header="実行中の校正を中断" Tag="cancel-generation" Click="CancelGeneration_Click" IsEnabled="False" />
                         </ContextMenu>
                     </avalon:TextEditor.ContextMenu>
                 </avalon:TextEditor>
@@ -363,6 +364,7 @@
                                    Visibility="Collapsed" />
                         <TextBlock x:Name="StatusUsage"
                                    FontSize="10"
+                                   Typography.NumeralAlignment="Tabular"
                                    TextTrimming="CharacterEllipsis"
                                    Cursor="Hand"
                                    MouseLeftButtonUp="StatusUsage_MouseLeftButtonUp"

@@ -1,4 +1,5 @@
 using System.Globalization;
+using JpScratch.Models;
 
 namespace JpScratch.Services;
 
@@ -40,6 +41,28 @@ internal static class UsageLimitService
     /// <summary>上限に達しているか（0以下＝無制限は常にfalse）。</summary>
     internal static bool IsReached(decimal monthUsd, decimal limitUsd)
         => limitUsd > 0m && monthUsd >= limitUsd;
+
+    /// <summary>
+    /// API 経路にだけ月額上限を適用する。契約サービスの利用枠は各サービス側で管理するため、
+    /// API の当月累計が上限に達していても契約経路を止めない。
+    /// </summary>
+    internal static bool IsReachedForBackend(BackendKind backend, decimal monthUsd, decimal limitUsd)
+        => backend == BackendKind.Api && IsReached(monthUsd, limitUsd);
+
+    /// <summary>
+    /// 用途に対応する接続方式を選んで、API月額上限を適用するか判定する。
+    /// 実行開始前はルーターが自動用を既定にするため、手動操作では用途を明示して呼び出す。
+    /// </summary>
+    internal static bool IsReachedForPurpose(
+        ProofreadingPurpose purpose,
+        BackendKind automaticBackend,
+        BackendKind manualBackend,
+        decimal monthUsd,
+        decimal limitUsd)
+        => IsReachedForBackend(
+            purpose == ProofreadingPurpose.Manual ? manualBackend : automaticBackend,
+            monthUsd,
+            limitUsd);
 
     /// <summary>
     /// 進捗バー用の0〜100の割合。上限が無制限（0以下）なら <c>null</c>

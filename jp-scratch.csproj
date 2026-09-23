@@ -6,12 +6,13 @@
     <RootNamespace>JpScratch</RootNamespace>
     <AssemblyName>JpScratch</AssemblyName>
     <Nullable>enable</Nullable>
+    <CopilotSkipCliDownload>true</CopilotSkipCliDownload>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.1.0</Version>
+    <Version>2.0.0</Version>
     <Product>JP Scratch</Product>
     <!-- 常駐アプリなので起動時間を優先する（2.1 非機能要件） -->
     <PublishReadyToRun>true</PublishReadyToRun>
@@ -46,6 +47,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="GitHub.Copilot.SDK" Version="1.0.13" />
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
     <!-- Microsoft.Data.Sqlite が引く SQLitePCLRaw 2.1.11 には高深刻度の脆弱性
@@ -66,6 +68,7 @@
   <!-- 独立したプロンプト検証アプリのソースを WPF 本体へ取り込まない。 -->
   <ItemGroup>
     <Compile Remove="PromptValidation\**\*.cs" />
+    <Compile Remove="tools\SettingsCapture\**\*.cs" />
     <None Remove="PromptValidation\**\*" />
   </ItemGroup>
 

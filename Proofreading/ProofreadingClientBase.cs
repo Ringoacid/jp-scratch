@@ -335,9 +335,7 @@ internal abstract class ProofreadingClientBase : IProofreadingClient
         (string rawText, GeminiUsage usage) = ParseRaw(body);
         // 送信時に逃がした閉じタグを元へ戻してから差分を取る（逃がしたままだと
         // 「\/document を /document へ直す」提案が出る）。
-        string correctedText = ProofreadingPrompt.UnescapeDocumentBoundary(rawText);
-        DocumentDiffResult diff = DocumentDiff.Create(sourceText, correctedText);
-        return new GeminiProofreadingResult(correctedText, diff, usage, elapsed, attempts);
+        return ProofreadingResultFactory.Create(sourceText, new(rawText, usage, elapsed, attempts));
     }
 
     private GeminiRawTextResult ParseRawSuccess(

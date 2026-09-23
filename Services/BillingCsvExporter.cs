@@ -22,6 +22,7 @@ internal static class BillingCsvExporter
         "日時", "種別", "モデル", "入力トークン", "出力トークン",
         "USD", "料金状態", "元通貨", "元通貨額", "USD/JPYレート", "レート基準日", "JPY", "所要ms",
         "成否", "提案件数", "破棄件数", "エラー",
+        "接続方式", "契約利用量", "契約利用量単位",
     ];
 
     /// <summary>
@@ -52,10 +53,10 @@ internal static class BillingCsvExporter
         yield return EscapeField(UsageFormatting.FormatTrigger(row.Trigger));
         // モデル名とエラー文は外部（API応答・例外メッセージ）由来の自由文字列なので数式ガードをかける。
         yield return EscapeField(row.Model, guardFormula: true);
-        yield return EscapeField(row.PromptTokens.ToString(CultureInfo.InvariantCulture));
-        yield return EscapeField(row.OutputTokens.ToString(CultureInfo.InvariantCulture));
-        yield return EscapeField(row.UsdCost.ToString(CultureInfo.InvariantCulture));
-        yield return EscapeField(row.IsUsdCostConfirmed ? "確定" : "未確認");
+        yield return EscapeField(row.IsUsageKnown ? row.PromptTokens.ToString(CultureInfo.InvariantCulture) : "");
+        yield return EscapeField(row.IsUsageKnown ? row.OutputTokens.ToString(CultureInfo.InvariantCulture) : "");
+        yield return EscapeField(row.Backend == Models.BackendKind.Api ? row.UsdCost.ToString(CultureInfo.InvariantCulture) : "");
+        yield return EscapeField(row.Backend != Models.BackendKind.Api ? "契約枠（追加請求額不明）" : row.IsUsdCostConfirmed ? "確定" : "未確認");
         yield return EscapeField(row.OriginalCurrency);
         yield return EscapeField(FormatNullableDecimal(row.OriginalCost));
         yield return EscapeField(FormatNullableDecimal(row.UsdJpyRate));
@@ -67,6 +68,9 @@ internal static class BillingCsvExporter
         yield return EscapeField(row.SuggestionCount.ToString(CultureInfo.InvariantCulture));
         yield return EscapeField(row.DiscardedCount.ToString(CultureInfo.InvariantCulture));
         yield return EscapeField(row.ErrorMessage ?? "", guardFormula: true);
+        yield return EscapeField(Models.BackendNames.Display(row.Backend));
+        yield return EscapeField(row.SubscriptionUnits?.ToString(CultureInfo.InvariantCulture));
+        yield return EscapeField(row.SubscriptionUnit, guardFormula: true);
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using JpScratch.Models;
 
 namespace JpScratch.Services;
 
@@ -33,7 +34,11 @@ internal sealed record ApiCallLogEntry(
     FxRate? FxRate = null,
     string? OriginalCurrency = null,
     decimal? OriginalCost = null,
-    bool IsUsdCostConfirmed = true);
+    bool IsUsdCostConfirmed = true,
+    BackendKind Backend = BackendKind.Api,
+    bool IsUsageKnown = true,
+    double? SubscriptionUnits = null,
+    string? SubscriptionUnit = null);
 
 /// <summary>期間内のAPI呼び出しログを、料金精度を失わずに集計した値。</summary>
 internal sealed record ApiCallUsageSummary(
@@ -71,8 +76,6 @@ internal sealed record ApiCallCompactionResult(
     int CompactedDays,
     int UnlinkedReactions)
 {
-    internal static ApiCallCompactionResult None { get; } = new(0, 0, 0);
-
     internal bool DidCompact => CompactedCalls > 0;
 }
 
@@ -112,7 +115,14 @@ internal sealed record ApiCallHistoryRow(
     int DiscardedCount,
     string? OriginalCurrency = null,
     decimal? OriginalCost = null,
-    bool IsUsdCostConfirmed = true);
+    bool IsUsdCostConfirmed = true,
+    BackendKind Backend = BackendKind.Api,
+    bool IsUsageKnown = true,
+    double? SubscriptionUnits = null,
+    string? SubscriptionUnit = null)
+{
+    internal decimal? KnownUsdCost => Backend == BackendKind.Api && IsUsdCostConfirmed ? UsdCost : null;
+}
 
 /// <summary>
 /// <see cref="ApiCallRepository.GetHistory"/> の結果。<paramref name="TotalCount"/> は
@@ -135,7 +145,7 @@ internal sealed record FxRateCompletionResult(
     int UncompletableCount);
 
 /// <summary>Gemini API呼び出しの課金・結果ログを永続化する。</summary>
-internal sealed class ApiCallRepository
+internal sealed partial class ApiCallRepository
 {
     private readonly Database _database;
     private readonly Func<DateTimeOffset> _now;
@@ -149,6 +159,8 @@ internal sealed class ApiCallRepository
     internal long Add(ApiCallLogEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
+        if (entry.Backend != BackendKind.Api)
+            entry = entry with { UsdCost = 0m, IsUsdCostConfirmed = false, FxRate = null, OriginalCost = null, OriginalCurrency = null };
         ArgumentException.ThrowIfNullOrWhiteSpace(entry.Model);
         ArgumentOutOfRangeException.ThrowIfNegative(entry.PromptTokens);
         ArgumentOutOfRangeException.ThrowIfNegative(entry.OutputTokens);
@@ -181,12 +193,12 @@ internal sealed class ApiCallRepository
                 called_at, trigger_type, model, prompt_tokens, output_tokens,
                 usd_cost, usd_jpy_rate, rate_date, jpy_cost, duration_ms,
                 status, error_message, suggestion_cnt, discarded_cnt,
-                original_currency, original_cost, usd_cost_confirmed)
+                original_currency, original_cost, usd_cost_confirmed, backend, usage_known, subscription_units, subscription_unit)
             VALUES (
                 $called_at, $trigger_type, $model, $prompt_tokens, $output_tokens,
                 $usd_cost, $usd_jpy_rate, $rate_date, $jpy_cost, $duration_ms,
                 $status, $error_message, $suggestion_cnt, $discarded_cnt,
-                $original_currency, $original_cost, $usd_cost_confirmed)
+                $original_currency, $original_cost, $usd_cost_confirmed, $backend, $usage_known, $subscription_units, $subscription_unit)
             RETURNING id;
             """,
             reader => reader.Read()
@@ -209,7 +221,9 @@ internal sealed class ApiCallRepository
             ("$original_currency", string.IsNullOrWhiteSpace(entry.OriginalCurrency)
                 ? null : entry.OriginalCurrency.Trim().ToUpperInvariant()),
             ("$original_cost", entry.OriginalCost?.ToString(CultureInfo.InvariantCulture)),
-            ("$usd_cost_confirmed", entry.IsUsdCostConfirmed ? 1 : 0));
+            ("$usd_cost_confirmed", entry.Backend == BackendKind.Api && entry.IsUsdCostConfirmed ? 1 : 0),
+            ("$backend", (int)entry.Backend), ("$usage_known", entry.IsUsageKnown ? 1 : 0),
+            ("$subscription_units", entry.SubscriptionUnits), ("$subscription_unit", entry.SubscriptionUnit));
     }
 
     /// <summary>本文またはタブが変わり、応答全体を表示できなかったログを破棄済みに更新する。</summary>
@@ -260,7 +274,7 @@ internal sealed class ApiCallRepository
                        usd_jpy_rate, rate_date, suggestion_cnt, discarded_cnt, trigger_type,
                        usd_cost_confirmed
                 FROM api_calls
-                WHERE ($from IS NULL OR called_at >= $from)
+                WHERE backend = 0 AND ($from IS NULL OR called_at >= $from)
                   AND ($to   IS NULL OR called_at <  $to);
                 """,
                 reader =>
@@ -511,7 +525,7 @@ internal sealed class ApiCallRepository
             SELECT id, called_at, trigger_type, model, prompt_tokens, output_tokens,
                    usd_cost, usd_jpy_rate, rate_date, jpy_cost, duration_ms,
                    status, error_message, suggestion_cnt, discarded_cnt,
-                   original_currency, original_cost, usd_cost_confirmed
+                   original_currency, original_cost, usd_cost_confirmed, backend, usage_known, subscription_units, subscription_unit
             FROM api_calls;
             """,
             reader =>
@@ -568,7 +582,8 @@ internal sealed class ApiCallRepository
                     reader.GetInt32(14),
                     reader.IsDBNull(15) ? null : reader.GetString(15),
                     TryReadDecimal(reader, 16, out decimal originalCost) ? originalCost : null,
-                    reader.GetInt32(17) != 0));
+                    reader.GetInt32(17) != 0, (BackendKind)reader.GetInt32(18), reader.GetInt32(19) != 0,
+                    reader.IsDBNull(20) ? null : reader.GetDouble(20), reader.IsDBNull(21) ? null : reader.GetString(21)));
             }
 
             matched.Sort((left, right) =>
@@ -595,6 +610,7 @@ internal sealed class ApiCallRepository
                    usd_jpy_rate, rate_date, jpy_cost, status, suggestion_cnt, discarded_cnt,
                    original_currency, original_cost, usd_cost_confirmed
             FROM api_calls
+            WHERE backend = 0
             ORDER BY id DESC;
             """,
             reader =>
@@ -640,7 +656,7 @@ internal sealed class ApiCallRepository
             """
             SELECT called_at, original_currency, original_cost
             FROM api_calls
-            WHERE usd_cost_confirmed = 0;
+            WHERE backend = 0 AND usd_cost_confirmed = 0;
             """,
             reader =>
             {
@@ -701,7 +717,7 @@ internal sealed class ApiCallRepository
                 """
                 SELECT id, called_at, original_currency, original_cost
                 FROM api_calls
-                WHERE usd_cost_confirmed = 0;
+                WHERE backend = 0 AND usd_cost_confirmed = 0;
                 """,
                 reader =>
                 {
@@ -770,7 +786,7 @@ internal sealed class ApiCallRepository
             """
             SELECT original_currency, original_cost
             FROM api_calls
-            WHERE usd_cost_confirmed = 0;
+            WHERE backend = 0 AND usd_cost_confirmed = 0;
             """,
             reader =>
             {
@@ -807,6 +823,7 @@ internal sealed class ApiCallRepository
     /// </summary>
     internal ApiCallCompactionResult Compact(DateTimeOffset cutoff)
     {
+        ApiCallCompactionResult subscriptions = CompactSubscriptions(cutoff, out var subscriptionDays);
         var totals = new Dictionary<DailyKey, DailyTotals>();
         List<long> idsToRemove = [];
         HashSet<DateOnly> affectedDays = [];
@@ -988,9 +1005,9 @@ internal sealed class ApiCallRepository
             }
         });
 
-        return idsToRemove.Count == 0
-            ? ApiCallCompactionResult.None
-            : new ApiCallCompactionResult(idsToRemove.Count, affectedDays.Count, unlinkedReactions);
+        affectedDays.UnionWith(subscriptionDays);
+        return new ApiCallCompactionResult(idsToRemove.Count + subscriptions.CompactedCalls,
+            affectedDays.Count, unlinkedReactions + subscriptions.UnlinkedReactions);
     }
 
     private static void Accumulate(

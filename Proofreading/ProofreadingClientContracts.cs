@@ -13,6 +13,10 @@ internal enum GeminiClientError
     Timeout,
     RequestFailed,
     InvalidResponse,
+    AuthenticationRequired,
+    QuotaUnavailable,
+    QuotaExhausted,
+    BackendUnavailable,
 }
 
 internal sealed class GeminiClientException : Exception
@@ -52,6 +56,11 @@ internal sealed record GeminiUsage(
     int TotalTokens)
 {
     internal int BillableOutputTokens => CandidateTokens + ThoughtsTokens;
+    internal bool IsKnown { get; init; } = true;
+    internal BackendKind Backend { get; init; }
+    internal double? SubscriptionUnits { get; init; }
+    internal string? SubscriptionUnit { get; init; }
+    internal static GeminiUsage Unknown => new(0, 0, 0, 0, 0) { IsKnown = false };
 }
 
 internal sealed record GeminiProofreadingResult(

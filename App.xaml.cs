@@ -215,6 +215,9 @@ public partial class App : Application
         _ = _window.RefreshFxRateAsync();
         _ = _window.CompleteUnconfirmedFxRatesAsync();
 
+        // Restore saved subscription sign-ins without waiting for the settings window or sending text.
+        _ = _proofreadingClient.Subscriptions.InitializeAsync(_settings.Current);
+
         // 保持期限を過ぎた課金明細の圧縮（要件 3.6.2）。ウィンドウを出した後に別スレッドで走らせる。
         // 起動経路の同期処理に足すとコールドスタートの実測値（0.63秒）を落としかねない。
         // 設定変更時・日付が変わったときにも同じ処理が必要なので、実装は MainWindow に置いてある。
@@ -369,12 +372,10 @@ public partial class App : Application
 
     /// <summary>自動用・手動用として現在選ばれているモデルのプロバイダー（重複は除く）。</summary>
     private IEnumerable<Models.ApiProvider> InUseProviders()
-        => new[]
-            {
-                Models.ProofreadingModelCatalog.ProviderOf(_settings.Current.AutoProofreadingModel),
-                Models.ProofreadingModelCatalog.ProviderOf(_settings.Current.ManualProofreadingModel),
-            }
-            .Distinct();
+        => new[] { (_settings.Current.AutoBackend, _settings.Current.AutoProofreadingModel),
+                   (_settings.Current.ManualBackend, _settings.Current.ManualProofreadingModel) }
+            .Where(selection => selection.Item1 == Models.BackendKind.Api)
+            .Select(selection => Models.ProofreadingModelCatalog.ProviderOf(selection.Item2)).Distinct();
 
     private Models.ApiKeySource ApiKeySourceOf(Models.ApiProvider provider)
         => provider switch

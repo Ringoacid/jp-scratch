@@ -4,18 +4,29 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
+    <CopilotSkipCliDownload>true</CopilotSkipCliDownload>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>JpScratch.PromptValidation</RootNamespace>
     <AssemblyName>JpScratch.PromptValidation</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="GitHub.Copilot.SDK" Version="1.0.13" />
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Models\AppSettings.cs" Link="Models\AppSettings.cs" />
+    <Compile Include="..\Models\HotkeySpec.cs" Link="Models\HotkeySpec.cs" />
+    <Compile Include="..\Infrastructure\NativeMethods.cs" Link="Infrastructure\NativeMethods.cs" />
+    <Compile Include="..\Models\BackendKind.cs" Link="Models\BackendKind.cs" />
+    <Compile Include="..\Proofreading\Subscription*.cs" Link="Proofreading\%(Filename)%(Extension)" />
+    <Compile Include="..\Proofreading\Codex*.cs" Link="Proofreading\%(Filename)%(Extension)" />
+    <Compile Include="..\Proofreading\Copilot*.cs" Link="Proofreading\%(Filename)%(Extension)" />
+    <Compile Include="..\Proofreading\ProofreadingResultFactory.cs" Link="Proofreading\ProofreadingResultFactory.cs" />
+    <Compile Include="..\Services\ApiCallRepository.Subscriptions.cs" Link="Services\ApiCallRepository.Subscriptions.cs" />
     <Compile Include="..\Infrastructure\AppPaths.cs"
              Link="Infrastructure\AppPaths.cs" />
     <Compile Include="..\Infrastructure\AtomicFile.cs"

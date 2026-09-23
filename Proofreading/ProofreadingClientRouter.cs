@@ -18,6 +18,13 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
 
     private string? _pinnedModel;
     private ProofreadingPurpose? _pinnedPurpose;
+    private BackendKind? _pinnedBackend;
+    private TimeSpan? _pinnedTimeout;
+    private IProofreadingClient? _subscriptionRun;
+    internal SubscriptionService Subscriptions { get; } = new();
+    internal BackendKind Backend => _pinnedBackend ?? BackendFor(CurrentPurpose);
+    internal BackendKind BackendFor(ProofreadingPurpose purpose) => purpose == ProofreadingPurpose.Manual ? _settings.Current.ManualBackend : _settings.Current.AutoBackend;
+    internal string PathFor(BackendKind backend) => backend == BackendKind.CodexAppServer ? _settings.Current.CodexCliPath : _settings.Current.CopilotCliPath;
 
     internal ProofreadingClientRouter(
         SettingsService settings,
@@ -65,7 +72,7 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
     /// </summary>
     private ProofreadingPurpose CurrentPurpose => _pinnedPurpose ?? ProofreadingPurpose.Automatic;
 
-    private TimeSpan CurrentTimeout => TimeoutFor(CurrentPurpose);
+    private TimeSpan CurrentTimeout => _pinnedTimeout ?? TimeoutFor(CurrentPurpose);
 
     internal string ModelFor(ProofreadingPurpose purpose)
         => purpose == ProofreadingPurpose.Manual
@@ -84,20 +91,30 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
     /// 呼び出し側（MainWindow）は実行開始前に用途を指定して固定し、対応する finally で
     /// <see cref="UnpinModel"/> を必ず呼ぶ。
     /// </summary>
-    internal void PinModel(ProofreadingPurpose purpose)
+    internal void PinModel(ProofreadingPurpose purpose, bool allowUnknownQuota = false)
     {
         _pinnedPurpose = purpose;
         _pinnedModel = ModelFor(purpose);
+        _pinnedBackend = BackendFor(purpose);
+        _pinnedTimeout = TimeoutFor(purpose);
+        if (Backend != BackendKind.Api)
+            _subscriptionRun = new SubscriptionProofreadingClient(Subscriptions, Backend, PathFor(Backend), Model,
+                Subscriptions.State(Backend)?.Account, allowUnknownQuota, CurrentTimeout,
+                _settings.Current.ProofreadingMinimumIntervalSeconds);
     }
 
     internal void UnpinModel()
     {
         _pinnedModel = null;
         _pinnedPurpose = null;
+        _pinnedBackend = null;
+        _pinnedTimeout = null;
+        _subscriptionRun = null;
     }
 
     private IProofreadingClient Active =>
-        _clients[ProofreadingModelCatalog.ProviderOf(Model)].Value;
+        Backend == BackendKind.Api ? _clients[ProofreadingModelCatalog.ProviderOf(Model)].Value :
+        _subscriptionRun ?? throw new InvalidOperationException("接続方式を固定してから実行してください。");
 
     public Task<GeminiProofreadingResult> ProofreadAsync(
         ProofreadingRequest request,
@@ -117,6 +134,7 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
 
     public void Dispose()
     {
+        Subscriptions.Dispose();
         foreach (Lazy<IProofreadingClient> client in _clients.Values)
         {
             // 一度も使っていないプロバイダーは生成自体していないので破棄も不要。

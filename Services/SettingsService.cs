@@ -194,10 +194,8 @@ internal sealed class SettingsService
             1,
             10);
         MigrateProofreadingModel(s);
-        if (!ProofreadingModelCatalog.IsSupported(s.AutoProofreadingModel))
-            s.AutoProofreadingModel = ProofreadingModelCatalog.DefaultAutomaticModel;
-        if (!ProofreadingModelCatalog.IsSupported(s.ManualProofreadingModel))
-            s.ManualProofreadingModel = ProofreadingModelCatalog.DefaultManualModel;
+        s.AutoProofreadingModel = BackendNames.NormalizeModel(s.AutoBackend, s.AutoProofreadingModel, ProofreadingModelCatalog.DefaultAutomaticModel);
+        s.ManualProofreadingModel = BackendNames.NormalizeModel(s.ManualBackend, s.ManualProofreadingModel, ProofreadingModelCatalog.DefaultManualModel);
         s.AutoProofreadingTimeoutSeconds = ClampTimeoutSeconds(s.AutoProofreadingTimeoutSeconds);
         s.ManualProofreadingTimeoutSeconds = ClampTimeoutSeconds(s.ManualProofreadingTimeoutSeconds);
         s.TrashRetentionDays = Math.Clamp(s.TrashRetentionDays, 1, 365);

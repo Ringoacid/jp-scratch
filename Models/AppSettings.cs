@@ -93,6 +93,12 @@ public sealed class AppSettings
     /// </summary>
     public string ProofreadingModel { get; set; } = "";
 
+    public BackendKind AutoBackend { get; set; }
+    public BackendKind ManualBackend { get; set; }
+    public bool SubscriptionAutomaticEnabled { get; set; }
+    public string CodexCliPath { get; set; } = "";
+    public string CopilotCliPath { get; set; } = "";
+
     /// <summary>入力中の自動校正と、理由つき別案生成に使うモデルID。料金表のキーと一致させる。</summary>
     public string AutoProofreadingModel { get; set; } =
         ProofreadingModelCatalog.DefaultAutomaticModel;
