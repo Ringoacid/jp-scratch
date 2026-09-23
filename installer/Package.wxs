@@ -28,8 +28,9 @@
 
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="JP Scratch を起動する" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
-    <!-- WixShellExec formats this target after INSTALLFOLDER has its final path. -->
-    <Property Id="WixShellExecTarget" Value="[INSTALLFOLDER]JpScratch.exe" />
+    <!-- Resolve INSTALLFOLDER after directory costing, before the Finish dialog can launch the app. -->
+    <SetProperty Id="WixShellExecTarget" Value="[INSTALLFOLDER]JpScratch.exe"
+                 After="CostFinalize" Sequence="ui" />
 
     <ui:WixUI Id="WixUI_Minimal" />
 
