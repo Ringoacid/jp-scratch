@@ -137,6 +137,7 @@ internal sealed class PricingService
 
     private readonly string _pricingFile;
     private readonly Func<DateOnly> _utcTodayProvider;
+    private readonly Func<string, OpenAiCompatibleProfile?> _compatibleProfileResolver;
     private Dictionary<string, ModelPricing> _models =
         new(StringComparer.Ordinal);
     private Dictionary<string, PricingModelHistory> _history =
@@ -144,16 +145,20 @@ internal sealed class PricingService
 
     internal PricingService(
         string? pricingFile = null,
-        Func<DateOnly>? utcTodayProvider = null)
+        Func<DateOnly>? utcTodayProvider = null,
+        Func<string, OpenAiCompatibleProfile?>? compatibleProfileResolver = null)
     {
         _pricingFile = pricingFile ?? AppPaths.PricingFile;
         _utcTodayProvider = utcTodayProvider ??
             (() => DateOnly.FromDateTime(DateTime.UtcNow));
+        _compatibleProfileResolver = compatibleProfileResolver ?? (_ => null);
         Load();
     }
 
     internal ModelPricing GetPricing(string model)
     {
+        if (_compatibleProfileResolver(model) is { } profile)
+            return CompatiblePricing(profile);
         if (_history.Count > 0) return GetPricing(model, _utcTodayProvider());
         if (string.IsNullOrWhiteSpace(model))
             throw new ArgumentException("モデルIDが空です。", nameof(model));
@@ -176,6 +181,8 @@ internal sealed class PricingService
 
     internal ModelPricing GetPricing(string model, DateOnly utcDate)
     {
+        if (_compatibleProfileResolver(model) is { } profile)
+            return CompatiblePricing(profile);
         string normalized = NormalizeModel(model);
         if (!_history.TryGetValue(normalized, out PricingModelHistory? history))
             throw new KeyNotFoundException($"モデル「{normalized}」の単価がpricing.jsonにありません。");
@@ -303,12 +310,15 @@ internal sealed class PricingService
     internal PricingQuote Calculate(
         string model,
         int promptTokens,
-        int outputTokens)
+        int outputTokens,
+        OpenAiCompatibleProfile? compatibleProfileOverride = null)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(promptTokens);
         ArgumentOutOfRangeException.ThrowIfNegative(outputTokens);
 
-        ModelPricing pricing = GetPricing(model);
+        ModelPricing pricing = compatibleProfileOverride is null
+            ? GetPricing(model)
+            : CompatiblePricing(compatibleProfileOverride);
         decimal cost =
             promptTokens / 1_000_000m * pricing.InputUsdPerMillion +
             outputTokens / 1_000_000m * pricing.OutputUsdPerMillion;
@@ -320,6 +330,15 @@ internal sealed class PricingService
             pricing.Currency,
             pricing);
     }
+
+    private static ModelPricing CompatiblePricing(OpenAiCompatibleProfile profile)
+        => new()
+        {
+            Currency = PricingCurrency.Usd,
+            InputUsdPerMillion = profile.InputUsdPerMillion,
+            OutputUsdPerMillion = profile.OutputUsdPerMillion,
+            UpdatedAt = profile.PricingUpdatedAt,
+        };
 
     private void Load()
     {

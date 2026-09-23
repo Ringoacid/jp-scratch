@@ -89,6 +89,17 @@ dotnet run --project PromptValidation -- --model-benchmark --trials 3 --max-cost
 主なオプションは `--trials` / `--max-cost` / `--models` / `--texts` / `--timeout` / `--output` / `--yes`。
 詳細は `--model-benchmark --help`。図の生成は `python tools/plot-model-benchmark.py`。
 
+自動用・手動用の既定モデルを比較するときは、同じ3モデルと文章を両用途で測る。`--purpose` の既定は `manual`。以下のコマンドは**実APIを呼んで課金される**ため、実行前に費用上限と対象を確認する。`--max-cost` は文章単位で判定する打ち切り目安であり、上限を厳密に保証するものではない。
+
+```powershell
+dotnet run --project PromptValidation -- --model-benchmark --models claude-sonnet-5,gpt-6-luna,gpt-6-sol --purpose automatic --trials 3 --max-cost 3
+dotnet run --project PromptValidation -- --model-benchmark --models claude-sonnet-5,gpt-6-luna,gpt-6-sol --purpose manual --trials 3 --max-cost 3
+```
+
+2026-09-23 の比較結果（7文章×3試行／用途、計126リクエスト）に基づき、新規設定の既定を自動・手動とも GPT 6 Luna にした。図表、修正内容、判断の限界は[比較レポート](model-benchmark-2026-09-23.md)を参照。生データは `results/model-benchmark-2026-09-23-automatic-r3.json` と `results/model-benchmark-2026-09-23-manual-r3.json` に保存している。
+
+追加した Claude Opus 5.5 も同じ文章・試行数で単独計測した（自動・手動の計42リクエスト）。結果と既存3モデルとの比較は[Opus 5.5 追補レポート](claude-opus-5-5-benchmark-2026-09-23.md)を参照。
+
 プロンプト案:
 
 - `full-rewrite-safe`（既定）: 全文の修正版を返す。文書境界と文中命令の無視を明示。

@@ -430,10 +430,14 @@ def draw_bars(data: list[dict], theme: dict, meta: str, path: Path) -> None:
         fontsize=15,
         fontweight="bold",
     )
+    providers_present = [
+        provider for provider in PROVIDER_ORDER
+        if any(row["provider"] == provider for row in data)
+    ]
     figure.text(
         0.03,
         0.918,
-        "行はプロバイダーごとにまとめ、区切り線の上から OpenAI / Gemini / Anthropic / PLaMo",
+        "行はプロバイダーごとにまとめ、上から " + " / ".join(providers_present),
         color=theme["secondary"],
         fontsize=10,
         ha="left",
@@ -518,8 +522,11 @@ def main() -> None:
         date = report["runStartedAt"][:10]
         suffix = "追補" if index > 0 else "一斉計測"
         run_labels.append(f"{date} {len(report['summary'])}モデル {suffix}")
+    purpose_label = {"Automatic": "自動用", "Manual": "手動用"}.get(
+        reports[0]["purpose"], reports[0]["purpose"]
+    )
     meta = (
-        f"計測 {' ＋ '.join(run_labels)} / 手動用 effort / "
+        f"計測 {' ＋ '.join(run_labels)} / {purpose_label} effort / "
         f"7 文章 × {reports[0]['trialCount']} 試行 / タイムアウト "
         f"{reports[0]['timeoutSeconds']} 秒 / 料金は各実行日の固定為替"
     )

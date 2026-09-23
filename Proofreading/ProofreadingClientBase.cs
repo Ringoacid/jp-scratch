@@ -43,6 +43,9 @@ internal abstract class ProofreadingClientBase : IProofreadingClient
     /// <summary>エラーメッセージへ出す表示名（例: <c>Gemini</c>）。APIキーは絶対に含めない。</summary>
     protected abstract string ProviderName { get; }
 
+    /// <summary>ローカル互換サーバーなど、認証キーを使わない接続先では false。</summary>
+    protected virtual bool RequiresApiKey => true;
+
     protected ProofreadingClientBase(
         Func<string?> apiKeyProvider,
         HttpClient httpClient,
@@ -209,14 +212,14 @@ internal abstract class ProofreadingClientBase : IProofreadingClient
         CancellationToken cancellationToken)
     {
         string? apiKey = _apiKeyProvider();
-        if (string.IsNullOrWhiteSpace(apiKey))
+        if (RequiresApiKey && string.IsNullOrWhiteSpace(apiKey))
         {
             throw new GeminiClientException(
                 GeminiClientError.MissingApiKey,
                 $"{ProviderName} APIキーが設定されていません。設定画面で登録または取得元を選択してください。");
         }
 
-        apiKey = apiKey.Trim();
+        apiKey = apiKey?.Trim() ?? "";
         string requestJson = BuildRequestJson(systemInstruction, userMessage);
         // 1回の呼び出しの中でタイムアウトが揺れないよう、先頭で一度だけ確定させる。
         TimeSpan requestTimeout = _requestTimeoutProvider();

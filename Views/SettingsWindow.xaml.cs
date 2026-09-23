@@ -38,6 +38,9 @@ public partial class SettingsWindow : Window
     private readonly Dictionary<ApiProvider, string> _pendingApiKeys = [];
     private readonly HashSet<ApiProvider> _deleteStoredKeys = [];
     private readonly Dictionary<ApiProvider, ApiKeySource> _pendingKeySources = [];
+    private readonly List<OpenAiCompatibleProfile> _compatibleProfiles = [];
+    private readonly Dictionary<string, string> _pendingCompatibleKeys = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _deleteCompatibleKeys = new(StringComparer.Ordinal);
     private ApiProvider? _shownCredentialProvider;
     private bool _loadingCredentialControls;
     private bool _loadingProofreadingModelControls;
@@ -169,7 +172,12 @@ public partial class SettingsWindow : Window
 
         // 取得元の現在値をプロバイダー別に取り込む。以降はこの辞書が編集中の正本になる。
         foreach (ApiProvider provider in Enum.GetValues<ApiProvider>())
-            _pendingKeySources[provider] = ApiKeySourceOf(s, provider);
+            if (provider != ApiProvider.OpenAiCompatible)
+                _pendingKeySources[provider] = ApiKeySourceOf(s, provider);
+
+        _compatibleProfiles.Clear();
+        _compatibleProfiles.AddRange(s.OpenAiCompatibleProfiles);
+        RefreshCompatibleProfileList();
 
         CustomInstructionBox.Text = s.CustomInstruction;
         StyleGuideAutoGenerateCheck.IsChecked = s.StyleGuideAutoGenerateEnabled;
@@ -203,8 +211,11 @@ public partial class SettingsWindow : Window
         // 既定モデル基準の誤った表示になる。
         LoadPricingControls();
         CredentialProviderCombo.ItemsSource = Enum.GetValues<ApiProvider>()
+            .Where(provider => provider != ApiProvider.OpenAiCompatible)
             .Select(provider => new ProviderOption(provider, ProofreadingModelCatalog.ProviderDisplayName(provider))).ToArray();
-        CredentialProviderCombo.SelectedValue = ProofreadingModelCatalog.ProviderOf(s.AutoProofreadingModel);
+        ApiProvider initialCredentialProvider = ProofreadingModelCatalog.ProviderOf(s.AutoProofreadingModel);
+        CredentialProviderCombo.SelectedValue = initialCredentialProvider == ApiProvider.OpenAiCompatible
+            ? ApiProvider.OpenAi : initialCredentialProvider;
 
         AutoSaveBox.Text = s.AutoSaveDebounceMs.ToString(CultureInfo.InvariantCulture);
         TrashDaysBox.Text = s.TrashRetentionDays.ToString(CultureInfo.InvariantCulture);
@@ -292,6 +303,7 @@ public partial class SettingsWindow : Window
         s.OpenAiApiKeySource = _pendingKeySources[ApiProvider.OpenAi];
         s.AnthropicApiKeySource = _pendingKeySources[ApiProvider.Anthropic];
         s.PlamoApiKeySource = _pendingKeySources[ApiProvider.PreferredNetworks];
+        s.OpenAiCompatibleProfiles = [.. _compatibleProfiles];
 
         s.CustomInstruction = CustomInstructionBox.Text.Trim();
         s.StyleGuideAutoGenerateEnabled = StyleGuideAutoGenerateCheck.IsChecked == true;
@@ -552,6 +564,14 @@ public partial class SettingsWindow : Window
             BackendKind backend = FamilyBackend(family.SelectedItem as string);
             if (backend == BackendKind.Api)
             {
+                OpenAiCompatibleProfile? compatible = _compatibleProfiles.FirstOrDefault(
+                    profile => profile.SelectionId == id);
+                if (compatible is not null)
+                {
+                    if (compatible.InputUsdPerMillion >= 10m || compatible.OutputUsdPerMillion >= 50m)
+                        warnings.Add($"{purpose}：{compatible.Name} は高価格です（100万トークンあたり入力 ${compatible.InputUsdPerMillion:0.##} / 出力 ${compatible.OutputUsdPerMillion:0.##}）。");
+                    continue;
+                }
                 if (!ProofreadingModelCatalog.IsHighCostForProofreading(id)) continue;
                 var model = ProofreadingModelCatalog.Get(id);
                 warnings.Add($"{purpose}：{model.DisplayName} は高価格です（100万トークンあたり入力 ${model.InputPricePerMillion:0.##} / 出力 ${model.OutputPricePerMillion:0.##}）。");
@@ -600,7 +620,7 @@ public partial class SettingsWindow : Window
     {
         public override string ToString() => DisplayName;
     }
-    private static readonly string[] ModelFamilies = ["GPT", "Claude", "Gemini", "PLaMo", "Codex", "Copilot"];
+    private static readonly string[] ModelFamilies = ["GPT", "Claude", "Gemini", "PLaMo", "OpenAI互換", "Codex", "Copilot"];
     private readonly Dictionary<(string Purpose, string Family), string> _familySelections = [];
 
     private static string FamilyOf(string model) => ProofreadingModelCatalog.ProviderOf(model) switch
@@ -608,6 +628,7 @@ public partial class SettingsWindow : Window
         ApiProvider.OpenAi => "GPT",
         ApiProvider.Anthropic => "Claude",
         ApiProvider.Google => "Gemini",
+        ApiProvider.OpenAiCompatible => "OpenAI互換",
         _ => "PLaMo",
     };
 
@@ -622,6 +643,17 @@ public partial class SettingsWindow : Window
             combo.ItemsSource = options;
             combo.SelectedValue = selected;
             if (selected is null && options.Count > 0) combo.SelectedIndex = 0;
+            return;
+        }
+        if (family == "OpenAI互換")
+        {
+            var options = _compatibleProfiles
+                .OrderBy(profile => profile.Name, StringComparer.CurrentCulture)
+                .Select(profile => new ModelOption(profile.SelectionId,
+                    $"{profile.Name}（{profile.ModelId}）", family)).ToArray();
+            combo.ItemsSource = options;
+            combo.SelectedValue = selected;
+            if (combo.SelectedIndex < 0 && options.Length > 0) combo.SelectedIndex = 0;
             return;
         }
         var models = ProofreadingModelCatalog.SupportedModels.Where(model => FamilyOf(model) == family)
@@ -648,6 +680,109 @@ public partial class SettingsWindow : Window
     }
 
     private static string? SelectedModelId(ComboBox combo) => combo.SelectedValue as string;
+
+    private OpenAiCompatibleProfile? SelectedCompatibleProfile =>
+        CompatibleProfileCombo.SelectedValue is string id
+            ? _compatibleProfiles.FirstOrDefault(profile => profile.Id == id)
+            : null;
+
+    private void RefreshCompatibleProfileList(string? selectedId = null)
+    {
+        selectedId ??= CompatibleProfileCombo.SelectedValue as string;
+        CompatibleProfileCombo.ItemsSource = null;
+        CompatibleProfileCombo.ItemsSource = _compatibleProfiles
+            .Select(profile => new ModelOption(profile.Id, profile.Name, "OpenAI互換"))
+            .ToArray();
+        CompatibleProfileCombo.SelectedValue = selectedId;
+        if (CompatibleProfileCombo.SelectedIndex < 0 && _compatibleProfiles.Count > 0)
+            CompatibleProfileCombo.SelectedIndex = 0;
+        RefreshCompatibleProfileSummary();
+    }
+
+    private void RefreshCompatibleProfileSummary()
+    {
+        OpenAiCompatibleProfile? profile = SelectedCompatibleProfile;
+        EditCompatibleProfileButton.IsEnabled = profile is not null;
+        DeleteCompatibleProfileButton.IsEnabled = profile is not null;
+        CompatibleProfileSummary.Text = profile is null
+            ? "接続設定はまだありません。追加すると校正画面のサービス欄で選択できます。"
+            : $"モデル: {profile.ModelId}\nURL: {profile.EndpointUrl}\n" +
+              $"入力 ${profile.InputUsdPerMillion:0.####} / 出力 ${profile.OutputUsdPerMillion:0.####}（100万トークン当たり）\n" +
+              (_pendingCompatibleKeys.ContainsKey(profile.Id) ||
+               (!_deleteCompatibleKeys.Contains(profile.Id) && _credentials.CompatibleKeyAvailable(profile.Id))
+                  ? "APIキー: 保存済みまたは保存予定" : "APIキー: なし");
+    }
+
+    private void CompatibleProfileCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => RefreshCompatibleProfileSummary();
+
+    private void AddCompatibleProfile_Click(object sender, RoutedEventArgs e)
+        => EditCompatibleProfile(null);
+
+    private void EditCompatibleProfile_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedCompatibleProfile is { } profile) EditCompatibleProfile(profile);
+    }
+
+    private void EditCompatibleProfile(OpenAiCompatibleProfile? original)
+    {
+        var dialog = new OpenAiCompatibleProfileDialog(original,
+            original is not null &&
+            (_pendingCompatibleKeys.ContainsKey(original.Id) ||
+             (!_deleteCompatibleKeys.Contains(original.Id) && _credentials.CompatibleKeyAvailable(original.Id))))
+        {
+            Owner = this,
+        };
+        if (dialog.ShowDialog() != true || dialog.Profile is not { } profile) return;
+
+        if (original is null) _compatibleProfiles.Add(profile);
+        else _compatibleProfiles[_compatibleProfiles.FindIndex(p => p.Id == original.Id)] = profile;
+        if (dialog.NewApiKey.Length > 0)
+        {
+            _pendingCompatibleKeys[profile.Id] = dialog.NewApiKey;
+            _deleteCompatibleKeys.Remove(profile.Id);
+        }
+        else if (dialog.DeleteStoredKey)
+        {
+            _pendingCompatibleKeys.Remove(profile.Id);
+            _deleteCompatibleKeys.Add(profile.Id);
+        }
+        RefreshCompatibleProfileList(profile.Id);
+        RefreshCompatibleModelChoices();
+    }
+
+    private void DeleteCompatibleProfile_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedCompatibleProfile is not { } profile) return;
+        if (SelectedModelId(AutoProofreadingModelCombo) == profile.SelectionId ||
+            SelectedModelId(ManualProofreadingModelCombo) == profile.SelectionId)
+        {
+            MessageBox.Show(this, "自動用または手動用で選択中です。別のモデルに切り替えてから削除してください。",
+                "JP Scratch", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        _compatibleProfiles.Remove(profile);
+        _pendingCompatibleKeys.Remove(profile.Id);
+        _deleteCompatibleKeys.Add(profile.Id);
+        RefreshCompatibleProfileList();
+        RefreshCompatibleModelChoices();
+    }
+
+    private void RefreshCompatibleModelChoices()
+    {
+        foreach (ComboBox combo in new[] { AutoProofreadingModelCombo, ManualProofreadingModelCombo })
+        {
+            ComboBox family = combo == AutoProofreadingModelCombo ? AutoModelFamilyCombo : ManualModelFamilyCombo;
+            if (family.SelectedItem as string != "OpenAI互換") continue;
+            string? selected = SelectedModelId(combo);
+            _loadingProofreadingModelControls = true;
+            PopulateModels(combo, "OpenAI互換", selected);
+            _loadingProofreadingModelControls = false;
+        }
+        RefreshHighCostModelWarning();
+        if (_pricingControlsLoaded)
+            RefreshPricingModelOptions(_selectedPricingModel);
+    }
 
     private void CredentialProviderCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -976,6 +1111,15 @@ public partial class SettingsWindow : Window
             _pricingOriginalEvents[model] = snapshot;
         }
 
+        RefreshPricingModelOptions(SelectedModelId(AutoProofreadingModelCombo));
+        _loadingPricingControls = false;
+        _pricingControlsLoaded = true;
+    }
+
+    private void RefreshPricingModelOptions(string? selected)
+    {
+        bool wasLoading = _loadingPricingControls;
+        _loadingPricingControls = true;
         List<string> models = _pricing.Snapshot().Keys
             .Where(model => model != PricingService.DefaultModel)
             .OrderBy(model => model, StringComparer.Ordinal)
@@ -985,19 +1129,19 @@ public partial class SettingsWindow : Window
 
         var choices = models.Select(model => new ModelOption(model,
             ProofreadingModelCatalog.DisplayName(model),
-            ProofreadingModelCatalog.IsSupported(model) ? FamilyOf(model) : "その他")).ToArray();
+            ProofreadingModelCatalog.IsSupported(model) ? FamilyOf(model) : "その他"))
+            .Concat(_compatibleProfiles.Select(profile => new ModelOption(
+                profile.SelectionId, $"{profile.Name}（{profile.ModelId}）", "OpenAI互換")))
+            .ToArray();
         var view = new System.Windows.Data.ListCollectionView(choices);
         view.GroupDescriptions.Add(new System.Windows.Data.PropertyGroupDescription(nameof(ModelOption.Family)));
         PricingModelCombo.ItemsSource = view;
-        _selectedPricingModel = SelectedModelId(AutoProofreadingModelCombo);
-        PricingModelCombo.SelectedValue = _selectedPricingModel;
-        if (PricingModelCombo.SelectedIndex < 0) PricingModelCombo.SelectedIndex = models.Count > 0 ? 0 : -1;
+        PricingModelCombo.SelectedValue = selected;
+        if (PricingModelCombo.SelectedIndex < 0) PricingModelCombo.SelectedIndex = choices.Length > 0 ? 0 : -1;
         _selectedPricingModel = PricingModelCombo.SelectedValue as string;
 
         ShowSelectedPricingModel();
-
-        _loadingPricingControls = false;
-        _pricingControlsLoaded = true;
+        _loadingPricingControls = wasLoading;
     }
 
     private void PricingModelCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1013,9 +1157,21 @@ public partial class SettingsWindow : Window
         PricingHistoryList.ItemsSource = null;
         PricingEditButton.IsEnabled = false;
         PricingDeleteButton.IsEnabled = false;
+        OpenAiCompatibleProfile? compatible = _compatibleProfiles.FirstOrDefault(
+            profile => profile.SelectionId == _selectedPricingModel);
+        PricingAddButton.IsEnabled = compatible is null;
         PricingRestoreButton.IsEnabled =
             _selectedPricingModel is not null &&
-            ProofreadingModelCatalog.IsSupported(_selectedPricingModel);
+            compatible is null && ProofreadingModelCatalog.IsSupported(_selectedPricingModel);
+
+        if (compatible is not null)
+        {
+            PricingCurrentSummaryText.Text =
+                $"100万トークンあたり：入力 ${compatible.InputUsdPerMillion:0.####} / " +
+                $"出力 ${compatible.OutputUsdPerMillion:0.####}（APIキー画面で編集）";
+            PricingHistoryChart.SetData([], PricingCurrency.Usd);
+            return;
+        }
 
         if (_selectedPricingModel is null ||
             !_pricingEvents.ContainsKey(_selectedPricingModel))
@@ -1463,6 +1619,7 @@ public partial class SettingsWindow : Window
 
         foreach (ApiProvider provider in inUse.Distinct())
         {
+            if (provider == ApiProvider.OpenAiCompatible) continue;
             if (ApiKeySourceOf(updated, provider) != ApiKeySource.EnvironmentVariable ||
                 _credentials.EnvironmentKeyAvailable(provider))
             {
@@ -1480,7 +1637,8 @@ public partial class SettingsWindow : Window
 
         try
         {
-            foreach (ApiProvider provider in Enum.GetValues<ApiProvider>())
+            foreach (ApiProvider provider in Enum.GetValues<ApiProvider>().Where(
+                         provider => provider != ApiProvider.OpenAiCompatible))
             {
                 if (_pendingApiKeys.TryGetValue(provider, out string? key) && key.Length > 0)
                 {
@@ -1491,6 +1649,11 @@ public partial class SettingsWindow : Window
                     _credentials.DeleteStoredApiKey(provider);
                 }
             }
+
+            foreach ((string id, string key) in _pendingCompatibleKeys)
+                _credentials.SaveCompatibleApiKey(id, key);
+            foreach (string id in _deleteCompatibleKeys)
+                _credentials.DeleteCompatibleApiKey(id);
 
             return true;
         }

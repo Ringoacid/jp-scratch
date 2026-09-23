@@ -68,6 +68,27 @@ internal static class ProviderCompletionGuardValidation
                 ("停止理由なし", Fill(
                     """{"choices":[{"message":{"role":"assistant","content":"@TEXT@"}}]}""", "")),
             ]),
+        new(
+            "OpenAI API互換",
+            http =>
+            {
+                OpenAiCompatibleProfile profile = new()
+                {
+                    Name = "テスト",
+                    EndpointUrl = "https://example.invalid/v1/chat/completions",
+                    ModelId = "test-model",
+                    InputUsdPerMillion = 1m,
+                    OutputUsdPerMillion = 2m,
+                };
+                return new OpenAiCompatibleProofreadingClient(
+                    () => null, http, () => profile, () => profile.SelectionId);
+            },
+            PlamoBody("stop"),
+            [
+                ("打ち切り（length）", PlamoBody("length")),
+                ("停止理由なし", Fill(
+                    """{"choices":[{"message":{"role":"assistant","content":"@TEXT@"}}]}""", "")),
+            ]),
     ];
 
     internal static async Task<bool> RunSelfTestsAsync()
@@ -103,7 +124,9 @@ internal static class ProviderCompletionGuardValidation
         {
             GeminiProofreadingResult result = await client.ProofreadAsync(
                 new ProofreadingRequest(0, Source.Length, Source, null, null, "hash", 0, 0, 1));
-            return result.CorrectedText == Source;
+            return result.CorrectedText == Source &&
+                   (testCase.Name != "Anthropic" ||
+                    (result.Usage.PromptTokens == 19 && result.Usage.CachedContentTokens == 5));
         }
         catch (GeminiClientException ex)
         {
@@ -164,7 +187,8 @@ internal static class ProviderCompletionGuardValidation
             """
             {"stop_reason":"@REASON@",
              "content":[{"type":"text","text":"@TEXT@"}],
-             "usage":{"input_tokens":11,"output_tokens":9}}
+             "usage":{"input_tokens":11,"cache_read_input_tokens":5,
+                      "cache_creation_input_tokens":3,"output_tokens":9}}
             """,
             stopReason);
 

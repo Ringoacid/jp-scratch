@@ -5,6 +5,8 @@ using System.Linq;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -43,7 +45,7 @@ internal static class Program
             current.StartWithWindows = false;
             var credentials = Create("Services.CredentialService", Path.Combine(data, "credentials.dat"),
                 (Func<ApiProvider, string?>)(_ => null));
-            var pricing = Create("Services.PricingService", Path.Combine(data, "pricing.json"), null);
+            var pricing = Create("Services.PricingService", Path.Combine(data, "pricing.json"), null, null);
             using var database = (IDisposable)Create("Services.Database", ":memory:");
             using var subscriptions = (IDisposable)Create("Proofreading.SubscriptionService", new object?[] { null });
             var window = (SettingsWindow)Create("Views.SettingsWindow", settings, credentials, pricing,
@@ -82,6 +84,7 @@ internal static class Program
                     using var stream = File.Create(Path.Combine(output, $"settings-{file}.png"));
                     encoder.Save(stream);
                     Console.WriteLine($"{header}: settings-{file}.png ({bitmap.PixelWidth}x{bitmap.PixelHeight})");
+                    if (header == "料金") VerifyPricingWheel(window);
                 }
             }
             finally { window.Close(); app.Shutdown(); }
@@ -98,4 +101,31 @@ internal static class Program
         => Activator.CreateInstance(AppAssembly.GetType("JpScratch." + name, throwOnError: true)!,
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
             binder: null, args, culture: null)!;
+
+    private static void VerifyPricingWheel(SettingsWindow window)
+    {
+        var combo = (ComboBox)window.FindName("PricingModelCombo");
+        combo.IsDropDownOpen = true;
+        window.Dispatcher.Invoke(() => { }, DispatcherPriority.ContextIdle);
+        combo.UpdateLayout();
+        var popup = (Popup)combo.Template.FindName("PART_Popup", combo);
+        var border = (Border)popup.Child;
+        var scroll = (ScrollViewer)border.Child;
+        if (scroll.ScrollableHeight <= 0)
+            throw new InvalidOperationException("Pricing model list did not overflow the dropdown.");
+        scroll.ScrollToTop();
+        window.Dispatcher.Invoke(() => { }, DispatcherPriority.ContextIdle);
+
+        scroll.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120)
+        {
+            RoutedEvent = UIElement.MouseWheelEvent,
+        });
+        window.Dispatcher.Invoke(() => { }, DispatcherPriority.ContextIdle);
+        double offset = scroll.VerticalOffset;
+        double maximum = scroll.ScrollableHeight;
+        combo.IsDropDownOpen = false;
+        if (offset <= 0 || offset >= maximum)
+            throw new InvalidOperationException($"Pricing wheel jumped to an edge: {offset} / {maximum}.");
+        Console.WriteLine($"料金モデル一覧: ホイール1回で中間へ移動 ({offset:0.#} / {maximum:0.#})");
+    }
 }

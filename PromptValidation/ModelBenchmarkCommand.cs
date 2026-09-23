@@ -82,7 +82,7 @@ internal static class ModelBenchmarkCommand
         Console.WriteLine("=== JP Scratch 校正モデル比較ベンチマーク ===");
         Console.WriteLine($"データディレクトリ（本体と一致している必要がある）: {DataDirectory()}");
         Console.WriteLine($"システム指示: {systemInstruction.Length} 文字 / sha256 {systemInstructionHash[..16]}…");
-        Console.WriteLine($"用途: 手動（ManualEffort） / 試行 {options.Trials} 回 / " +
+        Console.WriteLine($"用途: {(options.Purpose == ProofreadingPurpose.Manual ? "手動" : "自動")} / 試行 {options.Trials} 回 / " +
                           $"タイムアウト {options.TimeoutSeconds} 秒（全モデル共通）");
         Console.WriteLine();
 
@@ -252,7 +252,7 @@ internal static class ModelBenchmarkCommand
                 }
 
                 clients[descriptor.Id] = CreateClient(
-                    descriptor, keys[descriptor.Provider], http, timeout);
+                    descriptor, keys[descriptor.Provider], http, timeout, options.Purpose);
             }
 
             // 文章でインターリーブする（試行 → 文章 → モデル）。モデル単位でまとめると、
@@ -310,7 +310,7 @@ internal static class ModelBenchmarkCommand
                     descriptor.Id,
                     descriptor.DisplayName,
                     ProofreadingModelCatalog.ProviderDisplayName(descriptor.Provider),
-                    descriptor.EffortFor(ProofreadingPurpose.Manual),
+                    descriptor.EffortFor(options.Purpose),
                     modelPricing.InputUsdPerMillion,
                     modelPricing.OutputUsdPerMillion,
                     modelPricing.Currency,
@@ -326,7 +326,7 @@ internal static class ModelBenchmarkCommand
         BenchmarkReport report = new(
             runStartedAt,
             DateTimeOffset.Now.ToString("O", CultureInfo.InvariantCulture),
-            "Manual",
+            options.Purpose.ToString(),
             options.Trials,
             options.TimeoutSeconds,
             systemInstructionHash,
@@ -344,7 +344,7 @@ internal static class ModelBenchmarkCommand
             ModelBenchmark.Summarize(modelInfos, textInfos, results),
             results);
 
-        string outputPath = Path.GetFullPath(options.OutputPath ?? DefaultOutputPath(options.Trials));
+        string outputPath = Path.GetFullPath(options.OutputPath ?? DefaultOutputPath(options.Trials, options.Purpose));
         string? directory = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
         await File.WriteAllTextAsync(outputPath, JsonSerializer.Serialize(report, JsonOptions));
@@ -474,21 +474,22 @@ internal static class ModelBenchmarkCommand
         ModelDescriptor descriptor,
         string apiKey,
         HttpClient httpClient,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        ProofreadingPurpose purpose)
         => descriptor.Provider switch
         {
             ApiProvider.Google => new GeminiProofreadingClient(
                 () => apiKey, httpClient, descriptor.Id, null, timeout,
-                () => ProofreadingPurpose.Manual),
+                () => purpose),
             ApiProvider.OpenAi => new OpenAiProofreadingClient(
                 () => apiKey, httpClient, descriptor.Id, null, timeout,
-                () => ProofreadingPurpose.Manual),
+                () => purpose),
             ApiProvider.Anthropic => new AnthropicProofreadingClient(
                 () => apiKey, httpClient, descriptor.Id, null, timeout,
-                () => ProofreadingPurpose.Manual),
+                () => purpose),
             ApiProvider.PreferredNetworks => new PlamoProofreadingClient(
                 () => apiKey, httpClient, descriptor.Id, null, timeout,
-                () => ProofreadingPurpose.Manual),
+                () => purpose),
             _ => throw new ArgumentOutOfRangeException(nameof(descriptor)),
         };
 
@@ -551,7 +552,7 @@ internal static class ModelBenchmarkCommand
     private static void PrintSummary(BenchmarkReport report)
     {
         Console.WriteLine();
-        Console.WriteLine("=== モデル別サマリ（手動用 effort、中央値）===");
+        Console.WriteLine($"=== モデル別サマリ（{(report.Purpose == "Manual" ? "手動" : "自動")}用 effort、中央値）===");
         foreach (BenchmarkModelSummary summary in report.Summary.OrderBy(s => s.MedianElapsedMs ?? double.MaxValue))
         {
             string elapsed = summary.MedianElapsedMs is { } ms ? $"{ms / 1000:F1} s" : "—";
@@ -579,11 +580,11 @@ internal static class ModelBenchmarkCommand
             ?? throw new InvalidOperationException("benchmark-texts.json を読み取れませんでした。");
     }
 
-    private static string DefaultOutputPath(int trials)
+    private static string DefaultOutputPath(int trials, ProofreadingPurpose purpose)
         => Path.Combine(
             "PromptValidation",
             "results",
-            $"model-benchmark-{DateTime.Now:yyyy-MM-dd}-r{trials}.json");
+            $"model-benchmark-{DateTime.Now:yyyy-MM-dd}-{purpose.ToString().ToLowerInvariant()}-r{trials}.json");
 
     private static string DataDirectory()
         => Path.GetDirectoryName(AppPaths.CredentialsFile) ?? "(不明)";
@@ -615,9 +616,10 @@ internal static class ModelBenchmarkCommand
               --trials N        1 モデル × 1 文章あたりの試行回数（既定: 3）
               --max-cost USD    実測の累計費用の上限。超えたら以後を打ち切る（既定: 10.00）
               --models a,b      対象モデルIDを絞る（既定: カタログの全モデル）
+              --purpose P       automatic または manual（既定: manual）
               --texts a,b       対象文章IDを絞る（既定: benchmark-texts.json の全件）
               --timeout S       全モデル共通のタイムアウト秒（既定: 120）
-              --output PATH     保存先（既定: PromptValidation/results/model-benchmark-{日付}-r{試行}.json）
+              --output PATH     保存先（既定: PromptValidation/results/model-benchmark-{日付}-{用途}-r{試行}.json）
               --yes             実行前の確認を省略する
               --help            このヘルプを表示
 
@@ -631,6 +633,7 @@ internal static class ModelBenchmarkCommand
         decimal MaxCostUsd,
         IReadOnlyList<string>? ModelIds,
         IReadOnlyList<string>? TextIds,
+        ProofreadingPurpose Purpose,
         int TimeoutSeconds,
         string? OutputPath,
         bool AssumeYes,
@@ -642,6 +645,7 @@ internal static class ModelBenchmarkCommand
             decimal maxCostUsd = 10.00m;
             IReadOnlyList<string>? modelIds = null;
             IReadOnlyList<string>? textIds = null;
+            ProofreadingPurpose purpose = ProofreadingPurpose.Manual;
             int timeoutSeconds = DefaultTimeoutSeconds;
             string? output = null;
             bool assumeYes = false;
@@ -668,6 +672,14 @@ internal static class ModelBenchmarkCommand
                         break;
                     case "--models":
                         modelIds = SplitList(NextValue(args, ref index, argument));
+                        break;
+                    case "--purpose":
+                        purpose = NextValue(args, ref index, argument).ToLowerInvariant() switch
+                        {
+                            "automatic" => ProofreadingPurpose.Automatic,
+                            "manual" => ProofreadingPurpose.Manual,
+                            _ => throw new ArgumentException("--purpose は automatic または manual を指定してください。"),
+                        };
                         break;
                     case "--texts":
                         textIds = SplitList(NextValue(args, ref index, argument));
@@ -696,7 +708,7 @@ internal static class ModelBenchmarkCommand
             }
 
             return new BenchmarkOptions(
-                trials, maxCostUsd, modelIds, textIds, timeoutSeconds, output, assumeYes, help);
+                trials, maxCostUsd, modelIds, textIds, purpose, timeoutSeconds, output, assumeYes, help);
         }
 
         private static IReadOnlyList<string> SplitList(string value)

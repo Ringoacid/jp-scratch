@@ -122,10 +122,10 @@ public static class ProofreadingModelCatalog
     public const string OpenAiModel = "gpt-5.6-luna";
 
     /// <summary>新規インストール時の既定。入力中の自動校正は高速・低価格のモデルを使う。</summary>
-    public const string DefaultAutomaticModel = OpenAiModel;
+    public const string DefaultAutomaticModel = "gpt-6-luna";
 
-    /// <summary>新規インストール時の既定。最終仕上がりの確認は品質の高いモデルを使う。</summary>
-    public const string DefaultManualModel = "claude-sonnet-5";
+    /// <summary>新規インストール時の既定。比較計測で品質と価格のバランスを確認したモデル。</summary>
+    public const string DefaultManualModel = "gpt-6-luna";
 
     /// <summary>タイムアウト設定が無いときの保険。通常は設定値が使われる。</summary>
     public static readonly TimeSpan DefaultRequestTimeout = TimeSpan.FromSeconds(15);
@@ -142,6 +142,10 @@ public static class ProofreadingModelCatalog
         // ---- OpenAI（Responses API）----
         new("gpt-6-astra", "GPT 6 Astra", ApiProvider.OpenAi, Slow,
             "low", "medium", 10.00m, 50.00m, "USD", "2026-09-04"),
+        new("gpt-6-sol", "GPT 6 Sol", ApiProvider.OpenAi, Slow,
+            "low", "medium", 2.00m, 10.00m, "USD", "2026-09-23"),
+        new("gpt-6-luna", "GPT 6 Luna", ApiProvider.OpenAi, Fast,
+            "low", "medium", 0.10m, 0.50m, "USD", "2026-09-23"),
         // Sol は「少なくとも 2026-11-21 まで」の割引中で終了日が確定していない。期限付きの
         // PromotionalPricing にすると延長された場合にその日以降を過大見積もりするため、
         // 通常単価として持ち、値上げが公表されたら差し替える。
@@ -180,10 +184,12 @@ public static class ProofreadingModelCatalog
             "low", "medium", 10.00m, 50.00m, "USD", "2026-09-01"),
         new("claude-opus-5", "Claude Opus 5", ApiProvider.Anthropic, Slow,
             "low", "medium", 5.00m, 25.00m, "USD", "2026-08-04"),
+        new("claude-opus-5-5", "Claude Opus 5.5", ApiProvider.Anthropic, Slow,
+            "low", "medium", 4.00m, 20.00m, "USD", "2026-09-22"),
         // 導入価格の $2 / $10 がそのまま通常価格に確定し、2026-09-01 に予定されていた
         // $3 / $15 への値上げは行われないと公表された。期間限定扱いのままだと 9/1 から
         // 実価格の 1.5 倍で見積もるため、通常単価へ移して PromotionalPricing を外す。
-        new(DefaultManualModel, "Claude Sonnet 5", ApiProvider.Anthropic, Medium,
+        new("claude-sonnet-5", "Claude Sonnet 5", ApiProvider.Anthropic, Medium,
             "low", "medium", 2.00m, 10.00m, "USD", "2026-08-24"),
         new("claude-haiku-4-5-20251001", "Claude Haiku 4.5", ApiProvider.Anthropic, Fast,
             null, null, 1.00m, 5.00m, "USD", "2026-08-04"),
@@ -203,12 +209,16 @@ public static class ProofreadingModelCatalog
         [.. Descriptors.Select(d => d.Id)];
 
     public static bool IsSupported(string? model)
-        => model is not null && ById.ContainsKey(model.Trim());
+        => model is not null &&
+           (ById.ContainsKey(model.Trim()) || OpenAiCompatibleProfile.TryGetProfileId(model.Trim(), out _));
 
     /// <summary>未知のモデルIDでも落とさず、既定モデルの記述子へ寄せる。</summary>
     public static ModelDescriptor Get(string? model)
         => model is not null && ById.TryGetValue(model.Trim(), out ModelDescriptor? found)
             ? found
+            : OpenAiCompatibleProfile.TryGetProfileId(model, out _)
+                ? new ModelDescriptor(model!.Trim(), "OpenAI API互換", ApiProvider.OpenAiCompatible,
+                    Medium, null, null, 0m, 0m, "USD", "2026-09-23")
             : ById[DefaultAutomaticModel];
 
     public static bool TryGet(string? model, out ModelDescriptor descriptor)
@@ -216,6 +226,12 @@ public static class ProofreadingModelCatalog
         if (model is not null && ById.TryGetValue(model.Trim(), out ModelDescriptor? found))
         {
             descriptor = found;
+            return true;
+        }
+
+        if (OpenAiCompatibleProfile.TryGetProfileId(model, out _))
+        {
+            descriptor = Get(model);
             return true;
         }
 
@@ -250,6 +266,7 @@ public static class ProofreadingModelCatalog
             ApiProvider.OpenAi => "OpenAI",
             ApiProvider.Anthropic => "Anthropic",
             ApiProvider.PreferredNetworks => "PLaMo",
+            ApiProvider.OpenAiCompatible => "OpenAI API互換",
             _ => provider.ToString(),
         };
 
@@ -284,11 +301,11 @@ public static class ProofreadingModelCatalog
     /// Fable 5 は無効化そのものが 400、Haiku 4.5 は adaptive 非対応なのでどちらも送らない。
     /// </summary>
     public static bool SupportsDisabledThinking(string? model)
-        => Get(model).Id is "claude-opus-5" or DefaultManualModel;
+        => Get(model).Id is "claude-opus-5" or "claude-sonnet-5";
 
     /// <summary>Anthropic で adaptive thinking を明示できるモデルか（Haiku 4.5 は非対応）。</summary>
     public static bool SupportsAdaptiveThinking(string? model)
-        => Get(model).Id is "claude-fable-5" or "claude-fable-5-1" or "claude-opus-5" or DefaultManualModel;
+        => Get(model).Id is "claude-fable-5" or "claude-fable-5-1" or "claude-opus-5" or "claude-opus-5-5" or "claude-sonnet-5";
 
     /// <summary>
     /// v3 までの単一モデル設定を、自動用・手動用の 2 枠へ移す（要件 3.5.1）。

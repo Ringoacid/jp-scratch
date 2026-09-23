@@ -90,7 +90,8 @@ public partial class App : Application
         ConfirmEnvironmentCredentialSource();
 
         _database = new Database();
-        _pricing = new PricingService();
+        _pricing = new PricingService(compatibleProfileResolver:
+            model => Models.OpenAiCompatibleProfile.Find(_settings.Current, model));
         _apiCalls = new ApiCallRepository(_database);
         _fxRates = new FxRateService(_database);
         _reactions = new ReactionRepository(_database);
@@ -363,6 +364,7 @@ public partial class App : Application
         // 見ることになる。自動用と手動用が同じプロバイダーなら 1 回だけになる。
         foreach (Models.ApiProvider provider in InUseProviders())
         {
+            if (provider == Models.ApiProvider.OpenAiCompatible) continue;
             ConfirmCredentialSourceIfNeeded(
                 provider,
                 source: ApiKeySourceOf(provider),

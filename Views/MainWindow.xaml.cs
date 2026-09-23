@@ -2770,12 +2770,14 @@ public partial class MainWindow : Window
         int suggestionCount,
         int discardedCount)
     {
-        ApiUsageCost cost = CreateUsageCost(
-            usage.PromptTokens, usage.BillableOutputTokens);
+        ApiUsageCost cost = usage.IsKnown
+            ? CreateUsageCost(usage.PromptTokens, usage.BillableOutputTokens)
+            : new ApiUsageCost(0, 0, 0m, null, null, null,
+                IsCostConfirmed: false, IsUsageKnown: false);
         cost = cost with { IsUsageKnown = usage.IsKnown };
         return new RecordedApiCall(RecordApiCall(new ApiCallLogEntry(
             trigger,
-            _proofreadingClient.Model,
+            ModelForBillingLog(),
             usage.PromptTokens,
             usage.BillableOutputTokens,
             cost.UsdCost,
@@ -2805,7 +2807,7 @@ public partial class MainWindow : Window
         ApiUsageCost cost;
         Exception? accountingError = null;
         string errorMessage = exception.Message;
-        if (usage is not null)
+        if (usage is { IsKnown: true })
         {
             try
             {
@@ -2841,7 +2843,7 @@ public partial class MainWindow : Window
 
         long? apiCallId = RecordApiCall(new ApiCallLogEntry(
             trigger,
-            _proofreadingClient.Model,
+            ModelForBillingLog(),
             promptTokens,
             outputTokens,
             cost.UsdCost,
@@ -2939,11 +2941,17 @@ public partial class MainWindow : Window
         => costs.Any(cost => cost.Backend != BackendKind.Api) ? "契約枠を使用（追加請求額不明）" : ApiUsageDisplayFormatter.BuildUsageText(
             costs.Select(cost => cost.ToDisplay()).ToArray());
 
+    private string ModelForBillingLog()
+        => Router.CompatibleProfileForCurrentCall is { } profile
+            ? $"OpenAI API互換: {profile.Name} ({profile.ModelId})"
+            : _proofreadingClient.Model;
+
     private ApiUsageCost CreateUsageCost(int promptTokens, int outputTokens)
     {
         if (BackendFor() != BackendKind.Api) return new(promptTokens, outputTokens, 0m, null, null, null, false, true) { Backend = BackendFor() };
         PricingQuote quote = _pricing.Calculate(
-            _proofreadingClient.Model, promptTokens, outputTokens);
+            _proofreadingClient.Model, promptTokens, outputTokens,
+            Router.CompatibleProfileForCurrentCall);
         // 応答単位で一度だけキャッシュを読む。このsnapshotをログと全ての応答表示で共有する。
         FxRate? fxRate = _fxRates.GetCachedRate();
         if (fxRate is null)
@@ -2972,15 +2980,16 @@ public partial class MainWindow : Window
         if (BackendFor(purpose) != BackendKind.Api) return "契約枠を消費します。追加請求の有無は契約側の設定によります。";
         string model = ModelForPurpose(purpose);
         ModelPricing pricing = _pricing.GetPricing(model);
+        OpenAiCompatibleProfile? compatible = OpenAiCompatibleProfile.Find(_settings.Current, model);
         string unit = string.Equals(pricing.Currency, PricingCurrency.Jpy, StringComparison.Ordinal)
             ? "¥"
             : "$";
         return
-            $"{ProofreadingModelCatalog.DisplayName(model)} 単価（{pricing.UpdatedAt}）: " +
+            $"{(compatible is null ? ProofreadingModelCatalog.DisplayName(model) : $"{compatible.Name}（{compatible.ModelId}）")} 単価（{pricing.UpdatedAt}）: " +
             $"入力 {unit}{pricing.InputUsdPerMillion:0.####}／100万トークン、" +
             $"出力・推論 {unit}{pricing.OutputUsdPerMillion:0.####}／100万トークン\n" +
-            "※ 表示料金は概算です。キャッシュ関連料金などは考慮していないため、" +
-            "実際の請求額が表示額を上回る場合があります。";
+            "※ 表示料金は概算です。キャッシュ料金は計算せず、読み込み割引が適用されると表示額は実際より高めになります。" +
+            "キャッシュ書き込み割増・追加料金・単価変更などにより、実際の請求額が表示額を上回る場合もあります。";
     }
 
     /// <summary>起動後に静かに日次レートを更新し、既存のUSD表示を壊さずに再描画する。</summary>

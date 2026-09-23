@@ -31,6 +31,10 @@ internal static class CredentialServiceValidation
             service.SaveStoredApiKey(ApiProvider.OpenAi, " openai-test-key ");
             service.SaveStoredApiKey(ApiProvider.Anthropic, " anthropic-test-key ");
             service.SaveStoredApiKey(ApiProvider.PreferredNetworks, " plamo-test-key ");
+            string compatibleIdA = Guid.NewGuid().ToString("N");
+            string compatibleIdB = Guid.NewGuid().ToString("N");
+            service.SaveCompatibleApiKey(compatibleIdA, " compatible-key-a ");
+            service.SaveCompatibleApiKey(compatibleIdB, " compatible-key-b ");
 
             byte[] encrypted = File.ReadAllBytes(path);
             bool encryptedPass =
@@ -48,7 +52,15 @@ internal static class CredentialServiceValidation
                 reloaded.GetApiKey(ApiProvider.Google, ApiKeySource.Stored) == "stored-test-key" &&
                 reloaded.GetApiKey(ApiProvider.OpenAi, ApiKeySource.Stored) == "openai-test-key" &&
                 reloaded.GetApiKey(ApiProvider.Anthropic, ApiKeySource.Stored) == "anthropic-test-key" &&
-                reloaded.GetApiKey(ApiProvider.PreferredNetworks, ApiKeySource.Stored) == "plamo-test-key";
+                reloaded.GetApiKey(ApiProvider.PreferredNetworks, ApiKeySource.Stored) == "plamo-test-key" &&
+                reloaded.GetCompatibleApiKey(compatibleIdA) == "compatible-key-a" &&
+                reloaded.GetCompatibleApiKey(compatibleIdB) == "compatible-key-b";
+
+            reloaded.DeleteCompatibleApiKey(compatibleIdA);
+            bool compatibleDeletePass =
+                reloaded.GetCompatibleApiKey(compatibleIdA) is null &&
+                reloaded.GetCompatibleApiKey(compatibleIdB) == "compatible-key-b" &&
+                reloaded.GetApiKey(ApiProvider.Google, ApiKeySource.Stored) == "stored-test-key";
 
             reloaded.DeleteStoredApiKey(ApiProvider.OpenAi);
             bool perProviderDeletePass =
@@ -59,7 +71,11 @@ internal static class CredentialServiceValidation
             reloaded.DeleteStoredApiKey(ApiProvider.Google);
             reloaded.DeleteStoredApiKey(ApiProvider.Anthropic);
             reloaded.DeleteStoredApiKey(ApiProvider.PreferredNetworks);
+            bool compatibleStillStored = File.Exists(path) &&
+                                         reloaded.GetCompatibleApiKey(compatibleIdB) == "compatible-key-b";
+            reloaded.DeleteCompatibleApiKey(compatibleIdB);
             bool deletePass =
+                compatibleStillStored &&
                 reloaded.StoredKeyState(ApiProvider.Google) == StoredCredentialState.Missing &&
                 reloaded.GetApiKey(ApiProvider.Google, ApiKeySource.Stored) is null &&
                 !File.Exists(path);
@@ -75,11 +91,12 @@ internal static class CredentialServiceValidation
             Console.WriteLine($"資格情報（DPAPI暗号化）: {(encryptedPass ? "PASS" : "FAIL")}");
             Console.WriteLine($"資格情報（4プロバイダー再読込）: {(reloadPass ? "PASS" : "FAIL")}");
             Console.WriteLine($"資格情報（プロバイダー別削除）: {(perProviderDeletePass ? "PASS" : "FAIL")}");
+            Console.WriteLine($"資格情報（互換接続別保存・削除）: {(compatibleDeletePass ? "PASS" : "FAIL")}");
             Console.WriteLine($"資格情報（全削除）: {(deletePass ? "PASS" : "FAIL")}");
             Console.WriteLine($"資格情報（破損検出）: {(corruptPass ? "PASS" : "FAIL")}");
 
             return environmentPass && missingPass && encryptedPass &&
-                   reloadPass && perProviderDeletePass && deletePass && corruptPass;
+                   reloadPass && perProviderDeletePass && compatibleDeletePass && deletePass && corruptPass;
         }
         finally
         {

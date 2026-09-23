@@ -13,7 +13,7 @@ namespace JpScratch.Proofreading;
 /// </summary>
 internal sealed class AnthropicProofreadingClient : ProofreadingClientBase
 {
-    internal const string DefaultModel = ProofreadingModelCatalog.DefaultManualModel;
+    internal const string DefaultModel = "claude-sonnet-5";
 
     /// <summary>1 リクエストの出力トークン上限（思考トークンを含む）。<see cref="BuildRequestJson"/> 参照。</summary>
     private const int MaxOutputTokens = 16384;
@@ -153,11 +153,15 @@ internal sealed class AnthropicProofreadingClient : ProofreadingClientBase
     protected override GeminiUsage ExtractUsage(JsonElement root)
     {
         if (!root.TryGetProperty("usage", out JsonElement usage))
-            return new GeminiUsage(0, 0, 0, 0, 0);
+            return GeminiUsage.Unknown;
 
-        int promptTokens = ReadInt(usage, "input_tokens");
+        int uncachedTokens = ReadInt(usage, "input_tokens");
         int outputTokens = ReadInt(usage, "output_tokens");
         int cachedTokens = ReadInt(usage, "cache_read_input_tokens");
+        int cacheCreationTokens = ReadInt(usage, "cache_creation_input_tokens");
+        long allInputTokens = (long)uncachedTokens + cachedTokens + cacheCreationTokens;
+        if (allInputTokens > int.MaxValue) return GeminiUsage.Unknown;
+        int promptTokens = (int)allInputTokens;
         return new GeminiUsage(
             promptTokens,
             outputTokens,

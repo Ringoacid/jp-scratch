@@ -20,6 +20,7 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
     private ProofreadingPurpose? _pinnedPurpose;
     private BackendKind? _pinnedBackend;
     private TimeSpan? _pinnedTimeout;
+    private OpenAiCompatibleProfile? _pinnedCompatibleProfile;
     private IProofreadingClient? _subscriptionRun;
     internal SubscriptionService Subscriptions { get; } = new();
     internal BackendKind Backend => _pinnedBackend ?? BackendFor(CurrentPurpose);
@@ -61,6 +62,11 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
                 () => Model,
                 () => CurrentTimeout,
                 () => CurrentPurpose)),
+            [ApiProvider.OpenAiCompatible] = new(() => new OpenAiCompatibleProofreadingClient(
+                credentials,
+                () => CurrentCompatibleProfile,
+                () => Model,
+                () => CurrentTimeout)),
         };
     }
 
@@ -73,6 +79,14 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
     private ProofreadingPurpose CurrentPurpose => _pinnedPurpose ?? ProofreadingPurpose.Automatic;
 
     private TimeSpan CurrentTimeout => _pinnedTimeout ?? TimeoutFor(CurrentPurpose);
+
+    private OpenAiCompatibleProfile? CurrentCompatibleProfile =>
+        _pinnedCompatibleProfile ?? OpenAiCompatibleProfile.Find(_settings.Current, Model);
+
+    internal OpenAiCompatibleProfile? CompatibleProfileForCurrentCall =>
+        ProofreadingModelCatalog.ProviderOf(Model) == ApiProvider.OpenAiCompatible
+            ? CurrentCompatibleProfile
+            : null;
 
     internal string ModelFor(ProofreadingPurpose purpose)
         => purpose == ProofreadingPurpose.Manual
@@ -97,6 +111,7 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
         _pinnedModel = ModelFor(purpose);
         _pinnedBackend = BackendFor(purpose);
         _pinnedTimeout = TimeoutFor(purpose);
+        _pinnedCompatibleProfile = OpenAiCompatibleProfile.Find(_settings.Current, _pinnedModel);
         if (Backend != BackendKind.Api)
             _subscriptionRun = new SubscriptionProofreadingClient(Subscriptions, Backend, PathFor(Backend), Model,
                 Subscriptions.State(Backend)?.Account, allowUnknownQuota, CurrentTimeout,
@@ -109,6 +124,7 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
         _pinnedPurpose = null;
         _pinnedBackend = null;
         _pinnedTimeout = null;
+        _pinnedCompatibleProfile = null;
         _subscriptionRun = null;
     }
 

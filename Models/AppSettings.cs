@@ -86,6 +86,9 @@ public sealed class AppSettings
     /// <summary>PLaMo APIキーの取得元。</summary>
     public ApiKeySource PlamoApiKeySource { get; set; } = ApiKeySource.Unspecified;
 
+    /// <summary>OpenAI Chat Completions 互換接続。APIキーは credentials.dat に別保存する。</summary>
+    public List<OpenAiCompatibleProfile> OpenAiCompatibleProfiles { get; set; } = [];
+
     // ---- 校正モデル（要件 3.5.1「用途別の 2 枠」） ----
     /// <summary>
     /// v3 までの単一モデル設定。読み込み時に自動用・手動用へ移行するためだけに残す。
@@ -224,5 +227,10 @@ public sealed class AppSettings
         new HotkeySpec(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Alt,
                        System.Windows.Input.Key.Enter));
 
-    public AppSettings Clone() => (AppSettings)MemberwiseClone();
+    public AppSettings Clone()
+    {
+        var clone = (AppSettings)MemberwiseClone();
+        clone.OpenAiCompatibleProfiles = [.. OpenAiCompatibleProfiles];
+        return clone;
+    }
 }

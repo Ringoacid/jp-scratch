@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+                    xmlns:controls="clr-namespace:JpScratch.Controls">
 
     <!--
         共通スタイル。色はすべて DynamicResource 経由でテーマ辞書から引く。
@@ -533,9 +534,11 @@
                                     CornerRadius="4"
                                     MinWidth="{TemplateBinding ActualWidth}"
                                     MaxHeight="{TemplateBinding MaxDropDownHeight}">
-                                <ScrollViewer>
+                                <!-- グループ化されたモデル一覧を論理単位でスクロールすると
+                                     ホイール1回で次のグループへ飛ぶ。ピクセル単位で移動する。 -->
+                                <controls:PixelWheelScrollViewer CanContentScroll="False">
                                     <ItemsPresenter />
-                                </ScrollViewer>
+                                </controls:PixelWheelScrollViewer>
                             </Border>
                         </Popup>
                     </Grid>

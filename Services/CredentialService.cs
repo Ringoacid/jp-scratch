@@ -37,6 +37,7 @@ internal sealed class CredentialService
         public string? OpenAi { get; set; }
         public string? Anthropic { get; set; }
         public string? Plamo { get; set; }
+        public Dictionary<string, string> CompatibleProfiles { get; set; } = new(StringComparer.Ordinal);
 
         public string? Get(ApiProvider provider)
             => provider switch
@@ -64,7 +65,8 @@ internal sealed class CredentialService
             => string.IsNullOrWhiteSpace(Gemini) &&
                string.IsNullOrWhiteSpace(OpenAi) &&
                string.IsNullOrWhiteSpace(Anthropic) &&
-               string.IsNullOrWhiteSpace(Plamo);
+               string.IsNullOrWhiteSpace(Plamo) &&
+               (CompatibleProfiles?.Count ?? 0) == 0;
     }
 
     internal CredentialService(
@@ -131,6 +133,41 @@ internal sealed class CredentialService
         }
 
         SaveStoredCredentials(credentials);
+    }
+
+    internal string? GetCompatibleApiKey(string profileId)
+        => TryGetStoredCredentials(out StoredCredentials? credentials) &&
+           credentials!.CompatibleProfiles is { } profiles &&
+           profiles.TryGetValue(profileId, out string? key)
+            ? key
+            : null;
+
+    internal bool CompatibleKeyAvailable(string profileId)
+        => !string.IsNullOrWhiteSpace(GetCompatibleApiKey(profileId));
+
+    internal void SaveCompatibleApiKey(string profileId, string apiKey)
+    {
+        if (!Guid.TryParseExact(profileId, "N", out _))
+            throw new ArgumentException("接続設定IDが不正です。", nameof(profileId));
+        string normalized = apiKey.Trim();
+        if (normalized.Length == 0)
+            throw new ArgumentException("APIキーは空にできません。", nameof(apiKey));
+        StoredCredentials credentials = TryGetStoredCredentials(out StoredCredentials? existing)
+            ? existing!
+            : new StoredCredentials();
+        credentials.CompatibleProfiles ??= new(StringComparer.Ordinal);
+        credentials.CompatibleProfiles[profileId] = normalized;
+        SaveStoredCredentials(credentials);
+    }
+
+    internal void DeleteCompatibleApiKey(string profileId)
+    {
+        if (!File.Exists(_credentialsFile)) return;
+        if (!TryGetStoredCredentials(out StoredCredentials? credentials))
+            throw new InvalidDataException("保存済みAPIキーを読み取れません。削除は行いませんでした。");
+        if (credentials!.CompatibleProfiles?.Remove(profileId) != true) return;
+        if (credentials.IsEmpty) File.Delete(_credentialsFile);
+        else SaveStoredCredentials(credentials);
     }
 
     private void SaveStoredCredentials(StoredCredentials credentials)

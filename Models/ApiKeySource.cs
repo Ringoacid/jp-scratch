@@ -27,6 +27,7 @@ public enum ApiProvider
     OpenAi,
     Anthropic,
     PreferredNetworks,
+    OpenAiCompatible,
 }
 
 /// <summary>

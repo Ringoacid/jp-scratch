@@ -193,9 +193,22 @@ internal sealed class SettingsService
             s.ProofreadingParallelism,
             1,
             10);
+        s.OpenAiCompatibleProfiles ??= [];
+        s.OpenAiCompatibleProfiles = s.OpenAiCompatibleProfiles
+            .Where(OpenAiCompatibleProfile.IsValid)
+            .DistinctBy(profile => profile.Id, StringComparer.Ordinal)
+            .ToList();
         MigrateProofreadingModel(s);
         s.AutoProofreadingModel = BackendNames.NormalizeModel(s.AutoBackend, s.AutoProofreadingModel, ProofreadingModelCatalog.DefaultAutomaticModel);
         s.ManualProofreadingModel = BackendNames.NormalizeModel(s.ManualBackend, s.ManualProofreadingModel, ProofreadingModelCatalog.DefaultManualModel);
+        if (s.AutoBackend == BackendKind.Api &&
+            OpenAiCompatibleProfile.TryGetProfileId(s.AutoProofreadingModel, out _) &&
+            OpenAiCompatibleProfile.Find(s, s.AutoProofreadingModel) is null)
+            s.AutoProofreadingModel = ProofreadingModelCatalog.DefaultAutomaticModel;
+        if (s.ManualBackend == BackendKind.Api &&
+            OpenAiCompatibleProfile.TryGetProfileId(s.ManualProofreadingModel, out _) &&
+            OpenAiCompatibleProfile.Find(s, s.ManualProofreadingModel) is null)
+            s.ManualProofreadingModel = ProofreadingModelCatalog.DefaultManualModel;
         s.AutoProofreadingTimeoutSeconds = ClampTimeoutSeconds(s.AutoProofreadingTimeoutSeconds);
         s.ManualProofreadingTimeoutSeconds = ClampTimeoutSeconds(s.ManualProofreadingTimeoutSeconds);
         s.TrashRetentionDays = Math.Clamp(s.TrashRetentionDays, 1, 365);

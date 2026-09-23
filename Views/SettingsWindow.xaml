@@ -990,6 +990,28 @@
                                 <TextBlock Text="キーを空欄にしておくと、保存済みのキーをそのまま使います。変更は「保存して閉じる」で反映します。"
                                            Style="{StaticResource SettingsDescription}"
                                            Margin="0,0,0,8" />
+                                <TextBlock Text="OpenAI API互換" Style="{StaticResource SectionHeader}" Margin="0,16,0,6" />
+                                <TextBlock Text="接続先を複数登録できます。各接続先のモデルIDと入出力単価を設定してください。プリセットはありません。"
+                                           TextWrapping="Wrap" Style="{StaticResource SettingsDescription}" Margin="0,0,0,8" />
+                                <Border Style="{StaticResource SettingsCard}">
+                                    <StackPanel Margin="12">
+                                        <ComboBox x:Name="CompatibleProfileCombo" Style="{StaticResource AppComboBox}"
+                                                  AutomationProperties.Name="OpenAI API互換の接続設定"
+                                                  DisplayMemberPath="DisplayName" SelectedValuePath="Id"
+                                                  SelectionChanged="CompatibleProfileCombo_SelectionChanged" />
+                                        <TextBlock x:Name="CompatibleProfileSummary" TextWrapping="Wrap"
+                                                   Margin="0,8,0,8" Style="{StaticResource SettingsDescription}" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="追加" Style="{StaticResource AppButton}" Click="AddCompatibleProfile_Click" Margin="0,0,8,0" />
+                                            <Button x:Name="EditCompatibleProfileButton" Content="編集" Style="{StaticResource AppButton}"
+                                                    Click="EditCompatibleProfile_Click" Margin="0,0,8,0" />
+                                            <Button x:Name="DeleteCompatibleProfileButton" Content="削除" Style="{StaticResource AppButton}"
+                                                    Click="DeleteCompatibleProfile_Click" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Text="互換接続の料金は入力した単価から概算します。キャッシュ料金は反映しません。読み込み割引が適用されると高めになり、書き込み割増などがあると実額が上回る場合があります。"
+                                           TextWrapping="Wrap" Style="{StaticResource SettingsDescription}" Margin="0,8,0,0" />
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
@@ -1102,8 +1124,9 @@
                                     </StackPanel>
                                 </Border>
                                 <TextBlock Text="料金の計算に使う単価" Style="{StaticResource SectionHeader}" />
-                                <TextBlock Text="概算用の単価です。提供元の請求単価は変わらず、実際の請求額と異なる場合があります。"
+                                <TextBlock Text="概算用の単価です。キャッシュ料金は計算しません。読み込み割引が適用されると表示額は高めになり、書き込み割増などがあると実額が上回る場合があります。OpenAI API互換の単価は「APIキー」で編集します。"
                                            Style="{StaticResource SettingsDescription}"
+                                           TextWrapping="Wrap"
                                            Margin="0,0,0,8" />
                                 <Border Style="{StaticResource SettingsCard}">
                                     <StackPanel>

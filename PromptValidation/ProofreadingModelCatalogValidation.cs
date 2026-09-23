@@ -40,8 +40,12 @@ internal static class ProofreadingModelCatalogValidation
 
         // 既定モデルは必ずカタログに載っていること（載っていないと起動直後に校正が止まる）。
         bool defaultsPass =
+            ProofreadingModelCatalog.DefaultAutomaticModel == "gpt-6-luna" &&
+            ProofreadingModelCatalog.DefaultManualModel == "gpt-6-luna" &&
             ProofreadingModelCatalog.IsSupported(ProofreadingModelCatalog.DefaultAutomaticModel) &&
-            ProofreadingModelCatalog.IsSupported(ProofreadingModelCatalog.DefaultManualModel);
+            ProofreadingModelCatalog.IsSupported(ProofreadingModelCatalog.DefaultManualModel) &&
+            ProofreadingModelCatalog.SupportsDisabledThinking("claude-sonnet-5") &&
+            !ProofreadingModelCatalog.SupportsDisabledThinking("gpt-6-luna");
 
         ModelDescriptor? gemini37 = ProofreadingModelCatalog.All
             .SingleOrDefault(descriptor => descriptor.Id == "gemini-3.7-flash");
@@ -53,8 +57,14 @@ internal static class ProofreadingModelCatalogValidation
             .SingleOrDefault(descriptor => descriptor.Id == "gemini-3.1-flash-lite");
         ModelDescriptor? fable51 = ProofreadingModelCatalog.All
             .SingleOrDefault(descriptor => descriptor.Id == "claude-fable-5-1");
+        ModelDescriptor? sol6 = ProofreadingModelCatalog.All
+            .SingleOrDefault(descriptor => descriptor.Id == "gpt-6-sol");
+        ModelDescriptor? luna6 = ProofreadingModelCatalog.All
+            .SingleOrDefault(descriptor => descriptor.Id == "gpt-6-luna");
+        ModelDescriptor? opus55 = ProofreadingModelCatalog.All
+            .SingleOrDefault(descriptor => descriptor.Id == "claude-opus-5-5");
         bool gemini37Pass =
-            ProofreadingModelCatalog.All.Count == 16 &&
+            ProofreadingModelCatalog.All.Count == 19 &&
             gemini37 is not null &&
             gemini37.Provider == ApiProvider.Google &&
             gemini37.RecommendedTimeout == TimeSpan.FromSeconds(30) &&
@@ -82,7 +92,12 @@ internal static class ProofreadingModelCatalogValidation
             fable51Timeout == TimeSpan.FromSeconds(90) &&
             fable51.InputPricePerMillion == 10.00m &&
             fable51.OutputPricePerMillion == 50.00m &&
-            ProofreadingModelCatalog.SupportsAdaptiveThinking(fable51.Id);
+            ProofreadingModelCatalog.SupportsAdaptiveThinking(fable51.Id) &&
+            sol6 is { Provider: ApiProvider.OpenAi, InputPricePerMillion: 2.00m, OutputPricePerMillion: 10.00m } &&
+            luna6 is { Provider: ApiProvider.OpenAi, InputPricePerMillion: 0.10m, OutputPricePerMillion: 0.50m } &&
+            opus55 is { Provider: ApiProvider.Anthropic, InputPricePerMillion: 4.00m, OutputPricePerMillion: 20.00m } &&
+            ProofreadingModelCatalog.SupportsAdaptiveThinking(opus55.Id) &&
+            !ProofreadingModelCatalog.SupportsDisabledThinking(opus55.Id);
 
         bool highCostWarningPass =
             ProofreadingModelCatalog.IsHighCostForProofreading("gpt-6-astra") &&
@@ -115,7 +130,7 @@ internal static class ProofreadingModelCatalogValidation
         Console.WriteLine($"モデルカタログ（新規は既定のまま）: {(freshPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（未知IDは引き継がない）: {(unknownPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（既定モデルが収録済み）: {(defaultsPass ? "PASS" : "FAIL")}");
-        Console.WriteLine($"モデルカタログ（新規4モデルのID・単価・思考量）: {(newModelsPass ? "PASS" : "FAIL")}");
+        Console.WriteLine($"モデルカタログ（新規モデルのID・単価・思考量）: {(newModelsPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（高価格モデルの注意判定）: {(highCostWarningPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（用途別の思考量）: {(effortPass ? "PASS" : "FAIL")}");
         Console.WriteLine($"モデルカタログ（通貨はPLaMoのみJPY）: {(currencyPass ? "PASS" : "FAIL")}");

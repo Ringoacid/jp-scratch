@@ -23,6 +23,10 @@ public partial class MainWindow
         _allowUnknownQuota = false;
         if (backend == BackendKind.Api)
         {
+            // 互換接続はプロファイルごとにキーを持ち、ローカルサーバーではキーなしも有効。
+            // 送信時の認証ヘッダーは OpenAiCompatibleProofreadingClient が決める。
+            if (ProofreadingModelCatalog.ProviderOf(ModelForPurpose(purpose)) == ApiProvider.OpenAiCompatible)
+                return true;
             if (!string.IsNullOrWhiteSpace(GetActiveApiKey(purpose))) return true;
             SetProofreadingStatus($"{ActiveProviderName(purpose)} APIキーを設定してください", force: true);
             return false;
