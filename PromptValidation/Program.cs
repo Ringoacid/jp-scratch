@@ -15,6 +15,10 @@ internal static class Program
     private static async Task<int> Main(string[] args)
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
+        if (args.Contains("--mock-codex-jsonl")) return await SubscriptionValidation.RunMockAsync();
+        if (args.Contains("--mock-copilot-lifecycle")) return await CopilotLifecycleValidation.RunMockAsync();
+        if (args.Length == 3 && args[0] == "login" && args[1] == "--mock-copilot-login")
+            return await CopilotLoginValidation.RunMockAsync(args[2]);
 
         try
         {
@@ -281,7 +285,8 @@ internal static class Program
         bool trashRepositoryPass = TrashRepositoryValidation.RunSelfTests();
         bool atomicFilePass = AtomicFileValidation.RunSelfTests();
         bool modelBenchmarkPass = ModelBenchmarkValidation.RunSelfTests();
-        return exactPass && fallbackPass && diffPass && paragraphPass &&
+        bool subscriptionPass = await SubscriptionValidation.RunAsync();
+        return subscriptionPass && exactPass && fallbackPass && diffPass && paragraphPass &&
                credentialPass && pricingPass && currencyConversionPass && apiCallPass && apiCallHistoryPass &&
                apiCallUsageTriggerPass && apiCallUnconfirmedPass && hideSuppressionPass && customDateRangePass &&
                billingHistoryEmptyStatePass && usagePeriodPass && usageLimitPass &&
@@ -321,7 +326,7 @@ internal static class Program
               --max-cost USD     1回の実行で許容する推定料金（既定: 2.00）
               --output PATH      JSONレポートを保存
               --dry-run          APIを呼ばずプロンプトとスキーマを表示
-              --self-test        APIを呼ばず位置解決ロジックを検査
+              --self-test        APIを呼ばず、位置解決・課金上限・契約接続などの回帰検証を実行
               --analyze-results PATH
                                  保存済み全文応答の差分抽出を検査（APIは呼ばない）
               --seed-billing DIR [--bulk] [--force]

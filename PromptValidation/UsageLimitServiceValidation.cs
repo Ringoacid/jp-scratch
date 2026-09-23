@@ -1,4 +1,5 @@
 using JpScratch.Services;
+using JpScratch.Models;
 
 namespace JpScratch.PromptValidation;
 
@@ -16,11 +17,43 @@ internal static class UsageLimitServiceValidation
         bool notificationPassed = RunNotificationTests();
         bool monthRolloverPassed = RunMonthRolloverIntegrationTest();
         bool deliveryGatedPassed = RunDeliveryGatedNotificationTests();
+        bool backendPassed = RunBackendTests();
 
         bool passed = boundaryPassed && progressPassed && notificationPassed &&
-            monthRolloverPassed && deliveryGatedPassed;
+            monthRolloverPassed && deliveryGatedPassed && backendPassed;
         Console.WriteLine(
-            "月間上限ガード（境界値・進捗率・通知抑止/月替り再解禁）: " + (passed ? "PASS" : "FAIL"));
+            "月間上限ガード（境界値・接続方式・進捗率・通知抑止/月替り再解禁）: " + (passed ? "PASS" : "FAIL"));
+        return passed;
+    }
+
+    /// <summary>
+    /// 自動・手動で接続方式が異なるときも、API月額上限をAPI用途だけへ適用する。
+    /// 手動確認ダイアログが未ピン留め状態で自動用の接続方式を参照していた回帰を防ぐ。
+    /// </summary>
+    private static bool RunBackendTests()
+    {
+        const decimal limit = 2.00m;
+        bool automaticSubscriptionManualApiAtLimit =
+            !UsageLimitService.IsReachedForPurpose(
+                ProofreadingPurpose.Automatic, BackendKind.GitHubCopilot, BackendKind.Api, 2.00m, limit) &&
+            UsageLimitService.IsReachedForPurpose(
+                ProofreadingPurpose.Manual, BackendKind.GitHubCopilot, BackendKind.Api, 2.00m, limit);
+        bool apiBelowLimit = !UsageLimitService.IsReachedForPurpose(
+            ProofreadingPurpose.Manual, BackendKind.GitHubCopilot, BackendKind.Api, 1.99m, limit);
+        bool automaticApiManualSubscriptionAtLimit =
+            UsageLimitService.IsReachedForPurpose(
+                ProofreadingPurpose.Automatic, BackendKind.Api, BackendKind.CodexAppServer, 2.00m, limit) &&
+            !UsageLimitService.IsReachedForPurpose(
+                ProofreadingPurpose.Manual, BackendKind.Api, BackendKind.CodexAppServer, 2.00m, limit);
+        bool codexSubscriptionAtLimit = !UsageLimitService.IsReachedForPurpose(
+            ProofreadingPurpose.Automatic, BackendKind.CodexAppServer, BackendKind.Api, 5.00m, limit);
+        bool apiUnlimited = !UsageLimitService.IsReachedForPurpose(
+            ProofreadingPurpose.Manual, BackendKind.GitHubCopilot, BackendKind.Api, 5.00m, 0m);
+        bool passed = automaticSubscriptionManualApiAtLimit && automaticApiManualSubscriptionAtLimit && apiBelowLimit &&
+            codexSubscriptionAtLimit && apiUnlimited;
+        Console.WriteLine(
+            "  接続方式（自動契約・手動API/自動API・手動契約/API未到達/契約は非適用/無制限）: " +
+            (passed ? "PASS" : "FAIL"));
         return passed;
     }
 

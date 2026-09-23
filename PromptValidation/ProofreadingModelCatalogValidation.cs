@@ -20,10 +20,11 @@ internal static class ProofreadingModelCatalogValidation
             manual == ProofreadingModelCatalog.GeminiModel;
 
         // 旧設定が空（新規インストール）なら既定のまま。
+        var fresh = new AppSettings();
         (string freshAuto, string freshManual) = ProofreadingModelCatalog.MigrateLegacyModel(
-            "",
-            ProofreadingModelCatalog.DefaultAutomaticModel,
-            ProofreadingModelCatalog.DefaultManualModel);
+            fresh.ProofreadingModel,
+            fresh.AutoProofreadingModel,
+            fresh.ManualProofreadingModel);
         bool freshPass =
             freshAuto == ProofreadingModelCatalog.DefaultAutomaticModel &&
             freshManual == ProofreadingModelCatalog.DefaultManualModel;

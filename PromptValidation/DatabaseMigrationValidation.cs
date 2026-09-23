@@ -69,7 +69,7 @@ internal static class DatabaseMigrationValidation
                 HasColumn(legacyResumed, "api_calls", "usd_cost_confirmed");
 
             bool passed = firstUpgrade && resumedUpgrade && legacyUpgrade && legacyReentry;
-            Console.WriteLine("DB移行（旧版→v5・追加列・中断再開・metadata保持・再入耐性）: " +
+            Console.WriteLine("DB移行（旧版→v6・追加列・中断再開・metadata保持・再入耐性）: " +
                 (passed ? "PASS" : "FAIL"));
             return passed;
         }
@@ -82,7 +82,7 @@ internal static class DatabaseMigrationValidation
     }
 
     /// <summary><see cref="Database.Migrate"/> が到達する最新の user_version。</summary>
-    private const int CurrentVersion = 5;
+    private const int CurrentVersion = 6;
 
     private static int Version(Database database)
         => database.Read("PRAGMA user_version;", reader => reader.Read() ? reader.GetInt32(0) : 0);

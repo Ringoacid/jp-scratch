@@ -39,10 +39,10 @@ internal static class BillingCsvExporterValidation
         string csv = BillingCsvExporter.BuildCsv([]);
         const string expected =
             "日時,種別,モデル,入力トークン,出力トークン,USD,料金状態,元通貨,元通貨額," +
-            "USD/JPYレート,レート基準日,JPY,所要ms,成否,提案件数,破棄件数,エラー\r\n";
+            "USD/JPYレート,レート基準日,JPY,所要ms,成否,提案件数,破棄件数,エラー,接続方式,契約利用量,契約利用量単位\r\n";
 
-        bool passed = csv == expected && BillingCsvExporter.Headers.Length == 17;
-        Console.WriteLine("  ヘッダのみ（0件・17列・CRLF）: " + (passed ? "PASS" : "FAIL"));
+        bool passed = csv == expected && BillingCsvExporter.Headers.Length == 20;
+        Console.WriteLine("  ヘッダのみ（0件・20列・CRLF）: " + (passed ? "PASS" : "FAIL"));
         return passed;
     }
 
