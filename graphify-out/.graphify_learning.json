@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-12T12:04:16.577356+00:00",
+  "generated_at": "2026-09-24T15:59:02.065074+00:00",
   "nodes": {
     "agents_md": {
       "code_fingerprint": "5d8d1bfa3404e0cfc27b4a48e450f5907d6243cd31c09bd0391b6e3708c9b1f1",
@@ -12,13 +12,13 @@
           "q": "次のコミットメッセージを作成してください。"
         }
       ],
-      "score": 0.643685295,
+      "score": 0.485988204,
       "source_file": "AGENTS.md",
       "status": "tentative",
       "uses": 1
     },
-    "app_xaml_jpscratch_app": {
-      "code_fingerprint": "a3ac568e081c83e08fe12a30ba8560695e149e669aabacbbe9396d5fe8d02cf1",
+    "application_app_xaml_jpscratch_app": {
+      "code_fingerprint": "89e4004ad67e3de8eef2a558f8b8c765485ca055b25d5b084375590d9cdbdb34",
       "label": "App",
       "last": "2026-08-24T08:12:40.886087+00:00",
       "provenance": [
@@ -33,8 +33,8 @@
           "q": "Gitの変更をレビューしてください。"
         }
       ],
-      "score": 1.284485669,
-      "source_file": "App.xaml.cs",
+      "score": 0.969798265,
+      "source_file": "Application/App.xaml.cs",
       "status": "preferred",
       "uses": 2
     },
@@ -49,7 +49,7 @@
           "q": "補助ファイルについて教えてください。削除しても大丈夫なものですか？"
         }
       ],
-      "score": 0.644194153,
+      "score": 0.486372396,
       "source_file": ".claude/skills/graphify/references/query.md",
       "status": "tentative",
       "uses": 1
@@ -70,7 +70,7 @@
           "q": "graphify-out の生成物のコミットメッセージを作成してください。"
         }
       ],
-      "score": 1.287938705,
+      "score": 0.972405339,
       "source_file": ".claude/skills/graphify/references/query.md",
       "status": "preferred",
       "uses": 2
@@ -86,7 +86,7 @@
           "q": "graphify-out の生成物のコミットメッセージを作成してください。"
         }
       ],
-      "score": 0.643744552,
+      "score": 0.486032943,
       "source_file": ".claude/skills/graphify/references/update.md",
       "status": "tentative",
       "uses": 1
@@ -102,13 +102,13 @@
           "q": "モデルに更新が必要か調べてください。（新しいモデルや料金など）"
         }
       ],
-      "score": 0.882789965,
+      "score": 0.666514386,
       "source_file": "docs/gpt-5.6-luna.md",
       "status": "tentative",
       "uses": 1
     },
     "installer_build": {
-      "code_fingerprint": "770a06e55df891b3079e36d50db4b673ce8b1e3492027a66132ff2355882ac2a",
+      "code_fingerprint": "321dc5d5b78aaf21d17ab26c912a30889cb5e8b27825e4edfc29bad2421c5b60",
       "label": "build.ps1",
       "last": "2026-09-12T07:51:54.632138+00:00",
       "provenance": [
@@ -118,13 +118,13 @@
           "q": "このアプリのインストーラーを作成したいんだけど、署名ってあったっけ？"
         }
       ],
-      "score": 0.99595896,
+      "score": 0.751957998,
       "source_file": "installer/build.ps1",
       "status": "tentative",
       "uses": 1
     },
     "installer_build_sign_file": {
-      "code_fingerprint": "770a06e55df891b3079e36d50db4b673ce8b1e3492027a66132ff2355882ac2a",
+      "code_fingerprint": "321dc5d5b78aaf21d17ab26c912a30889cb5e8b27825e4edfc29bad2421c5b60",
       "label": "Sign-File()",
       "last": "2026-09-12T07:51:54.632138+00:00",
       "provenance": [
@@ -134,13 +134,13 @@
           "q": "このアプリのインストーラーを作成したいんだけど、署名ってあったっけ？"
         }
       ],
-      "score": 0.99595896,
+      "score": 0.751957998,
       "source_file": "installer/build.ps1",
       "status": "tentative",
       "uses": 1
     },
-    "promptvalidation_modelbenchmarkcommand_jpscratch_promptvalidation_modelbenchmarkcommand": {
-      "code_fingerprint": "c72ddd49f3f9333dcf5f112ce3a838a1d37c9397c770e301bf7729b697f07793",
+    "promptvalidation_support_modelbenchmarkcommand_jpscratch_promptvalidation_modelbenchmarkcommand": {
+      "code_fingerprint": "0426cd072f583a1489873d0624124a26c97d50bf7213284481b4576d960cad23",
       "label": "ModelBenchmarkCommand",
       "last": "2026-09-07T02:34:24.991050+00:00",
       "provenance": [
@@ -150,12 +150,28 @@
           "q": "モデルに更新が必要か調べてください。（新しいモデルや料金など）"
         }
       ],
-      "score": 0.882789965,
-      "source_file": "PromptValidation/ModelBenchmarkCommand.cs",
+      "score": 0.666514386,
+      "source_file": "PromptValidation/support/ModelBenchmarkCommand.cs",
       "status": "tentative",
       "uses": 1
     },
-    "services_backuprestoreservice_jpscratch_services_backuprestoreservice": {
+    "services_billing_usage_pricingservice_jpscratch_services_modelpricing": {
+      "code_fingerprint": "2daba5788a692356d56c2c250b4465b0b362882429ea82cbf1ddf39ec78159a1",
+      "label": "ModelPricing",
+      "last": "2026-09-07T02:34:24.991050+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-07T02:34:24.991050+00:00",
+          "outcome": "useful",
+          "q": "モデルに更新が必要か調べてください。（新しいモデルや料金など）"
+        }
+      ],
+      "score": 0.666514386,
+      "source_file": "Services/Billing/Usage/PricingService.cs",
+      "status": "tentative",
+      "uses": 1
+    },
+    "services_data_backuprestoreservice_jpscratch_services_backuprestoreservice": {
       "code_fingerprint": "c9e0e3ecb63d7abeeb164491fb38e06fdb4389583031b425605d23453e92a2cd",
       "label": "BackupRestoreService",
       "last": "2026-08-24T10:20:50.592460+00:00",
@@ -176,12 +192,12 @@
           "q": "Gitの変更をレビューしてください。"
         }
       ],
-      "score": 1.928101796,
-      "source_file": "Services/BackupRestoreService.cs",
+      "score": 1.455734247,
+      "source_file": "Services/Data/BackupRestoreService.cs",
       "status": "preferred",
       "uses": 3
     },
-    "services_backupservice_jpscratch_services_backupservice": {
+    "services_data_backupservice_jpscratch_services_backupservice": {
       "code_fingerprint": "9835196fb89dff9d197d4025c5809b809a344bcc6bfdfff5f859a717e0e5b2c2",
       "label": "BackupService",
       "last": "2026-08-24T08:12:40.886087+00:00",
@@ -197,12 +213,12 @@
           "q": "Gitの変更をレビューしてください。"
         }
       ],
-      "score": 1.284485669,
-      "source_file": "Services/BackupService.cs",
+      "score": 0.969798265,
+      "source_file": "Services/Data/BackupService.cs",
       "status": "preferred",
       "uses": 2
     },
-    "services_diagnosticinfoservice_jpscratch_services_diagnosticinfoservice": {
+    "services_shell_diagnosticinfoservice_jpscratch_services_diagnosticinfoservice": {
       "code_fingerprint": "bc086ad8bb77b9e8470b48c8e80733caafa050aba87fa7775720383a19fbb6c0",
       "label": "DiagnosticInfoService",
       "last": "2026-08-24T10:20:50.592460+00:00",
@@ -213,28 +229,33 @@
           "q": "現在のGit変更に適したコミット範囲を判断する"
         }
       ],
-      "score": 0.643616128,
-      "source_file": "Services/DiagnosticInfoService.cs",
+      "score": 0.485935981,
+      "source_file": "Services/Shell/DiagnosticInfoService.cs",
       "status": "tentative",
       "uses": 1
     },
-    "services_pricingservice_jpscratch_services_modelpricing": {
-      "code_fingerprint": "2c05bff4a7936fab50a36b9e3b9a2604c6bb0c37d31441dac3f8125a0924cde4",
-      "label": "ModelPricing",
-      "last": "2026-09-07T02:34:24.991050+00:00",
+    "services_shell_trayiconservice_jpscratch_services_trayiconservice": {
+      "code_fingerprint": "c4d0e8ab11907c3e5d468950ad3b336e92210981abf190bd6f4a1ac63bea25a4",
+      "label": "TrayIconService",
+      "last": "2026-09-12T12:07:01.579532+00:00",
       "provenance": [
         {
-          "date": "2026-09-07T02:34:24.991050+00:00",
+          "date": "2026-09-12T12:07:01.579532+00:00",
           "outcome": "useful",
-          "q": "モデルに更新が必要か調べてください。（新しいモデルや料金など）"
+          "q": "v2.0.0を再測定してください。"
+        },
+        {
+          "date": "2026-09-12T11:58:57.407371+00:00",
+          "outcome": "useful",
+          "q": "「タスクトレイに常駐し、軽量」の部分を具体的なデータを使って補強したいので、測定できますか？"
         }
       ],
-      "score": 0.882789965,
-      "source_file": "Services/PricingService.cs",
-      "status": "tentative",
-      "uses": 1
+      "score": 1.509986915,
+      "source_file": "Services/Shell/TrayIconService.cs",
+      "status": "preferred",
+      "uses": 2
     },
-    "services_tabmanager_jpscratch_services_tabmanager": {
+    "services_tabs_tabmanager_jpscratch_services_tabmanager": {
       "code_fingerprint": "05d70a491167352060db9bd7300f56cb273ff55684e7eee8413d7e47216a79c4",
       "label": "TabManager",
       "last": "2026-09-06T15:30:34.157769+00:00",
@@ -245,77 +266,76 @@
           "q": "全タブ検索から、ごみ箱のタブを復元できるようにしてください。"
         }
       ],
-      "score": 0.873436848,
-      "source_file": "Services/TabManager.cs",
-      "status": "tentative",
-      "uses": 1
-    },
-    "services_trayiconservice_jpscratch_services_trayiconservice": {
-      "code_fingerprint": "c4d0e8ab11907c3e5d468950ad3b336e92210981abf190bd6f4a1ac63bea25a4",
-      "label": "TrayIconService",
-      "last": "2026-09-12T11:58:57.407371+00:00",
-      "provenance": [
-        {
-          "date": "2026-09-12T11:58:57.407371+00:00",
-          "outcome": "useful",
-          "q": "「タスクトレイに常駐し、軽量」の部分を具体的なデータを使って補強したいので、測定できますか？"
-        }
-      ],
-      "score": 0.999914652,
-      "source_file": "Services/TrayIconService.cs",
+      "score": 0.659452698,
+      "source_file": "Services/Tabs/TabManager.cs",
       "status": "tentative",
       "uses": 1
     },
     "tools_measure_performance": {
       "code_fingerprint": "61ebea8c6289c118724375ff4644375d3e190011eec7888f9ae29b33b9e19b3c",
       "label": "measure-performance.py",
-      "last": "2026-09-12T11:58:57.407371+00:00",
+      "last": "2026-09-12T12:07:01.579532+00:00",
       "provenance": [
+        {
+          "date": "2026-09-12T12:07:01.579532+00:00",
+          "outcome": "useful",
+          "q": "v2.0.0を再測定してください。"
+        },
         {
           "date": "2026-09-12T11:58:57.407371+00:00",
           "outcome": "useful",
           "q": "「タスクトレイに常駐し、軽量」の部分を具体的なデータを使って補強したいので、測定できますか？"
         }
       ],
-      "score": 0.999914652,
+      "score": 1.509986915,
       "source_file": "tools/measure-performance.py",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 2
     },
     "tools_measure_performance_process_memory_counters_ex": {
       "code_fingerprint": "61ebea8c6289c118724375ff4644375d3e190011eec7888f9ae29b33b9e19b3c",
       "label": "PROCESS_MEMORY_COUNTERS_EX",
-      "last": "2026-09-12T11:58:57.407371+00:00",
+      "last": "2026-09-12T12:07:01.579532+00:00",
       "provenance": [
+        {
+          "date": "2026-09-12T12:07:01.579532+00:00",
+          "outcome": "useful",
+          "q": "v2.0.0を再測定してください。"
+        },
         {
           "date": "2026-09-12T11:58:57.407371+00:00",
           "outcome": "useful",
           "q": "「タスクトレイに常駐し、軽量」の部分を具体的なデータを使って補強したいので、測定できますか？"
         }
       ],
-      "score": 0.999914652,
+      "score": 1.509986915,
       "source_file": "tools/measure-performance.py",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 2
     },
     "tools_measure_performance_sample_state": {
       "code_fingerprint": "61ebea8c6289c118724375ff4644375d3e190011eec7888f9ae29b33b9e19b3c",
       "label": "sample_state()",
-      "last": "2026-09-12T11:58:57.407371+00:00",
+      "last": "2026-09-12T12:07:01.579532+00:00",
       "provenance": [
+        {
+          "date": "2026-09-12T12:07:01.579532+00:00",
+          "outcome": "useful",
+          "q": "v2.0.0を再測定してください。"
+        },
         {
           "date": "2026-09-12T11:58:57.407371+00:00",
           "outcome": "useful",
           "q": "「タスクトレイに常駐し、軽量」の部分を具体的なデータを使って補強したいので、測定できますか？"
         }
       ],
-      "score": 0.999914652,
+      "score": 1.509986915,
       "source_file": "tools/measure-performance.py",
-      "status": "tentative",
-      "uses": 1
+      "status": "preferred",
+      "uses": 2
     },
     "tools_plot_model_benchmark": {
-      "code_fingerprint": "3ccf9e5d85a5ed9047235f02d8e6d50c7ecab020e89a764d5b9ac017b30ea169",
+      "code_fingerprint": "76dd318c95e5acfc7ee3a39386b8c2280d2e919064ee2dd649d34d6e8f601151",
       "label": "plot-model-benchmark.py",
       "last": "2026-08-21T12:51:10.740458+00:00",
       "provenance": [
@@ -325,13 +345,13 @@
           "q": "model-benchmark-barsなども更新してください。"
         }
       ],
-      "score": 0.601965361,
+      "score": 0.454489277,
       "source_file": "tools/plot-model-benchmark.py",
       "status": "tentative",
       "uses": 1
     },
     "tools_plot_model_benchmark_draw_bars": {
-      "code_fingerprint": "3ccf9e5d85a5ed9047235f02d8e6d50c7ecab020e89a764d5b9ac017b30ea169",
+      "code_fingerprint": "76dd318c95e5acfc7ee3a39386b8c2280d2e919064ee2dd649d34d6e8f601151",
       "label": "draw_bars()",
       "last": "2026-08-21T12:51:10.740458+00:00",
       "provenance": [
@@ -341,13 +361,13 @@
           "q": "model-benchmark-barsなども更新してください。"
         }
       ],
-      "score": 0.601965361,
+      "score": 0.454489277,
       "source_file": "tools/plot-model-benchmark.py",
       "status": "tentative",
       "uses": 1
     },
     "tools_plot_model_benchmark_draw_scatter": {
-      "code_fingerprint": "3ccf9e5d85a5ed9047235f02d8e6d50c7ecab020e89a764d5b9ac017b30ea169",
+      "code_fingerprint": "76dd318c95e5acfc7ee3a39386b8c2280d2e919064ee2dd649d34d6e8f601151",
       "label": "draw_scatter()",
       "last": "2026-08-21T12:51:10.740458+00:00",
       "provenance": [
@@ -357,29 +377,13 @@
           "q": "model-benchmark-barsなども更新してください。"
         }
       ],
-      "score": 0.601965361,
+      "score": 0.454489277,
       "source_file": "tools/plot-model-benchmark.py",
       "status": "tentative",
       "uses": 1
     },
-    "views_crosstabsearchwindow_xaml_jpscratch_views_crosstabsearchwindow": {
-      "code_fingerprint": "de315731e0ea46c8c0badb1fd26bb524b8bb53c432f5a20152f0462444d7f383",
-      "label": "CrossTabSearchWindow",
-      "last": "2026-09-06T15:30:34.157769+00:00",
-      "provenance": [
-        {
-          "date": "2026-09-06T15:30:34.157769+00:00",
-          "outcome": "useful",
-          "q": "全タブ検索から、ごみ箱のタブを復元できるようにしてください。"
-        }
-      ],
-      "score": 0.873436848,
-      "source_file": "Views/CrossTabSearchWindow.xaml.cs",
-      "status": "tentative",
-      "uses": 1
-    },
-    "views_mainwindow_subscriptions_jpscratch_views_mainwindow": {
-      "code_fingerprint": "33529c23c4fb5e4c50f434f458e5188ebc3caf7e9b714bd120af472869aa6918",
+    "views_main_mainwindow_subscriptions_jpscratch_views_mainwindow": {
+      "code_fingerprint": "deb2e2b4f07b2a8d5da737699e6f765a10a1f6b8fff5855ba09d364a780a1a92",
       "label": "MainWindow",
       "last": "2026-09-06T15:30:34.157769+00:00",
       "provenance": [
@@ -389,12 +393,12 @@
           "q": "全タブ検索から、ごみ箱のタブを復元できるようにしてください。"
         }
       ],
-      "score": 0.873436848,
-      "source_file": "Views/MainWindow.Subscriptions.cs",
+      "score": 0.659452698,
+      "source_file": "Views/Main/MainWindow.Subscriptions.cs",
       "status": "tentative",
       "uses": 1
     },
-    "views_settingswindow_subscriptions_jpscratch_views_settingswindow": {
+    "views_settings_settingswindow_subscriptions_jpscratch_views_settingswindow": {
       "code_fingerprint": "ab6545f88cfb6d37061a1b9a1d23293e04398594162de0fe34e089a1266065be",
       "label": "SettingsWindow",
       "last": "2026-08-24T10:20:50.592460+00:00",
@@ -415,10 +419,26 @@
           "q": "Gitの変更をレビューしてください。"
         }
       ],
-      "score": 1.928101796,
-      "source_file": "Views/SettingsWindow.Subscriptions.cs",
+      "score": 1.455734247,
+      "source_file": "Views/Settings/SettingsWindow.Subscriptions.cs",
       "status": "preferred",
       "uses": 3
+    },
+    "views_tabs_crosstabsearchwindow_xaml_jpscratch_views_crosstabsearchwindow": {
+      "code_fingerprint": "de315731e0ea46c8c0badb1fd26bb524b8bb53c432f5a20152f0462444d7f383",
+      "label": "CrossTabSearchWindow",
+      "last": "2026-09-06T15:30:34.157769+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-06T15:30:34.157769+00:00",
+          "outcome": "useful",
+          "q": "全タブ検索から、ごみ箱のタブを復元できるようにしてください。"
+        }
+      ],
+      "score": 0.659452698,
+      "source_file": "Views/Tabs/CrossTabSearchWindow.xaml.cs",
+      "status": "tentative",
+      "uses": 1
     }
   },
   "version": 1
