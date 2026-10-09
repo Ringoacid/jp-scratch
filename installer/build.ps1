@@ -136,12 +136,43 @@ if ($Sign) {
         ForEach-Object { Sign-File $_.FullName }
 }
 
-Write-Host '==> wix build' -ForegroundColor Cyan
+# インストーラーの使用許諾画面に出す RTF を LICENSE から生成する。
+# WiX 既定の WixUILicenseRtf はダミーテキスト (Lorem ipsum) のため、必ず差し替える。
+# LICENSE を正とし、RTF を手で維持しない。非 ASCII 文字は \uN? 形式にエスケープする。
+function ConvertTo-RtfText([string]$text) {
+    $builder = New-Object System.Text.StringBuilder
+    foreach ($ch in $text.ToCharArray()) {
+        $code = [int]$ch
+        if ($ch -eq '\' -or $ch -eq '{' -or $ch -eq '}') { [void]$builder.Append('\').Append($ch) }
+        elseif ($code -gt 127) {
+            if ($code -gt 32767) { $code -= 65536 }
+            [void]$builder.Append('\u').Append($code).Append('?')
+        }
+        else { [void]$builder.Append($ch) }
+    }
+    $builder.ToString()
+}
+
+$licenseParagraphs = (Get-Content -LiteralPath $licenseFile -Raw) -split '(\r?\n){2,}' |
+    Where-Object { $_.Trim() } |
+    ForEach-Object { ($_ -split '\r?\n' | ForEach-Object { $_.Trim() }) -join ' ' }
+
+$rtfNote = 'JP Scratch は MIT ライセンスのもとで提供されます。以下はその原文（英語）で、法的効力を持つのは原文です。同梱ライブラリのライセンスは、インストール先の THIRD-PARTY-NOTICES.md に記載しています。'
+$rtfBody = New-Object System.Collections.Generic.List[string]
+$rtfBody.Add((ConvertTo-RtfText $rtfNote))
+foreach ($paragraph in $licenseParagraphs) { $rtfBody.Add((ConvertTo-RtfText $paragraph)) }
+
+$licenseRtf = Join-Path $outputDir 'License.rtf'
 New-Item -ItemType Directory -Force $outputDir | Out-Null
+$rtf = '{\rtf1\ansi\ansicpg932\uc1\deff0{\fonttbl{\f0\fnil\fcharset128 Yu Gothic UI;}}\viewkind4\f0\fs20 ' +
+    ($rtfBody -join '\par\par ') + '\par}'
+[System.IO.File]::WriteAllText($licenseRtf, $rtf, [System.Text.Encoding]::ASCII)
+
+Write-Host '==> wix build' -ForegroundColor Cyan
 
 wix build (Join-Path $PSScriptRoot 'Package.wxs') -arch x64 -culture ja-JP `
     -ext WixToolset.UI.wixext -ext WixToolset.Util.wixext `
-    -d Version=$Version -d PublishDir=$publishDir -d IconFile=$iconFile -o $msiPath
+    -d Version=$Version -d PublishDir=$publishDir -d IconFile=$iconFile -d LicenseRtf=$licenseRtf -o $msiPath
 if ($LASTEXITCODE -ne 0) { throw 'wix build に失敗しました' }
 
 if ($Sign) {

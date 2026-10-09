@@ -32,6 +32,9 @@
     <SetProperty Id="WixShellExecTarget" Value="[INSTALLFOLDER]JpScratch.exe"
                  After="CostFinalize" Sequence="ui" />
 
+    <!-- 既定はダミーテキスト (Lorem ipsum)。build.ps1 が LICENSE から生成した RTF に差し替える。 -->
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+
     <ui:WixUI Id="WixUI_Minimal" />
 
     <CustomAction Id="LaunchApplication"
