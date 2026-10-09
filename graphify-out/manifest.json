@@ -1506,9 +1506,9 @@
     "semantic_hash": ""
   },
   "Views/Settings/SettingsWindow.xaml.cs": {
-    "mtime": 1791556635.4820898,
-    "seen": 1791556784.9234872,
-    "ast_hash": "c5e4a9b3fff2c77f38e607bcf137afd7",
+    "mtime": 1791557229.2154303,
+    "seen": 1791557438.3091683,
+    "ast_hash": "3fc5551bf35ffad947179da73f945ec8",
     "semantic_hash": ""
   },
   "Views/Tabs/CrossTabSearchWindow.xaml": {
