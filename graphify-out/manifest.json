@@ -102,9 +102,9 @@
     "semantic_hash": ""
   },
   "Models/AppSettings.cs": {
-    "mtime": 1790148844.9513884,
-    "seen": 1790149757.3550987,
-    "ast_hash": "84463c30620f8a1c01e3d44cfe24f4af",
+    "mtime": 1791556621.5405736,
+    "seen": 1791556784.923354,
+    "ast_hash": "6697404cdc98d104d3eedcef51b83f51",
     "semantic_hash": ""
   },
   "Models/HotkeySpec.cs": {
@@ -114,9 +114,9 @@
     "semantic_hash": ""
   },
   "Models/ProofreadingModelCatalog.cs": {
-    "mtime": 1790150949.8147454,
-    "seen": 1790151075.040909,
-    "ast_hash": "8575cd7e675a7a8b1887377fb2f015de",
+    "mtime": 1791556734.32805,
+    "seen": 1791556784.9233577,
+    "ast_hash": "cd4b16a3e537e8f1cfd1fdd174471932",
     "semantic_hash": ""
   },
   "Models/ScratchTab.cs": {
@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "PromptValidation/Program.cs": {
-    "mtime": 1790583739.924341,
-    "seen": 1790593589.9861212,
-    "ast_hash": "cde1f0a4f0a0e4f505db9a6991acd854",
+    "mtime": 1791556734.329588,
+    "seen": 1791556784.9233603,
+    "ast_hash": "e219bca660a5bc479613498675f83713",
     "semantic_hash": ""
   },
   "PromptValidation/PromptValidation.csproj": {
@@ -216,15 +216,15 @@
     "semantic_hash": ""
   },
   "installer/build.ps1": {
-    "mtime": 1790166448.5271487,
-    "seen": 1790178537.5143795,
-    "ast_hash": "2fe3d93691fd8ea9f2538d799cf28f2c",
+    "mtime": 1791555481.9472964,
+    "seen": 1791556784.9234908,
+    "ast_hash": "db20ac342d311ebe039e790f29f75947",
     "semantic_hash": ""
   },
   "jp-scratch.csproj": {
-    "mtime": 1790180445.6832843,
-    "seen": 1790180791.6826313,
-    "ast_hash": "867cc482b1066b977d8bf8aa1d4fa9b5",
+    "mtime": 1791556897.9495711,
+    "seen": 1791557007.1316144,
+    "ast_hash": "7ab9dca93e9ceb23627f264b71dc8fae",
     "semantic_hash": ""
   },
   "jp-scratch.slnx": {
@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1790178464.2960696,
-    "seen": 1790178537.5144017,
-    "ast_hash": "460110f218fa46a530860a096a594b8f",
+    "mtime": 1791556771.9115987,
+    "seen": 1791556784.9235113,
+    "ast_hash": "bed2b98b9fa935215b088e5a30c633bb",
     "semantic_hash": ""
   },
   "PromptValidation/README.md": {
@@ -330,9 +330,9 @@
     "semantic_hash": ""
   },
   "requirements.md": {
-    "mtime": 1790583739.967742,
-    "seen": 1790593589.9863155,
-    "ast_hash": "e0b6719cc3593465b04e9752632f2bb8",
+    "mtime": 1791556771.9100778,
+    "seen": 1791556784.9235423,
+    "ast_hash": "e3d1be81a22df741dfaa2cc3e53bb448",
     "semantic_hash": ""
   },
   ".claude/skills/graphify/references/github-and-merge.md": {
@@ -492,9 +492,9 @@
     "semantic_hash": ""
   },
   "docs/how-to-use.md": {
-    "mtime": 1790583739.944325,
-    "seen": 1790593589.9862924,
-    "ast_hash": "fff2bc76c90a4709f4287b761932efb8",
+    "mtime": 1791556771.9115987,
+    "seen": 1791556784.9235246,
+    "ast_hash": "9afe904f65102b9e87a8656a225f06d0",
     "semantic_hash": ""
   },
   "graphify-out/memory/query_20260912_075154_\u3053\u306e\u30a2\u30d7\u30ea\u306e\u30a4\u30f3\u30b9\u30c8\u30fc\u30e9\u30fc\u3092\u4f5c\u6210\u3057\u305f\u3044\u3093\u3060\u3051\u3069_\u7f72\u540d\u3063\u3066\u3042\u3063\u305f\u3063\u3051.md": {
@@ -882,9 +882,9 @@
     "semantic_hash": ""
   },
   "PromptValidation/validations/providers/ProofreadingModelCatalogValidation.cs": {
-    "mtime": 1790150952.1690302,
-    "seen": 1790178537.5143085,
-    "ast_hash": "3380f4309e16768b4bb46059b8a56c5f",
+    "mtime": 1791556734.329588,
+    "seen": 1791556784.9234064,
+    "ast_hash": "7658697189365fd9c2c75dd9aa7bc02a",
     "semantic_hash": ""
   },
   "PromptValidation/validations/providers/ProviderCompletionGuardValidation.cs": {
@@ -984,15 +984,15 @@
     "semantic_hash": ""
   },
   "Proofreading/Clients/AnthropicProofreadingClient.cs": {
-    "mtime": 1790150950.989708,
-    "seen": 1790178537.5143192,
-    "ast_hash": "3c1eb0ebcb3e842a0d18482df70e46d7",
+    "mtime": 1791556621.5405736,
+    "seen": 1791556784.923419,
+    "ast_hash": "d2dc05fe050c0fd47ba9f0d094be465e",
     "semantic_hash": ""
   },
   "Proofreading/Clients/GeminiProofreadingClient.cs": {
-    "mtime": 1786020790.2199967,
-    "seen": 1790178537.51432,
-    "ast_hash": "fe34c6d08411d2919afdb1d922633c42",
+    "mtime": 1791556621.5405736,
+    "seen": 1791556784.9234197,
+    "ast_hash": "fe3875f00fd055917e867972708ee675",
     "semantic_hash": ""
   },
   "Proofreading/Clients/OpenAiCompatibleProofreadingClient.cs": {
@@ -1002,15 +1002,15 @@
     "semantic_hash": ""
   },
   "Proofreading/Clients/OpenAiProofreadingClient.cs": {
-    "mtime": 1786020790.2199967,
-    "seen": 1790178537.5143209,
-    "ast_hash": "f7a025559c05f6048014ab19efc4ae13",
+    "mtime": 1791556621.5405736,
+    "seen": 1791556784.9234211,
+    "ast_hash": "ecd498014e20856393621dc3f69c5ba5",
     "semantic_hash": ""
   },
   "Proofreading/Clients/PlamoProofreadingClient.cs": {
-    "mtime": 1786020790.2199967,
-    "seen": 1790178537.5143216,
-    "ast_hash": "be975b4c7e8bcbd8b9930aee886617db",
+    "mtime": 1791556621.5405736,
+    "seen": 1791556784.9234216,
+    "ast_hash": "eeed7223b85139d29a5ca1f06d850df1",
     "semantic_hash": ""
   },
   "Proofreading/Clients/ProofreadingClientBase.cs": {
@@ -1026,9 +1026,9 @@
     "semantic_hash": ""
   },
   "Proofreading/Clients/ProofreadingClientRouter.cs": {
-    "mtime": 1790149383.7155738,
-    "seen": 1790178537.5143247,
-    "ast_hash": "c3f7c505697e17dc451be1f8b879f030",
+    "mtime": 1791556621.5421312,
+    "seen": 1791556784.923424,
+    "ast_hash": "8d5ea42d3e973f62a1a6d215618dca0f",
     "semantic_hash": ""
   },
   "Proofreading/Pipeline/DocumentDiff.cs": {
@@ -1308,9 +1308,9 @@
     "semantic_hash": ""
   },
   "Services/Settings/SettingsService.cs": {
-    "mtime": 1790148879.5029733,
-    "seen": 1790178537.5143538,
-    "ast_hash": "c9a3ae7d5ec57b8d32ba82b5d45f9e82",
+    "mtime": 1791556734.32805,
+    "seen": 1791556784.923459,
+    "ast_hash": "2ebea434dba78ec082cdd3a7f0544bb4",
     "semantic_hash": ""
   },
   "Services/Settings/StartupRegistration.cs": {
@@ -1494,21 +1494,21 @@
     "semantic_hash": ""
   },
   "Views/Settings/SettingsWindow.Subscriptions.cs": {
-    "mtime": 1789187538.2256074,
-    "seen": 1790178537.514375,
-    "ast_hash": "0c1c7753b4bcfd42aab7268aa0c9873e",
+    "mtime": 1791556635.4820898,
+    "seen": 1791556784.9234858,
+    "ast_hash": "f0647475d71b4b0818136d7d3ea98c2a",
     "semantic_hash": ""
   },
   "Views/Settings/SettingsWindow.xaml": {
-    "mtime": 1790583739.9398448,
-    "seen": 1790593589.986253,
-    "ast_hash": "ccdd55dba67e335709d45e06bcc5f2cf",
+    "mtime": 1791556572.879217,
+    "seen": 1791556784.9234865,
+    "ast_hash": "e059ce8502598d2a1acb7974765487ba",
     "semantic_hash": ""
   },
   "Views/Settings/SettingsWindow.xaml.cs": {
-    "mtime": 1790583739.9413595,
-    "seen": 1790593589.9862537,
-    "ast_hash": "2f921dc2acb0d0834f55a630d987c70c",
+    "mtime": 1791556635.4820898,
+    "seen": 1791556784.9234872,
+    "ast_hash": "c5e4a9b3fff2c77f38e607bcf137afd7",
     "semantic_hash": ""
   },
   "Views/Tabs/CrossTabSearchWindow.xaml": {
@@ -1725,6 +1725,12 @@
     "mtime": 1790589851.3942876,
     "seen": 1790593589.9863148,
     "ast_hash": "a6755a57d11dbd2c4bf51f9a99ff69d8",
+    "semantic_hash": ""
+  },
+  "PromptValidation/validations/providers/ProofreadingEffortValidation.cs": {
+    "mtime": 1791556734.32805,
+    "seen": 1791556784.9234054,
+    "ast_hash": "8da17a0c47a9404a577ca398690ec5de",
     "semantic_hash": ""
   }
 }
