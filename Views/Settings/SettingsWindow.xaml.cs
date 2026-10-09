@@ -554,7 +554,11 @@ public partial class SettingsWindow : Window
         RefreshCredentialStatus();
     }
 
-    private sealed record EffortOption(string Value, string Label);
+    // AppComboBox は選択中の項目を ToString() で表示するため、ModelOption と同じく上書きが必要。
+    private sealed record EffortOption(string Value, string Label)
+    {
+        public override string ToString() => Label;
+    }
 
     private static readonly Dictionary<string, string> EffortLabels = new(StringComparer.Ordinal)
     {
