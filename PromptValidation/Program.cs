@@ -267,6 +267,7 @@ internal static class Program
         bool compatibleClientPass = await OpenAiCompatibleValidation.RunSelfTestsAsync();
         bool completionGuardPass = await ProviderCompletionGuardValidation.RunSelfTestsAsync();
         bool modelCatalogPass = ProofreadingModelCatalogValidation.RunSelfTests();
+        bool effortPass = await ProofreadingEffortValidation.RunSelfTestsAsync();
         bool appPathsPass = AppPathsValidation.RunSelfTests();
         bool singleInstancePass = SingleInstanceValidation.RunSelfTests();
         bool billingSeedPass = BillingSeedCommandValidation.RunSelfTests();
@@ -292,7 +293,7 @@ internal static class Program
                apiCallUsageTriggerPass && apiCallUnconfirmedPass && hideSuppressionPass && customDateRangePass &&
                billingHistoryEmptyStatePass && usagePeriodPass && usageLimitPass &&
                migrationPass && backupPass && backupRestorePass && fxRatePass && fxRateCompletionPass && reactionPass && schedulePass && dispatchPlannerPass &&
-               geminiClientPass && openAiClientPass && compatibleClientPass && completionGuardPass && modelCatalogPass &&
+               geminiClientPass && openAiClientPass && compatibleClientPass && completionGuardPass && modelCatalogPass && effortPass &&
                appPathsPass && singleInstancePass &&
                billingSeedPass && settingsFieldFormattingPass && billingCsvPass &&
                apiLogCompactionPass && trayIconStatePass &&

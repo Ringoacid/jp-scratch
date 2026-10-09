@@ -175,6 +175,9 @@ internal sealed class SettingsService
             (int)ProofreadingModelCatalog.MinimumRequestTimeout.TotalSeconds,
             (int)ProofreadingModelCatalog.MaximumRequestTimeout.TotalSeconds);
 
+    private static string NormalizeEffort(BackendKind backend, string model, string? effort)
+        => backend == BackendKind.Api ? ProofreadingModelCatalog.NormalizeEffort(model, effort) : "";
+
     private static void Normalize(AppSettings s)
     {
         s.WindowWidth = Math.Clamp(s.WindowWidth, 320, 4000);
@@ -209,6 +212,10 @@ internal sealed class SettingsService
             OpenAiCompatibleProfile.TryGetProfileId(s.ManualProofreadingModel, out _) &&
             OpenAiCompatibleProfile.Find(s, s.ManualProofreadingModel) is null)
             s.ManualProofreadingModel = ProofreadingModelCatalog.DefaultManualModel;
+        // 現在のモデルが受け付けない思考量（モデルを変えた・手で書き換えた）は「既定」へ戻す。
+        // 契約サービスはモデルを動的に選ぶため思考量を持たない。
+        s.AutoProofreadingEffort = NormalizeEffort(s.AutoBackend, s.AutoProofreadingModel, s.AutoProofreadingEffort);
+        s.ManualProofreadingEffort = NormalizeEffort(s.ManualBackend, s.ManualProofreadingModel, s.ManualProofreadingEffort);
         s.AutoProofreadingTimeoutSeconds = ClampTimeoutSeconds(s.AutoProofreadingTimeoutSeconds);
         s.ManualProofreadingTimeoutSeconds = ClampTimeoutSeconds(s.ManualProofreadingTimeoutSeconds);
         s.TrashRetentionDays = Math.Clamp(s.TrashRetentionDays, 1, 365);

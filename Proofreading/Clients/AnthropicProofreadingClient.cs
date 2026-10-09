@@ -23,6 +23,7 @@ internal sealed class AnthropicProofreadingClient : ProofreadingClientBase
     private static readonly Uri DefaultBaseAddress = new("https://api.anthropic.com/");
 
     private readonly Func<ProofreadingPurpose> _purposeProvider;
+    private readonly Func<string?>? _effortProvider;
 
     protected override string ProviderName => "Anthropic";
 
@@ -31,7 +32,8 @@ internal sealed class AnthropicProofreadingClient : ProofreadingClientBase
         Func<ApiKeySource> sourceProvider,
         Func<string> modelProvider,
         Func<TimeSpan> requestTimeoutProvider,
-        Func<ProofreadingPurpose> purposeProvider)
+        Func<ProofreadingPurpose> purposeProvider,
+        Func<string?>? effortProvider = null)
         : base(
             () => credentials.GetApiKey(ApiProvider.Anthropic, sourceProvider()),
             CreateHttpClient(),
@@ -43,6 +45,7 @@ internal sealed class AnthropicProofreadingClient : ProofreadingClientBase
             ownsHttpClient: true)
     {
         _purposeProvider = purposeProvider;
+        _effortProvider = effortProvider;
     }
 
     internal AnthropicProofreadingClient(
@@ -52,7 +55,8 @@ internal sealed class AnthropicProofreadingClient : ProofreadingClientBase
         Func<TimeSpan, CancellationToken, Task>? delay = null,
         TimeSpan? requestTimeout = null,
         Func<ProofreadingPurpose>? purposeProvider = null,
-        bool ownsHttpClient = false)
+        bool ownsHttpClient = false,
+        Func<string?>? effortProvider = null)
         : base(
             apiKeyProvider,
             httpClient,
@@ -64,6 +68,7 @@ internal sealed class AnthropicProofreadingClient : ProofreadingClientBase
             ownsHttpClient)
     {
         _purposeProvider = purposeProvider ?? (() => ProofreadingPurpose.Automatic);
+        _effortProvider = effortProvider;
     }
 
     private static HttpClient CreateHttpClient()
@@ -173,7 +178,6 @@ internal sealed class AnthropicProofreadingClient : ProofreadingClientBase
     protected override string BuildRequestJson(string systemInstruction, string userMessage)
     {
         ProofreadingPurpose purpose = _purposeProvider();
-        ModelDescriptor descriptor = ProofreadingModelCatalog.Get(Model);
 
         JsonObject request = new()
         {
@@ -192,15 +196,17 @@ internal sealed class AnthropicProofreadingClient : ProofreadingClientBase
         // temperature / top_p / top_k は Fable 5・Opus 5・Sonnet 5 では 400 になるため送らない
         // （要件 3.5.1）。末尾 assistant ターンによるプレフィルも同じ理由で使わない。
 
-        if (descriptor.EffortFor(purpose) is { } effort)
+        string? effort = ProofreadingModelCatalog.ResolveEffort(Model, purpose, _effortProvider?.Invoke());
+        if (effort is not null)
             request["output_config"] = new JsonObject { ["effort"] = effort };
 
-        // 自動用は思考を切って速度と費用を優先する。ただし Fable 5 は無効化そのものが 400、
-        // Haiku 4.5 は adaptive 非対応なので、どちらにも thinking を送らない。
+        // 自動用は思考を切って速度と費用を優先する。ただし Fable 5・Opus 5.5 は無効化そのものが 400、
+        // Haiku 4.5 は adaptive 非対応、Sonnet 5.5 は disabled ではなく between_tools を使う。
+        // どのモデルも xhigh / max では切れない（400）ので、その場合は thinking を送らない。
         if (purpose == ProofreadingPurpose.Automatic)
         {
-            if (ProofreadingModelCatalog.SupportsDisabledThinking(Model))
-                request["thinking"] = new JsonObject { ["type"] = "disabled" };
+            if (ProofreadingModelCatalog.ThinkingOffType(Model, effort) is { } thinkingOff)
+                request["thinking"] = new JsonObject { ["type"] = thinkingOff };
         }
         else if (ProofreadingModelCatalog.SupportsAdaptiveThinking(Model))
         {

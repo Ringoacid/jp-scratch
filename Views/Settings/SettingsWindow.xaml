@@ -615,6 +615,13 @@
                                                               AutomationProperties.Name="自動校正のモデル" DisplayMemberPath="DisplayName" SelectedValuePath="Id"
                                                               SelectionChanged="ProofreadingModelCombo_SelectionChanged" />
                                                 </Grid>
+                                                <Grid x:Name="AutoEffortPanel" Margin="0,8,0,0">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                    <TextBlock Text="思考量（effort）" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                                                    <ComboBox x:Name="AutoEffortCombo" Grid.Column="1" Style="{StaticResource AppComboBox}"
+                                                              AutomationProperties.Name="自動校正の思考量" DisplayMemberPath="Label" SelectedValuePath="Value"
+                                                              ToolTip="高いほど深く考えますが、出力トークン（料金）と待ち時間が増えます。" />
+                                                </Grid>
                                             </StackPanel>
                                         </Border>
                                         <Border Style="{StaticResource SettingsLastRow}">
@@ -628,6 +635,13 @@
                                                     <ComboBox x:Name="ManualProofreadingModelCombo" Grid.Column="1" Style="{StaticResource AppComboBox}"
                                                               AutomationProperties.Name="手動校正のモデル" DisplayMemberPath="DisplayName" SelectedValuePath="Id"
                                                               SelectionChanged="ProofreadingModelCombo_SelectionChanged" />
+                                                </Grid>
+                                                <Grid x:Name="ManualEffortPanel" Margin="0,8,0,0">
+                                                    <Grid.ColumnDefinitions><ColumnDefinition Width="150" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                                    <TextBlock Text="思考量（effort）" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                                                    <ComboBox x:Name="ManualEffortCombo" Grid.Column="1" Style="{StaticResource AppComboBox}"
+                                                              AutomationProperties.Name="手動校正の思考量" DisplayMemberPath="Label" SelectedValuePath="Value"
+                                                              ToolTip="高いほど深く考えますが、出力トークン（料金）と待ち時間が増えます。" />
                                                 </Grid>
                                             </StackPanel>
                                         </Border>

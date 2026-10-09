@@ -23,6 +23,7 @@ internal sealed class OpenAiProofreadingClient : ProofreadingClientBase
         new("https://api.openai.com/");
 
     private readonly Func<ProofreadingPurpose> _purposeProvider;
+    private readonly Func<string?>? _effortProvider;
 
     protected override string ProviderName => "OpenAI";
 
@@ -31,7 +32,8 @@ internal sealed class OpenAiProofreadingClient : ProofreadingClientBase
         Func<ApiKeySource> sourceProvider,
         Func<string> modelProvider,
         Func<TimeSpan> requestTimeoutProvider,
-        Func<ProofreadingPurpose> purposeProvider)
+        Func<ProofreadingPurpose> purposeProvider,
+        Func<string?>? effortProvider = null)
         : base(
             () => credentials.GetApiKey(ApiProvider.OpenAi, sourceProvider()),
             CreateHttpClient(),
@@ -43,6 +45,7 @@ internal sealed class OpenAiProofreadingClient : ProofreadingClientBase
             ownsHttpClient: true)
     {
         _purposeProvider = purposeProvider;
+        _effortProvider = effortProvider;
     }
 
     internal OpenAiProofreadingClient(
@@ -52,7 +55,8 @@ internal sealed class OpenAiProofreadingClient : ProofreadingClientBase
         Func<TimeSpan, CancellationToken, Task>? delay = null,
         TimeSpan? requestTimeout = null,
         Func<ProofreadingPurpose>? purposeProvider = null,
-        bool ownsHttpClient = false)
+        bool ownsHttpClient = false,
+        Func<string?>? effortProvider = null)
         : base(
             apiKeyProvider,
             httpClient,
@@ -64,6 +68,7 @@ internal sealed class OpenAiProofreadingClient : ProofreadingClientBase
             ownsHttpClient)
     {
         _purposeProvider = purposeProvider ?? (() => ProofreadingPurpose.Automatic);
+        _effortProvider = effortProvider;
     }
 
     private static HttpClient CreateHttpClient()
@@ -179,8 +184,8 @@ internal sealed class OpenAiProofreadingClient : ProofreadingClientBase
             ["max_output_tokens"] = MaxOutputTokens,
         };
 
-        // 用途別の推論量（要件 3.5.1）。自動は low、手動は medium。
-        if (ProofreadingModelCatalog.Get(Model).EffortFor(_purposeProvider()) is { } effort)
+        // 用途別の推論量（要件 3.5.1）。設定が空なら自動は low、手動は medium。
+        if (ProofreadingModelCatalog.ResolveEffort(Model, _purposeProvider(), _effortProvider?.Invoke()) is { } effort)
             request["reasoning"] = new JsonObject { ["effort"] = effort };
 
         return request.ToJsonString();

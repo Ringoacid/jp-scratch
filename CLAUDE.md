@@ -12,7 +12,7 @@
 
 - C# / .NET 10 (LTS)、WPF、AvalonEdit 6.x、SQLite (Microsoft.Data.Sqlite)。
 - WinForms はトレイアイコンのためだけに参照（暗黙 using は外してあり `TrayIconService` のみが明示的に using）。
-- 校正モデルは 4 プロバイダー 16 モデル（Google / OpenAI / Anthropic / Preferred Networks）。**自動用と手動用の 2 枠**を持ち、既定は自動 `gpt-5.6-luna` / 手動 `claude-sonnet-5`。API キーはプロバイダーごとに DPAPI 暗号化で `credentials.dat` に保存。
+- 校正モデルは 4 プロバイダー 22 モデル（Google / OpenAI / Anthropic / Preferred Networks）。**自動用と手動用の 2 枠**を持ち（思考量も 2 枠ごとに設定可。選択肢は `ModelDescriptor.Efforts` が正典）、既定は自動 `gpt-5.6-luna` / 手動 `claude-sonnet-5`。API キーはプロバイダーごとに DPAPI 暗号化で `credentials.dat` に保存。
 - APIキーに加え、Codex App Server / GitHub Copilot の契約接続を実装済み。自動・手動校正、別案、スタイルガイド生成に対応。設定は左ナビゲーションの「校正」「APIキー」「料金」「契約サービス」で管理する。
 
 ## ビルド・テスト

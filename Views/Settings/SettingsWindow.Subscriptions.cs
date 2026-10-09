@@ -57,6 +57,7 @@ public partial class SettingsWindow
                     PopulateModels(model, selectedFamily, SelectedModelId(model));
         }
         finally { _loadingProofreadingModelControls = wasLoading; }
+        RefreshEffortCombos();
         RefreshHighCostModelWarning();
     }
 

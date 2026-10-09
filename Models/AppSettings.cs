@@ -111,6 +111,16 @@ public sealed class AppSettings
         ProofreadingModelCatalog.DefaultManualModel;
 
     /// <summary>
+    /// 自動用の思考量（effort / thinkingLevel / reasoning_effort）。空文字は「モデル表の用途別既定」
+    /// （<see cref="ModelDescriptor.EffortFor"/>）で、旧バージョンからの更新でも挙動を変えない。
+    /// モデルが受け付けない値は <see cref="ProofreadingModelCatalog.ResolveEffort"/> が既定へ戻す。
+    /// </summary>
+    public string AutoProofreadingEffort { get; set; } = "";
+
+    /// <summary>手動用の思考量。意味は <see cref="AutoProofreadingEffort"/> と同じ。</summary>
+    public string ManualProofreadingEffort { get; set; } = "";
+
+    /// <summary>
     /// 自動校正 1 リクエストのタイムアウト秒数（要件 3.5.1）。
     /// 1 回の自動校正は複数リクエストに分割されうるため、実行時間の上限は「この値 × 分割数」。
     /// </summary>

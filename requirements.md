@@ -353,14 +353,21 @@ LLM に文字オフセットや個別置換を返させると、日本語（サ�
   揺れないよう、実行開始時に用途に応じたモデルを固定する**（`ProofreadingClientRouter.PinModel`）。
 - 旧 `ProofreadingModel` 設定は、読み込み時に自動用・手動用の両方へコピーして移行する
   （既存ユーザーは移行前と同じ挙動で起動する）。
+- **思考量（effort）は自動用・手動用の 2 枠ごとに選べる**（`AutoProofreadingEffort` /
+  `ManualProofreadingEffort`）。選択肢はモデルごとに API が受け付ける値だけを並べる（範囲外は 400 に
+  なるため）。空（「既定」）なら従来どおり自動 `low` / 手動 `medium`（PLaMo は自動 `none`）を送るので、
+  設定を変えない限り挙動・料金は変わらない。モデルを切り替えて選択中の値が使えなくなったときは
+  「既定」へ戻す。契約サービス・OpenAI互換・Claude Haiku 4.5 は思考量を指定できず、行ごと隠す。
+  値が高いほど思考トークン（出力単価で課金）と待ち時間が増える。
+  Anthropic の自動用は思考を最小にするが、`xhigh` / `max` では無効化が 400 になるため送らない。
 
 ##### 選択できるモデル
 
 | プロバイダー | モデル ID | 備考 |
 |---|---|---|
-| OpenAI | `gpt-6-astra` / `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` | 推奨 Luna |
+| OpenAI | `gpt-6-astra` / `gpt-6.1-sol` / `gpt-6-sol` / `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-6-luna` / `gpt-5.6-luna` | 推奨 Luna |
 | Google | `gemini-3.1-pro-preview` / `gemini-3.8-flash` / `gemini-3.7-flash` / `gemini-3.6-flash` / `gemini-3.1-flash-lite` / `gemini-3.5-flash-lite` | 推奨 Flash Lite |
-| Anthropic | `claude-fable-5-1` / `claude-fable-5` / `claude-opus-5` / `claude-sonnet-5` / `claude-haiku-4-5-20251001` | 推奨 Sonnet 5 |
+| Anthropic | `claude-fable-5-1` / `claude-fable-5` / `claude-opus-5-5` / `claude-opus-5` / `claude-sonnet-5-5` / `claude-sonnet-5` / `claude-haiku-5-5` / `claude-haiku-4-5-20251001` | 推奨 Sonnet 5.5 |
 | Preferred Networks | `plamo-3.0-prime` | 推奨（唯一） |
 
 - 自動用・手動用のどちらにも全モデルを選べる。低速モデルを自動側へ選ぶことも許すが、設定画面で
@@ -593,6 +600,7 @@ LLM に文字オフセットや個別置換を返させると、日本語（サ�
 | プロバイダー | モデル ID | 入力 | 出力 | コンテキスト | 最大出力 |
 |---|---|---|---|---|---|
 | OpenAI | `gpt-6-astra` | $10.00 | $50.00 | 1,050,000 | 128,000 |
+| OpenAI | `gpt-6.1-sol` | $2.00 | $10.00 | 1,050,000 | 128,000 |
 | OpenAI | `gpt-5.6-sol` | $4.00 | $20.00 | — | — |
 | OpenAI | `gpt-5.6-terra` | $2.00 | $12.00 | — | — |
 | OpenAI | `gpt-5.6-luna` | $0.20 | $1.20 | 1,050,000 | 128,000 |
@@ -605,7 +613,9 @@ LLM に文字オフセットや個別置換を返させると、日本語（サ�
 | Anthropic | `claude-fable-5-1` | $10.00 | $50.00 | 1,000,000 | 128,000 |
 | Anthropic | `claude-fable-5` | $10.00 | $50.00 | 1,000,000 | 128,000 |
 | Anthropic | `claude-opus-5` | $5.00 | $25.00 | 1,000,000 | 128,000 |
+| Anthropic | `claude-sonnet-5-5` | $2.00 | $10.00 | 1,000,000 | 128,000 |
 | Anthropic | `claude-sonnet-5` | $2.00 | $10.00 | 1,000,000 | 128,000 |
+| Anthropic | `claude-haiku-5-5` | $0.10（≤100K）/ $0.50 | $0.50（≤100K）/ $2.50 | 1,000,000 | 128,000 |
 | Anthropic | `claude-haiku-4-5-20251001` | $1.00 | $5.00 | 200,000 | 64,000 |
 | Preferred Networks | `plamo-3.0-prime` | **¥60** | **¥250** | 262,144 | 20,000 |
 
@@ -615,6 +625,8 @@ LLM に文字オフセットや個別置換を返させると、日本語（サ�
   「公式価格へ戻す」イベント以後はその日付のカタログ価格を再び使う。
 - `claude-sonnet-5` は導入価格の $2.00 / $10.00 がそのまま通常価格に確定し、2026-09-01 に予定されて
   いた $3.00 / $15.00 への値上げは行われないと公表された（2026-08-24 確認）。
+- `claude-haiku-5-5` の 100K トークン超の単価は、校正の 1 リクエスト（2,000 文字以下）では到達しないため
+  単価表には基本単価だけを持つ（2026-10-09 確認）。`gpt-6.1-sol` と `claude-sonnet-5-5` も同日に追加した。
 - `gpt-5.6-sol` は割引中だが「少なくとも 2026-11-21 まで」としか公表されておらず、終了後の通常価格も
   未公表。期限付き価格として持つと延長時にその日以降を過大見積もりするため、通常単価として扱う
   （2026-08-24 確認）。
@@ -1086,7 +1098,7 @@ OpenAI・Google に加えて Anthropic と Preferred Networks を選べるよう
 | 料金・利用量表示 | API は直近 / セッション累計 / 当日・当月累計、契約サービスは当月利用回数。リクエスト単位の履歴とCSVに接続方式を記録 |
 | API キー | プロバイダーごとに別々に DPAPI 暗号化。対応する環境変数があれば使用するか確認 |
 | 契約サービス | Codex App Server / GitHub Copilot。対応版CLIを専用フォルダーへ導入し、専用ホームで認証。詳細は [docs/subscription-backends.md](docs/subscription-backends.md) |
-| 校正モデル | 自動用・手動用の 2 枠。API の4プロバイダー16モデルまたは接続済み契約サービスの動的モデルから選択（既定 自動 `gpt-5.6-luna` / 手動 `claude-sonnet-5`） |
+| 校正モデル | 自動用・手動用の 2 枠。API の4プロバイダー22モデルまたは接続済み契約サービスの動的モデルから選択（既定 自動 `gpt-5.6-luna` / 手動 `claude-sonnet-5`） |
 | 別案・スタイルガイド | 別案生成は自動用モデル、スタイルガイド自動生成は手動用モデルを使う |
 | タイムアウト | 用途別にユーザー設定（既定 自動 15 秒 / 手動 90 秒、範囲 5〜300）。タイムアウトでは再試行しない |
 | 単価の通貨 | `pricing.json` の `currency`（省略時 USD）。円建て単価は保存時に USD へ換算 |

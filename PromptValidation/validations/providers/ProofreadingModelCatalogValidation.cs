@@ -64,7 +64,7 @@ internal static class ProofreadingModelCatalogValidation
         ModelDescriptor? opus55 = ProofreadingModelCatalog.All
             .SingleOrDefault(descriptor => descriptor.Id == "claude-opus-5-5");
         bool gemini37Pass =
-            ProofreadingModelCatalog.All.Count == 19 &&
+            ProofreadingModelCatalog.All.Count == 22 &&
             gemini37 is not null &&
             gemini37.Provider == ApiProvider.Google &&
             gemini37.RecommendedTimeout == TimeSpan.FromSeconds(30) &&
@@ -73,6 +73,12 @@ internal static class ProofreadingModelCatalogValidation
             ProofreadingModelCatalog.IsSupported("gemini-3.7-flash") &&
             ProofreadingModelCatalog.DefaultAutomaticModel != "gemini-3.7-flash";
 
+        ModelDescriptor? sonnet55 = ProofreadingModelCatalog.All
+            .SingleOrDefault(descriptor => descriptor.Id == "claude-sonnet-5-5");
+        ModelDescriptor? haiku55 = ProofreadingModelCatalog.All
+            .SingleOrDefault(descriptor => descriptor.Id == "claude-haiku-5-5");
+        ModelDescriptor? sol61 = ProofreadingModelCatalog.All
+            .SingleOrDefault(descriptor => descriptor.Id == "gpt-6.1-sol");
         bool newModelsPass =
             astra is { Provider: ApiProvider.OpenAi, RecommendedTimeout: var astraTimeout } &&
             astraTimeout == TimeSpan.FromSeconds(90) &&
@@ -97,7 +103,19 @@ internal static class ProofreadingModelCatalogValidation
             luna6 is { Provider: ApiProvider.OpenAi, InputPricePerMillion: 0.10m, OutputPricePerMillion: 0.50m } &&
             opus55 is { Provider: ApiProvider.Anthropic, InputPricePerMillion: 4.00m, OutputPricePerMillion: 20.00m } &&
             ProofreadingModelCatalog.SupportsAdaptiveThinking(opus55.Id) &&
-            !ProofreadingModelCatalog.SupportsDisabledThinking(opus55.Id);
+            !ProofreadingModelCatalog.SupportsDisabledThinking(opus55.Id) &&
+            // 2026-10-09 追加分。Sonnet 5.5 は disabled ではなく between_tools を使う。
+            sonnet55 is { Provider: ApiProvider.Anthropic, InputPricePerMillion: 2.00m, OutputPricePerMillion: 10.00m } &&
+            ProofreadingModelCatalog.SupportsAdaptiveThinking(sonnet55.Id) &&
+            !ProofreadingModelCatalog.SupportsDisabledThinking(sonnet55.Id) &&
+            haiku55 is { Provider: ApiProvider.Anthropic, InputPricePerMillion: 0.10m, OutputPricePerMillion: 0.50m } &&
+            haiku55.RecommendedTimeout == TimeSpan.FromSeconds(15) &&
+            ProofreadingModelCatalog.SupportsAdaptiveThinking(haiku55.Id) &&
+            ProofreadingModelCatalog.SupportsDisabledThinking(haiku55.Id) &&
+            sol61 is { Provider: ApiProvider.OpenAi, InputPricePerMillion: 2.00m, OutputPricePerMillion: 10.00m } &&
+            sol61.RecommendedTimeout == TimeSpan.FromSeconds(90) &&
+            !ProofreadingModelCatalog.IsHighCostForProofreading(sol61.Id) &&
+            !ProofreadingModelCatalog.IsHighCostForProofreading(haiku55.Id);
 
         bool highCostWarningPass =
             ProofreadingModelCatalog.IsHighCostForProofreading("gpt-6-astra") &&

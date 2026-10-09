@@ -20,6 +20,7 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
     private ProofreadingPurpose? _pinnedPurpose;
     private BackendKind? _pinnedBackend;
     private TimeSpan? _pinnedTimeout;
+    private string? _pinnedEffort;
     private OpenAiCompatibleProfile? _pinnedCompatibleProfile;
     private IProofreadingClient? _subscriptionRun;
     internal SubscriptionService Subscriptions { get; } = new();
@@ -43,25 +44,29 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
                 () => settings.Current.GeminiApiKeySource,
                 () => Model,
                 () => CurrentTimeout,
-                () => CurrentPurpose)),
+                () => CurrentPurpose,
+                () => CurrentEffort)),
             [ApiProvider.OpenAi] = new(() => new OpenAiProofreadingClient(
                 credentials,
                 () => settings.Current.OpenAiApiKeySource,
                 () => Model,
                 () => CurrentTimeout,
-                () => CurrentPurpose)),
+                () => CurrentPurpose,
+                () => CurrentEffort)),
             [ApiProvider.Anthropic] = new(() => new AnthropicProofreadingClient(
                 credentials,
                 () => settings.Current.AnthropicApiKeySource,
                 () => Model,
                 () => CurrentTimeout,
-                () => CurrentPurpose)),
+                () => CurrentPurpose,
+                () => CurrentEffort)),
             [ApiProvider.PreferredNetworks] = new(() => new PlamoProofreadingClient(
                 credentials,
                 () => settings.Current.PlamoApiKeySource,
                 () => Model,
                 () => CurrentTimeout,
-                () => CurrentPurpose)),
+                () => CurrentPurpose,
+                () => CurrentEffort)),
             [ApiProvider.OpenAiCompatible] = new(() => new OpenAiCompatibleProofreadingClient(
                 credentials,
                 () => CurrentCompatibleProfile,
@@ -78,6 +83,9 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
     /// </summary>
     private ProofreadingPurpose CurrentPurpose => _pinnedPurpose ?? ProofreadingPurpose.Automatic;
 
+    /// <summary>設定画面で選ばれた思考量。空は「モデル表の用途別既定」（クライアント側で解決する）。</summary>
+    private string? CurrentEffort => _pinnedEffort ?? EffortFor(CurrentPurpose);
+
     private TimeSpan CurrentTimeout => _pinnedTimeout ?? TimeoutFor(CurrentPurpose);
 
     private OpenAiCompatibleProfile? CurrentCompatibleProfile =>
@@ -93,6 +101,11 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
             ? _settings.Current.ManualProofreadingModel
             : _settings.Current.AutoProofreadingModel;
 
+    internal string? EffortFor(ProofreadingPurpose purpose)
+        => purpose == ProofreadingPurpose.Manual
+            ? _settings.Current.ManualProofreadingEffort
+            : _settings.Current.AutoProofreadingEffort;
+
     internal TimeSpan TimeoutFor(ProofreadingPurpose purpose)
         => ProofreadingModelCatalog.ClampTimeout(TimeSpan.FromSeconds(
             purpose == ProofreadingPurpose.Manual
@@ -101,7 +114,7 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
 
     /// <summary>
     /// 1回の校正実行の間だけ使う用途とモデルを固定する。実行中に設定画面でモデルを切り替えても、
-    /// 同一実行の途中でプロバイダ・APIキー取得元・料金単価・タイムアウトが揺れないようにする。
+    /// 同一実行の途中でプロバイダ・APIキー取得元・料金単価・タイムアウト・思考量が揺れないようにする。
     /// 呼び出し側（MainWindow）は実行開始前に用途を指定して固定し、対応する finally で
     /// <see cref="UnpinModel"/> を必ず呼ぶ。
     /// </summary>
@@ -111,6 +124,7 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
         _pinnedModel = ModelFor(purpose);
         _pinnedBackend = BackendFor(purpose);
         _pinnedTimeout = TimeoutFor(purpose);
+        _pinnedEffort = EffortFor(purpose);
         _pinnedCompatibleProfile = OpenAiCompatibleProfile.Find(_settings.Current, _pinnedModel);
         if (Backend != BackendKind.Api)
             _subscriptionRun = new SubscriptionProofreadingClient(Subscriptions, Backend, PathFor(Backend), Model,
@@ -124,6 +138,7 @@ internal sealed class ProofreadingClientRouter : IProofreadingClient
         _pinnedPurpose = null;
         _pinnedBackend = null;
         _pinnedTimeout = null;
+        _pinnedEffort = null;
         _pinnedCompatibleProfile = null;
         _subscriptionRun = null;
     }

@@ -24,6 +24,7 @@ internal sealed class PlamoProofreadingClient : ProofreadingClientBase
         new("https://api.platform.preferredai.jp/");
 
     private readonly Func<ProofreadingPurpose> _purposeProvider;
+    private readonly Func<string?>? _effortProvider;
 
     protected override string ProviderName => "PLaMo";
 
@@ -32,7 +33,8 @@ internal sealed class PlamoProofreadingClient : ProofreadingClientBase
         Func<ApiKeySource> sourceProvider,
         Func<string> modelProvider,
         Func<TimeSpan> requestTimeoutProvider,
-        Func<ProofreadingPurpose> purposeProvider)
+        Func<ProofreadingPurpose> purposeProvider,
+        Func<string?>? effortProvider = null)
         : base(
             () => credentials.GetApiKey(ApiProvider.PreferredNetworks, sourceProvider()),
             CreateHttpClient(),
@@ -44,6 +46,7 @@ internal sealed class PlamoProofreadingClient : ProofreadingClientBase
             ownsHttpClient: true)
     {
         _purposeProvider = purposeProvider;
+        _effortProvider = effortProvider;
     }
 
     internal PlamoProofreadingClient(
@@ -53,7 +56,8 @@ internal sealed class PlamoProofreadingClient : ProofreadingClientBase
         Func<TimeSpan, CancellationToken, Task>? delay = null,
         TimeSpan? requestTimeout = null,
         Func<ProofreadingPurpose>? purposeProvider = null,
-        bool ownsHttpClient = false)
+        bool ownsHttpClient = false,
+        Func<string?>? effortProvider = null)
         : base(
             apiKeyProvider,
             httpClient,
@@ -65,6 +69,7 @@ internal sealed class PlamoProofreadingClient : ProofreadingClientBase
             ownsHttpClient)
     {
         _purposeProvider = purposeProvider ?? (() => ProofreadingPurpose.Automatic);
+        _effortProvider = effortProvider;
     }
 
     private static HttpClient CreateHttpClient()
@@ -170,7 +175,7 @@ internal sealed class PlamoProofreadingClient : ProofreadingClientBase
         };
 
         // PLaMo の reasoning_effort は none / medium の 2 段階のみ（要件 3.5.1）。
-        if (ProofreadingModelCatalog.Get(Model).EffortFor(_purposeProvider()) is { } effort)
+        if (ProofreadingModelCatalog.ResolveEffort(Model, _purposeProvider(), _effortProvider?.Invoke()) is { } effort)
             request["reasoning_effort"] = effort;
 
         return request.ToJsonString();

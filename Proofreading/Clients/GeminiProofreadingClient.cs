@@ -21,6 +21,7 @@ internal sealed class GeminiProofreadingClient : ProofreadingClientBase
         new("https://generativelanguage.googleapis.com/");
 
     private readonly Func<ProofreadingPurpose> _purposeProvider;
+    private readonly Func<string?>? _effortProvider;
 
     protected override string ProviderName => "Gemini";
 
@@ -29,7 +30,8 @@ internal sealed class GeminiProofreadingClient : ProofreadingClientBase
         Func<ApiKeySource> sourceProvider,
         Func<string> modelProvider,
         Func<TimeSpan> requestTimeoutProvider,
-        Func<ProofreadingPurpose> purposeProvider)
+        Func<ProofreadingPurpose> purposeProvider,
+        Func<string?>? effortProvider = null)
         : base(
             () => credentials.GetApiKey(ApiProvider.Google, sourceProvider()),
             CreateHttpClient(),
@@ -41,6 +43,7 @@ internal sealed class GeminiProofreadingClient : ProofreadingClientBase
             ownsHttpClient: true)
     {
         _purposeProvider = purposeProvider;
+        _effortProvider = effortProvider;
     }
 
     internal GeminiProofreadingClient(
@@ -50,7 +53,8 @@ internal sealed class GeminiProofreadingClient : ProofreadingClientBase
         Func<TimeSpan, CancellationToken, Task>? delay = null,
         TimeSpan? requestTimeout = null,
         Func<ProofreadingPurpose>? purposeProvider = null,
-        bool ownsHttpClient = false)
+        bool ownsHttpClient = false,
+        Func<string?>? effortProvider = null)
         : base(
             apiKeyProvider,
             httpClient,
@@ -62,6 +66,7 @@ internal sealed class GeminiProofreadingClient : ProofreadingClientBase
             ownsHttpClient)
     {
         _purposeProvider = purposeProvider ?? (() => ProofreadingPurpose.Automatic);
+        _effortProvider = effortProvider;
     }
 
     private static HttpClient CreateHttpClient()
@@ -167,7 +172,8 @@ internal sealed class GeminiProofreadingClient : ProofreadingClientBase
         // Gemini 3 系は thinkingLevel を明示しないとモデル既定に従う。gemini-3.1-pro-preview は
         // 既定が high 思考で、思考トークンは出力単価で課金されるため必ず明示する（要件3.5.1）。
         // thinkingBudget との併用は 400 になるので送らない。
-        if (ProofreadingModelCatalog.TryGetGeminiThinkingLevel(Model, _purposeProvider(), out string? level))
+        if (ProofreadingModelCatalog.TryGetGeminiThinkingLevel(
+                Model, _purposeProvider(), out string? level, _effortProvider?.Invoke()))
         {
             generationConfig["thinkingConfig"] = new JsonObject
             {

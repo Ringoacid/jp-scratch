@@ -195,6 +195,7 @@ public partial class SettingsWindow : Window
         ManualModelFamilyCombo.SelectedItem = manualFamily;
         PopulateModels(AutoProofreadingModelCombo, autoFamily, s.AutoProofreadingModel);
         PopulateModels(ManualProofreadingModelCombo, manualFamily, s.ManualProofreadingModel);
+        RefreshEffortCombos(s.AutoProofreadingEffort, s.ManualProofreadingEffort);
         _codexPath.Text = s.CodexCliPath;
         _copilotPath.Text = s.CopilotCliPath;
         _subscriptionAuto.IsChecked = s.SubscriptionAutomaticEnabled;
@@ -263,6 +264,8 @@ public partial class SettingsWindow : Window
             SelectedModelId(AutoProofreadingModelCombo) ?? s.AutoProofreadingModel;
         s.ManualProofreadingModel =
             SelectedModelId(ManualProofreadingModelCombo) ?? s.ManualProofreadingModel;
+        s.AutoProofreadingEffort = SelectedEffort(AutoEffortCombo);
+        s.ManualProofreadingEffort = SelectedEffort(ManualEffortCombo);
         // 範囲外は SettingsService.Normalize が 5〜300 秒へ丸める。
         s.AutoProofreadingTimeoutSeconds =
             (int)ParseNumber(AutoTimeoutBox.Text, s.AutoProofreadingTimeoutSeconds);
@@ -545,9 +548,80 @@ public partial class SettingsWindow : Window
     private void ProofreadingModelCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_loadingProofreadingModelControls) return;
+        RefreshEffortCombos();
         RefreshTimeoutHint();
         RefreshHighCostModelWarning();
         RefreshCredentialStatus();
+    }
+
+    private sealed record EffortOption(string Value, string Label);
+
+    private static readonly Dictionary<string, string> EffortLabels = new(StringComparer.Ordinal)
+    {
+        ["none"] = "none（思考なし）",
+        ["minimal"] = "minimal（最小）",
+        ["low"] = "low（低）",
+        ["medium"] = "medium（中）",
+        ["high"] = "high（高）",
+        ["xhigh"] = "xhigh（より高）",
+        ["max"] = "max（最大）",
+    };
+
+    private static string EffortLabel(string value)
+        => EffortLabels.TryGetValue(value, out string? label) ? label : value;
+
+    /// <summary>空文字は「モデル表の用途別既定」。指定できないモデルでは行ごと隠れているので空文字になる。</summary>
+    private static string SelectedEffort(ComboBox combo) => combo.SelectedValue as string ?? "";
+
+    /// <summary>現在の選択を引き継いで、両方の思考量コンボを選択中のモデルに合わせて作り直す。</summary>
+    private void RefreshEffortCombos()
+        => RefreshEffortCombos(SelectedEffort(AutoEffortCombo), SelectedEffort(ManualEffortCombo));
+
+    private void RefreshEffortCombos(string? autoDesired, string? manualDesired)
+    {
+        RefreshEffortCombo(AutoEffortCombo, AutoEffortPanel, AutoModelFamilyCombo,
+            AutoProofreadingModelCombo, ProofreadingPurpose.Automatic, autoDesired);
+        RefreshEffortCombo(ManualEffortCombo, ManualEffortPanel, ManualModelFamilyCombo,
+            ManualProofreadingModelCombo, ProofreadingPurpose.Manual, manualDesired);
+    }
+
+    /// <summary>
+    /// 選択中のモデルが受け付ける思考量だけを並べる。契約サービス・OpenAI互換・Haiku 4.5 など
+    /// 指定できないモデルでは行ごと隠す。切り替え前の値がまだ有効なら維持し、無効なら「既定」へ戻す。
+    /// </summary>
+    private void RefreshEffortCombo(
+        ComboBox effortCombo,
+        FrameworkElement panel,
+        ComboBox familyCombo,
+        ComboBox modelCombo,
+        ProofreadingPurpose purpose,
+        string? desired)
+    {
+        ModelDescriptor? descriptor = null;
+        if (FamilyBackend(familyCombo.SelectedItem as string) == BackendKind.Api &&
+            SelectedModelId(modelCombo) is string id &&
+            ProofreadingModelCatalog.TryGet(id, out ModelDescriptor found))
+        {
+            descriptor = found;
+        }
+
+        if (descriptor is null || descriptor.EffortChoices.Count == 0)
+        {
+            effortCombo.ItemsSource = null;
+            panel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var options = new List<EffortOption>
+        {
+            new("", $"既定（{descriptor.EffortFor(purpose) ?? "未指定"}）"),
+        };
+        options.AddRange(descriptor.EffortChoices.Select(effort => new EffortOption(effort, EffortLabel(effort))));
+        effortCombo.ItemsSource = options;
+        effortCombo.SelectedValue = desired is { Length: > 0 } && descriptor.EffortChoices.Contains(desired)
+            ? desired
+            : "";
+        panel.Visibility = Visibility.Visible;
     }
 
     private void RefreshHighCostModelWarning()
@@ -674,6 +748,7 @@ public partial class SettingsWindow : Window
         _loadingProofreadingModelControls = true;
         PopulateModels(combo, family, selected);
         _loadingProofreadingModelControls = false;
+        RefreshEffortCombos();
         RefreshTimeoutHint();
         RefreshHighCostModelWarning();
         RefreshCredentialStatus();
