@@ -5,9 +5,22 @@ Gemini の校正精度と文体保護を比較し、JP Scratch 本体と共有�
 既定のテストセットは、誤り検出5本と文体保護25本を `cases.json` に収録している。
 既定のプロンプト案は、文脈を含む全文を渡して修正版全文を受け取る `full-rewrite-safe`。
 
+## ファイル構成
+
+- `validations/`: アプリ、課金、使用量、保存、接続先、校正、ベンチマークのオフライン検証。
+- `support/`: 検証アプリのコマンドと共通処理。
+- `reports/`: 検証・モデル比較の記録。
+- `results/`: 精度検証の JSON。モデル比較の JSON は `results/benchmarks/`。
+
 ## 実行
 
-PowerShell で API キーを現在のプロセスだけに設定して実行する。
+外部APIを使わずに確認する場合は、以下を実行してください。APIキーは必要ありません。
+
+```powershell
+dotnet run --project PromptValidation -- --self-test
+```
+
+実際のモデルで校正精度を確認する場合は、PowerShellでAPIキーを現在のプロセスだけに設定して実行してください。以下はAPIを呼ぶため、料金が発生します。
 
 ```powershell
 $env:GEMINI_API_KEY = "..."
@@ -30,7 +43,7 @@ dotnet run --project PromptValidation -- --input "この文章を校正して"
 # APIを呼ばず、実際のプロンプトとJSON Schemaを確認
 dotnet run --project PromptValidation -- --dry-run --case style-01
 
-# 提案位置・全文差分・資格情報・料金/ログ/為替・DB移行をオフライン検査
+# 提案位置・全文差分・資格情報・料金/ログ/為替・DB移行・契約接続をオフライン検査
 dotnet run --project PromptValidation -- --self-test
 
 # 保存済みの全文応答から個別提案を抽出（APIは呼ばない）
@@ -45,6 +58,12 @@ dotnet run --project PromptValidation -- --suite error --repeat 10 --variant phr
 # 1回の実行に費用上限を設定
 dotnet run --project PromptValidation -- --max-cost 0.25
 ```
+
+`--self-test` は外部 AI API や実際の契約サービスへ接続せず、ローカルの模擬サーバーと模擬応答で
+Codex / Copilot 契約経路の4機能、Copilotの認証ライフサイクル、利用枠・モデルのガード、キャンセル、
+DB v6 の移行・集計・圧縮、CSVを検査する。実契約での認証・生成確認は含めない。
+実契約の生成確認は利用枠を消費するため、別途承認を得て行う。
+契約接続の前提と検証方針は [契約サービスの導入手順](../docs/subscription-backends.md) を参照。
 
 終了コードは、全件合格なら `0`、検証失敗なら `1`、設定・通信エラーなら `2`。
 各API呼び出しと集計には、`usageMetadata` と現行単価に基づく推定USD料金を表示する。
@@ -77,6 +96,17 @@ dotnet run --project PromptValidation -- --model-benchmark --trials 3 --max-cost
 主なオプションは `--trials` / `--max-cost` / `--models` / `--texts` / `--timeout` / `--output` / `--yes`。
 詳細は `--model-benchmark --help`。図の生成は `python tools/plot-model-benchmark.py`。
 
+自動用・手動用の既定モデルを比較するときは、同じ3モデルと文章を両用途で測る。`--purpose` の既定は `manual`。以下のコマンドは**実APIを呼んで課金される**ため、実行前に費用上限と対象を確認する。`--max-cost` は文章単位で判定する打ち切り目安であり、上限を厳密に保証するものではない。
+
+```powershell
+dotnet run --project PromptValidation -- --model-benchmark --models claude-sonnet-5,gpt-6-luna,gpt-6-sol --purpose automatic --trials 3 --max-cost 3
+dotnet run --project PromptValidation -- --model-benchmark --models claude-sonnet-5,gpt-6-luna,gpt-6-sol --purpose manual --trials 3 --max-cost 3
+```
+
+2026-09-23 の比較結果（7文章×3試行／用途、計126リクエスト）に基づき、新規設定の既定を自動・手動とも GPT 6 Luna にした。図表、修正内容、判断の限界は[比較レポート](reports/model-benchmark-2026-09-23.md)を参照。生データは `results/benchmarks/model-benchmark-2026-09-23-automatic-r3.json` と `results/benchmarks/model-benchmark-2026-09-23-manual-r3.json` に保存している。
+
+追加した Claude Opus 5.5 も同じ文章・試行数で単独計測した（自動・手動の計42リクエスト）。結果と既存3モデルとの比較は[Opus 5.5 追補レポート](reports/claude-opus-5-5-benchmark-2026-09-23.md)を参照。
+
 プロンプト案:
 
 - `full-rewrite-safe`（既定）: 全文の修正版を返す。文書境界と文中命令の無視を明示。
@@ -97,7 +127,7 @@ dotnet run --project PromptValidation -- --model-benchmark --trials 3 --max-cost
 
 ## 全文から個別提案への変換
 
-本体の `Proofreading/DocumentDiff.cs` を検証プロジェクトからリンクして使用する。
+本体の `Proofreading/Pipeline/DocumentDiff.cs` を検証プロジェクトからリンクして使用する。
 `DocumentDiff` は原文とモデルの修正版全文を Unicode の書記素単位で比較し、各変更を
 AvalonEdit と同じ UTF-16 オフセットの局所置換へ変換する。絵文字・結合文字を途中で分割せず、
 同じ語の中で最大2書記素だけ離れた変更は1提案へまとめる。脱字のような純粋な挿入は、
@@ -105,7 +135,7 @@ AvalonEdit と同じ UTF-16 オフセットの局所置換へ変換する。絵�
 
 全提案を原文に再適用して修正版を再現できない場合、変更範囲が重なる場合、または変更量が
 安全上限を超える場合は応答全体を破棄する。詳細と検証結果は
-`algorithm-validation-2026-07-29.md` を参照。
+`reports/algorithm-validation-2026-07-29.md` を参照。
 
 `ProofreadingSession` も同じ方法でリンクし、`--self-test` で TextAnchor の前方編集追従、
 範囲編集時の失効、境界挿入、複数提案の順次適用を検査する。

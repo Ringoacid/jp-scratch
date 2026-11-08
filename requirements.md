@@ -66,7 +66,7 @@
 - タスクトレイに常駐する。左クリックでウィンドウをトグル表示。
 - 右クリックメニュー: `表示` / `設定` / `課金履歴` / `終了`。
 - アイコンで状態を示す（通常 / 校正リクエスト中 / API エラー / 月間上限到達）。**実装済み。実機確認済み**。
-  - 状態の決定は `Services/TrayIconStateResolver.cs` の純粋関数。同時に成り立つ条件からは
+  - 状態の決定は `Services/Shell/TrayIconStateResolver.cs` の純粋関数。同時に成り立つ条件からは
     **校正中 > API エラー > 上限到達 > 通常**の順で 1 つを選ぶ。校正中を最優先にするのは、
     これだけが応答が返れば自分で消える一時的な状態だから（消えた時点で残りの条件が再計算される）。
     上限到達中でも手動校正は実行できるため、ここを逆にすると通信中かどうかが分からなくなる。
@@ -175,7 +175,7 @@ Notepad++ 相当。
   2. 前回の校正実行開始から `M` 秒以上経過（既定 10 秒、設定可）— **最小送信間隔の強制**
   3. 対象段落の内容ハッシュが前回送信時と異なる
   4. IME 変換が確定済み（未確定文字列がない）
-  5. 月間上限に達していない（実装済み。`Services/UsageLimitService.cs`、`Views/MainWindow.xaml.cs`。実機確認済み）
+  5. 月間上限に達していない（実装済み。`Services/Billing/Usage/UsageLimitService.cs`、`Views/Main/MainWindow.xaml.cs`。実機確認済み）
 - `Ctrl + Enter` でデバウンスを待たず即時実行できる。
 - 自動チェックは設定で OFF にできる（OFF 時は手動のみ）。
 - 最小送信間隔は 1 回の校正実行を開始する前にだけ適用する。開始後に段落・パートごとの
@@ -353,18 +353,28 @@ LLM に文字オフセットや個別置換を返させると、日本語（サ�
   揺れないよう、実行開始時に用途に応じたモデルを固定する**（`ProofreadingClientRouter.PinModel`）。
 - 旧 `ProofreadingModel` 設定は、読み込み時に自動用・手動用の両方へコピーして移行する
   （既存ユーザーは移行前と同じ挙動で起動する）。
+- **思考量（effort）は自動用・手動用の 2 枠ごとに選べる**（`AutoProofreadingEffort` /
+  `ManualProofreadingEffort`）。選択肢はモデルごとに API が受け付ける値だけを並べる（範囲外は 400 に
+  なるため）。空（「既定」）なら従来どおり自動 `low` / 手動 `medium`（PLaMo は自動 `none`）を送るので、
+  設定を変えない限り挙動・料金は変わらない。モデルを切り替えて選択中の値が使えなくなったときは
+  「既定」へ戻す。契約サービス・OpenAI互換・Claude Haiku 4.5 は思考量を指定できず、行ごと隠す。
+  値が高いほど思考トークン（出力単価で課金）と待ち時間が増える。
+  Anthropic の自動用は思考を最小にするが、`xhigh` / `max` では無効化が 400 になるため送らない。
 
 ##### 選択できるモデル
 
 | プロバイダー | モデル ID | 備考 |
 |---|---|---|
-| OpenAI | `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna` | 推奨 Luna |
-| Google | `gemini-3.1-pro-preview` / `gemini-3.7-flash` / `gemini-3.6-flash` / `gemini-3.5-flash-lite` | 推奨 Flash Lite |
-| Anthropic | `claude-fable-5` / `claude-opus-5` / `claude-sonnet-5` / `claude-haiku-4-5-20251001` | 推奨 Sonnet 5 |
+| OpenAI | `gpt-6-astra` / `gpt-6.1-sol` / `gpt-6-sol` / `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-6-luna` / `gpt-5.6-luna` | 推奨 Luna |
+| Google | `gemini-3.1-pro-preview` / `gemini-3.8-flash` / `gemini-3.7-flash` / `gemini-3.6-flash` / `gemini-3.1-flash-lite` / `gemini-3.5-flash-lite` | 推奨 Flash Lite |
+| Anthropic | `claude-fable-5-1` / `claude-fable-5` / `claude-opus-5-5` / `claude-opus-5` / `claude-sonnet-5-5` / `claude-sonnet-5` / `claude-haiku-5-5` / `claude-haiku-4-5-20251001` | 推奨 Sonnet 5.5 |
 | Preferred Networks | `plamo-3.0-prime` | 推奨（唯一） |
 
 - 自動用・手動用のどちらにも全モデルを選べる。低速モデルを自動側へ選ぶことも許すが、設定画面で
   推奨タイムアウトを併記して注意を促す（分類をハード制限にすると、モデルが増えたときの維持が負債になる）。
+- 入力 $10 または出力 $50 / 1M tokens 以上の高価格モデル（GPT-6 Astra、Claude Fable 5 / 5.1）を
+  選んだ場合は、校正用途ではオーバースペックになりやすく高い料金が発生しうることを、モデル欄の
+  直下へ常時表示する。選択自体は妨げず、自動・手動のどちらが対象かと標準単価を明記する。
 
 ##### タイムアウトと再試行
 
@@ -455,7 +465,7 @@ LLM に文字オフセットや個別置換を返させると、日本語（サ�
   変換する（3.5.1 の各プロバイダー節を参照）。共通モデルの課金対象出力は
   `candidatesTokenCount + thoughtsTokenCount` 相当で、思考分の内訳を返さないプロバイダー
   （Anthropic・PLaMo）では思考を 0、出力に全量を寄せる。合計は変わらない。
-- 単価は `pricing.json` に外出しする。設定画面の「API・料金」では、モデル別の入力・出力単価を
+- 単価は `pricing.json` に外出しする。設定画面の「料金」→「単価の履歴・変更」では、モデル別の入力・出力単価を
   日付比例の階段グラフと履歴表で表示する。公式価格は読み取り専用、ユーザー履歴は過去・当日・未来日で
   追加・編集・削除できる。同日のユーザーイベントは1件だけとし、「公式価格へ戻す」イベントも保存する。
   ユーザー指定値は次のユーザーイベントまで有効で、公式価格の切替日をまたいでも勝手に解除しない。
@@ -589,23 +599,37 @@ LLM に文字オフセットや個別置換を返させると、日本語（サ�
 
 | プロバイダー | モデル ID | 入力 | 出力 | コンテキスト | 最大出力 |
 |---|---|---|---|---|---|
-| OpenAI | `gpt-5.6-sol` | $5.00 | $30.00 | — | — |
+| OpenAI | `gpt-6-astra` | $10.00 | $50.00 | 1,050,000 | 128,000 |
+| OpenAI | `gpt-6.1-sol` | $2.00 | $10.00 | 1,050,000 | 128,000 |
+| OpenAI | `gpt-5.6-sol` | $4.00 | $20.00 | — | — |
 | OpenAI | `gpt-5.6-terra` | $2.00 | $12.00 | — | — |
 | OpenAI | `gpt-5.6-luna` | $0.20 | $1.20 | 1,050,000 | 128,000 |
 | Google | `gemini-3.1-pro-preview` | $2.00（≤200K）/ $4.00（>200K） | $12.00 / $18.00 | 1,048,576 | 65,536 |
 | Google | `gemini-3.7-flash` | $0.75（〜2026-12-31）/ $1.50 | $3.75（〜2026-12-31）/ $7.50 | 1,048,576 | 65,536 |
 | Google | `gemini-3.6-flash` | $0.75（〜2026-12-31）/ $1.50 | $3.75（〜2026-12-31）/ $7.50 | 1,048,576 | 65,536 |
+| Google | `gemini-3.8-flash` | $0.75（〜2026-12-31）/ $1.50 | $3.75（〜2026-12-31）/ $7.50 | 1,048,576 | 65,536 |
+| Google | `gemini-3.1-flash-lite` | $0.25 | $1.50 | 1,048,576 | 65,536 |
 | Google | `gemini-3.5-flash-lite` | $0.30 | $2.50 | 1,048,576 | 65,536 |
+| Anthropic | `claude-fable-5-1` | $10.00 | $50.00 | 1,000,000 | 128,000 |
 | Anthropic | `claude-fable-5` | $10.00 | $50.00 | 1,000,000 | 128,000 |
 | Anthropic | `claude-opus-5` | $5.00 | $25.00 | 1,000,000 | 128,000 |
-| Anthropic | `claude-sonnet-5` | $2.00（〜2026-08-31）/ $3.00 | $10.00（〜2026-08-31）/ $15.00 | 1,000,000 | 128,000 |
+| Anthropic | `claude-sonnet-5-5` | $2.00 | $10.00 | 1,000,000 | 128,000 |
+| Anthropic | `claude-sonnet-5` | $2.00 | $10.00 | 1,000,000 | 128,000 |
+| Anthropic | `claude-haiku-5-5` | $0.10（≤100K）/ $0.50 | $0.50（≤100K）/ $2.50 | 1,000,000 | 128,000 |
 | Anthropic | `claude-haiku-4-5-20251001` | $1.00 | $5.00 | 200,000 | 64,000 |
 | Preferred Networks | `plamo-3.0-prime` | **¥60** | **¥250** | 262,144 | 20,000 |
 
-- Gemini 3.6 / 3.7 Flash と Claude Sonnet 5 の期限付き公式価格は、終了日を含めてUTC日付で適用し、
+- Gemini 3.6 / 3.7 Flash の期限付き公式価格は、終了日を含めてUTC日付で適用し、
   翌日から通常価格へ自動切替する。アプリを起動したまま境界を越えた場合も、料金計算時のUTC日付で
   解決し直す。ユーザーが設定画面で登録した単価は次のユーザーイベントまで固定値として優先し、
   「公式価格へ戻す」イベント以後はその日付のカタログ価格を再び使う。
+- `claude-sonnet-5` は導入価格の $2.00 / $10.00 がそのまま通常価格に確定し、2026-09-01 に予定されて
+  いた $3.00 / $15.00 への値上げは行われないと公表された（2026-08-24 確認）。
+- `claude-haiku-5-5` の 100K トークン超の単価は、校正の 1 リクエスト（2,000 文字以下）では到達しないため
+  単価表には基本単価だけを持つ（2026-10-09 確認）。`gpt-6.1-sol` と `claude-sonnet-5-5` も同日に追加した。
+- `gpt-5.6-sol` は割引中だが「少なくとも 2026-11-21 まで」としか公表されておらず、終了後の通常価格も
+  未公表。期限付き価格として持つと延長時にその日以降を過大見積もりするため、通常単価として扱う
+  （2026-08-24 確認）。
 - `gemini-3.1-pro-preview` は preview 版であり、予告なく仕様・単価が変わりうる。長文の 2 段階単価は
   1 リクエスト 2,000 文字上限（3.3.2）の本アプリでは到達しない。
 - OpenAI・Anthropic・Google はキャッシュ入力に割引単価があるが、3.5.2 のとおり単価表は入力・出力の
@@ -621,7 +645,7 @@ LLM に文字オフセットや個別置換を返させると、日本語（サ�
 - `gemini-3.7-flash` を既存比較と同じ7文章・3試行・手動用 effort で実API計測した。21/21件完走し、
   中央値2.4秒、1回あたり料金の中央値 `$0.002875`、合計 `$0.05923725`。引用保護・指示耐性の
   違反、失敗、安全検査での破棄、再試行はいずれも0件。詳細は
-  [`PromptValidation/gemini-3.7-flash-benchmark-2026-08-21.md`](PromptValidation/gemini-3.7-flash-benchmark-2026-08-21.md)。
+  [`PromptValidation/reports/gemini-3.7-flash-benchmark-2026-08-21.md`](PromptValidation/reports/gemini-3.7-flash-benchmark-2026-08-21.md)。
 
 **未確認**:
 
@@ -679,14 +703,14 @@ USD/JPYスナップショットを合算して結果を表示する。使用量�
   期間合計・ステータスバーには確定分の合計と「未確認 N件」を併記する。
 - 「未確認料金を補完」ボタンから 3.5.3 の日付別 API 取得・手入力ダイアログを開く。補完後は
   明細一覧、期間合計、ステータスバー、月間上限判定を再集計する。
-- CSV エクスポート。**実装済み**（`Services/BillingCsvExporter.cs`）。現在の期間・種別フィルタに合致する明細を
+- CSV エクスポート。**実装済み**（`Services/Billing/History/BillingCsvExporter.cs`）。現在の期間・種別フィルタに合致する明細を
   BOM 付き UTF-8・CRLF の RFC 4180 形式で書き出す。一覧の表示上限（2,000件）は適用せず全件を書く。
   USD/JPY/レートは表示書式で丸めず保存済みの `decimal` をそのまま出す（表計算ソフトで再集計するため）。
   モデル名・エラー文は外部由来の自由文字列なので、`= + - @` などで始まる場合に `'` を前置して
   CSV インジェクションを防ぐ。
 - 保持期間は既定 12 か月（設定画面 `ApiLogRetentionMonths`、0 で無期限）。それ以前の月の明細は
   バックグラウンドで日次サマリ `api_call_daily` へ圧縮し、`api_calls` から削除する。**実装済み**
-  （`Services/ApiLogRetention.cs`、`ApiCallRepository.Compact`、`MainWindow.CompactApiLogsInBackground`）。
+  （`Services/Billing/History/ApiLogRetention.cs`、`ApiCallRepository.Compact`、`MainWindow.CompactApiLogsInBackground`）。
   実行契機は**起動後・設定変更後・日付が変わったとき**の3つ。境界は月初のローカル 0 時に丸めるので、
   削除されるのは必ず「保持期間以上前」の明細に限られる（保持期間 1 か月・現在 2026-07 なら境界は
   2026-06-01 で、前月の明細は残る）。
@@ -705,7 +729,7 @@ USD/JPYスナップショットを合算して結果を表示する。使用量�
 
 | ガード | 既定 | 挙動 |
 |---|---|---|
-| **月間上限額** | $2.00 | 到達したら**自動チェックを停止**。トレイアイコンで通知。手動実行は「上限を超えます」の確認ダイアログを挟んで実行可。翌月 1 日 00:00（ローカル時間）にリセット。**実装済み**（`Services/UsageLimitService.cs`、`Views/MainWindow.xaml.cs`、`Views/SettingsWindow.xaml`）。設定画面から `MonthlyLimitUsd` を編集でき、0 は無制限として扱う |
+| **月間上限額** | $2.00 | 到達したら**自動チェックを停止**。トレイアイコンで通知。手動実行は「上限を超えます」の確認ダイアログを挟んで実行可。翌月 1 日 00:00（ローカル時間）にリセット。**実装済み**（`Services/Billing/Usage/UsageLimitService.cs`、`Views/Main/MainWindow.xaml.cs`、`Views/Settings/SettingsWindow.xaml`）。設定画面から `MonthlyLimitUsd` を編集でき、0 は無制限として扱う |
 | 上限接近の警告 | 80% | ステータスバーの進捗バーを警告色に変える。**実装済み**（`Themes/Styles.xaml` の `UsageProgressBar`、`UsageLimitWarningRatio` を設定画面から編集可） |
 | 課金 API 実行前の確認 | ON | 設定画面の「課金API実行前の確認を表示する」。ON では入力停止後の自動校正・手動校正・理由付き別案生成の前に確認し、OFF ではこれらの確認を表示せず実行する。既定 ON |
 | **最小送信間隔** | 10 秒 | 前回の校正実行開始からこの秒数が経つまで次の自動チェックを開始しない。実行内の個別リクエストには適用しない |
@@ -918,15 +942,15 @@ CREATE TABLE app_metadata (
 - [x] 月額上限の進捗表示・ガード（発火条件5、確認ダイアログ、進捗バー、トレイ通知、設定画面編集）。
       実機確認済み（進捗バーの配色・上限0時のレイアウト・トレイ通知の実発行・再解禁をダークテーマで
       確認し、ライトテーマでの進捗バーも 2026-07-31 に確認）。設定画面の数値欄は往復不変性のある書式へ
-      修正済み（`Services/SettingsFieldFormatting.cs`）
-- [x] CSV エクスポートと保持期限後の明細圧縮（3.6.2）。`Services/BillingCsvExporter.cs`、
-      `Services/ApiLogRetention.cs`、`ApiCallRepository.Compact`、DB v4で作成された `api_call_daily`。
+      修正済み（`Services/Settings/SettingsFieldFormatting.cs`）
+- [x] CSV エクスポートと保持期限後の明細圧縮（3.6.2）。`Services/Billing/History/BillingCsvExporter.cs`、
+      `Services/Billing/History/ApiLogRetention.cs`、`ApiCallRepository.Compact`、DB v4で作成された `api_call_daily`。
       2026-07-31 に実機確認済み（CSV の文字化け無し。保持期間 12 → 3 → 1 で圧縮件数が
       0 → 3 → 5 と増える一方、件数・トークン数・USD・提案/破棄数・`¥—` はすべて不変）。
       同日の実機確認で「設定画面の補足文が右端で切れる」「保持期間を変えても圧縮が走らない
       （起動時のみ実行していた）」の2件が見つかり、いずれも修正のうえ再確認済み
 - [x] トレイアイコンの状態表示（3.1.1、通常/校正中/APIエラー/月間上限到達の4状態）。
-      `Services/TrayIconStateResolver.cs`（優先順位の純粋関数）、`Services/TrayIconService.cs`
+      `Services/Shell/TrayIconStateResolver.cs`（優先順位の純粋関数）、`Services/Shell/TrayIconService.cs`
       （遅延読み込みと差し替え）、`Assets/app-{proofreading,error,limit}.ico`
       （`tools/build-tray-icons.py` が `app.ico` から生成）。月間上限ガードの実装中に
       未実装であることが判明し、別WIPとして切り出したもの。2026-07-31 に実機確認済み
@@ -940,13 +964,13 @@ CREATE TABLE app_metadata (
 
 ### v3 — 学習（P-3 の解決）
 
-- [x] リアクション履歴の蓄積と few-shot 選定ロジック（`Proofreading/FewShotSelector.cs`）
-- [x] スタイルガイドの自動生成（閾値到達時、確認ダイアログつき。`Views/MainWindow.xaml.cs`
+- [x] リアクション履歴の蓄積と few-shot 選定ロジック（`Proofreading/Pipeline/FewShotSelector.cs`）
+- [x] スタイルガイドの自動生成（閾値到達時、確認ダイアログつき。`Views/Main/MainWindow.xaml.cs`
       `MaybeOfferStyleGuideGeneration` / `RunStyleGuideGenerationAsync`）
-- [x] スタイルガイドの閲覧・編集・世代管理・無効化（`Services/StyleGuideRepository.cs`、
+- [x] スタイルガイドの閲覧・編集・世代管理・無効化（`Services/Data/StyleGuideRepository.cs`、
       設定画面「学習（文体の適応）」セクション）
 - [x] ユーザー手書きカスタム指示欄（`AppSettings.CustomInstruction`、設定画面）
-- [x] プロンプト構成の統合（`Proofreading/ProofreadingPrompt.BuildSystemInstruction`、要件3.4.4の送信順）
+- [x] プロンプト構成の統合（`Proofreading/Pipeline/ProofreadingPrompt.BuildSystemInstruction`、要件3.4.4の送信順）
 - [ ] コンテキストキャッシュの適用（対応していれば）— **意図的に見送り**（3.5.4の「未確認」＝Gemini
       の明示的キャッシュ（`cachedContents`）の最小トークン数が分からないままでは実装できず、
       これを確認するには実APIへの疎通が要る。加えて、キャッシュ済みトークンの割引後単価も
@@ -959,7 +983,7 @@ CREATE TABLE app_metadata (
       （`PromptValidation --probe-openai-cache`、詳細は3.5.4参照）でOpenAI（GPT-5.6 Luna）側の
       暗黙キャッシュが実際に働くことは確認できたが、これはGemini側の未確認事項（最小トークン数・
       割引単価）には回答しないため、上のGemini向けの見送り判断自体は変わらない。**
-- [x] 学習効果の可視化（`Services/ReactionRepository.GetRejectionRateTrend`、設定画面「学習」
+- [x] 学習効果の可視化（`Services/Data/ReactionRepository.GetRejectionRateTrend`、設定画面「学習」
       タブの「学習効果」セクション）
 
 **2026-07-31 実装・実機確認済み**: few-shot選定は要件3.4.1どおり
@@ -983,6 +1007,10 @@ GPT-5.6 Lunaでのスタイルガイド自動生成の確認ダイアログ〜�
 下げての生成提案の実発火）。設定画面は項目数の増加に伴い`TabControl`で5タブへ分割した
 （全般/エディタ/校正/学習/API・料金。詳細はCLAUDE.md参照）。開発中に実APIを呼ぶ前の確認は
 都度ユーザーへ依頼している。
+
+上記は当時の実装履歴である。現在の設定画面は左ナビゲーションの「全般」「エディタ」「校正」
+「学習」「APIキー」「料金」「契約サービス」で構成する。Codex / Copilot 契約接続の導入・認証・
+利用枠・検証要件は [docs/subscription-backends.md](docs/subscription-backends.md) を正典とする。
 
 学習効果の可視化は同日中に追加実装した。実データ（隔離環境ではなく実`app.db`。読み取り専用で
 `SELECT COUNT(*), MIN(reacted_at), MAX(reacted_at) FROM reactions`を確認）で全19件が2026-07-30〜
@@ -1046,7 +1074,7 @@ OpenAI・Google に加えて Anthropic と Preferred Networks を選べるよう
 
 | # | リスク | 影響 | 対策 |
 |---|---|---|---|
-| R-1 | ~~モデル ID が存在しない~~ / 単価が変わる | 低 | 4 プロバイダー 12 モデルのモデル ID と標準単価を確認済み（3.5.4）。`pricing.json` への外出しと更新日表示に加え、期限付き公式価格はUTC日付で自動切替する |
+| R-1 | ~~モデル ID が存在しない~~ / 単価が変わる | 低 | 4 プロバイダー 16 モデルのモデル ID と標準単価を確認済み（3.5.4）。`pricing.json` への外出しと更新日表示に加え、期限付き公式価格はUTC日付で自動切替する |
 | R-2 | 全文差分から安全な提案を作れない | **高** | 3.3.5 の再適用検査と過剰変更ガード。応答全体の破棄件数を `api_calls.discarded_cnt` に記録する |
 | R-3 | 文体保護が効かず、余計な修正が出続ける | **高** | 検証済みの厳格な全文プロンプトを固定し、迷う修正を禁止する。過剰変更ガードに触れた応答は全破棄する |
 | R-4 | 自動チェックでトークンを浪費する | 中 | デバウンス・最小送信間隔・ハッシュ重複抑止・月間上限の 4 段構え |
@@ -1067,16 +1095,17 @@ OpenAI・Google に加えて Anthropic と Preferred Networks を選べるよう
 | 学習方式 | リアクション履歴の few-shot ＋ スタイルガイド自動生成 ＋ 手書きカスタム指示欄 |
 | フォーカス喪失時 | 設定で切替。クリップボードコピーの可否も設定項目 |
 | 提案 UI | インライン下線 ＋ 下部パネル |
-| 料金表示 | 直近 / セッション累計 / 当日・当月累計 / リクエスト単位のログ画面 |
+| 料金・利用量表示 | API は直近 / セッション累計 / 当日・当月累計、契約サービスは当月利用回数。リクエスト単位の履歴とCSVに接続方式を記録 |
 | API キー | プロバイダーごとに別々に DPAPI 暗号化。対応する環境変数があれば使用するか確認 |
-| 校正モデル | 自動用・手動用の 2 枠。4 プロバイダー 12 モデルから設定画面で選択（既定 自動 `gpt-5.6-luna` / 手動 `claude-sonnet-5`） |
+| 契約サービス | Codex App Server / GitHub Copilot。対応版CLIを専用フォルダーへ導入し、専用ホームで認証。詳細は [docs/subscription-backends.md](docs/subscription-backends.md) |
+| 校正モデル | 自動用・手動用の 2 枠。API の4プロバイダー22モデルまたは接続済み契約サービスの動的モデルから選択（既定 自動 `gpt-5.6-luna` / 手動 `claude-sonnet-5`） |
 | 別案・スタイルガイド | 別案生成は自動用モデル、スタイルガイド自動生成は手動用モデルを使う |
 | タイムアウト | 用途別にユーザー設定（既定 自動 15 秒 / 手動 90 秒、範囲 5〜300）。タイムアウトでは再試行しない |
 | 単価の通貨 | `pricing.json` の `currency`（省略時 USD）。円建て単価は保存時に USD へ換算 |
 | 送信範囲 | 変更段落 ＋ 前後 1 段落を文脈として添付 |
-| 段落の並列送信 | 異なる段落を同時に 1〜10 件（既定 3）。同じ段落の分割パートは逐次送信 |
-| 課金ガード | 月間上限額での自動停止 ＋ デバウンス・最小送信間隔 |
-| 課金確認 | 「課金API実行前の確認を表示する」で校正・理由付き別案生成の確認を一括切替。既定 ON |
+| 段落の並列送信 | API は異なる段落を同時に 1〜10 件（既定 3）。契約サービスは同時実行1件。同じ段落の分割パートは逐次送信 |
+| 課金・利用枠ガード | API は月間上限額で自動停止。契約サービスは入力停止10秒以上・各送信間隔30秒以上とし、残量不明時の自動送信と枠到達時の送信を停止 |
+| 課金確認 | 「課金API実行前の確認を表示する」でAPIの校正・理由付き別案生成の確認を一括切替。契約サービスで残量不明時の手動操作は別途確認。既定 ON |
 | 為替 | Frankfurter を 1 日 1 回取得しローカルキャッシュ。未確認の円建て料金は起動時または課金履歴から日付別レートで補完 |
 | 校正スコープ | 誤字・脱字・変換ミス・タイポ ＋ 文法エラー ＋ 表記ゆれ・句読点 |
 | 提案の分類・モデル理由 | 生成・表示・保存しない。分類・理由生成用の追加 API も呼ばない |

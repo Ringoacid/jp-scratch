@@ -12,13 +12,14 @@
 
 - C# / .NET 10 (LTS)、WPF、AvalonEdit 6.x、SQLite (Microsoft.Data.Sqlite)。
 - WinForms はトレイアイコンのためだけに参照（暗黙 using は外してあり `TrayIconService` のみが明示的に using）。
-- 校正モデルは 4 プロバイダー 12 モデル（Google / OpenAI / Anthropic / Preferred Networks）。**自動用と手動用の 2 枠**を持ち、既定は自動 `gpt-5.6-luna` / 手動 `claude-sonnet-5`。API キーはプロバイダーごとに DPAPI 暗号化で `credentials.dat` に保存。
+- 校正モデルは 4 プロバイダー 22 モデル（Google / OpenAI / Anthropic / Preferred Networks）。**自動用と手動用の 2 枠**を持ち（思考量も 2 枠ごとに設定可。選択肢は `ModelDescriptor.Efforts` が正典）、既定は自動 `gpt-5.6-luna` / 手動 `claude-sonnet-5`。API キーはプロバイダーごとに DPAPI 暗号化で `credentials.dat` に保存。
+- APIキーに加え、Codex App Server / GitHub Copilot の契約接続を実装済み。自動・手動校正、別案、スタイルガイド生成に対応。設定は左ナビゲーションの「校正」「APIキー」「料金」「契約サービス」で管理する。
 
 ## ビルド・テスト
 
 ```powershell
 dotnet build    # デバッグビルド / dotnet run で実行
-powershell -File tools\smoke-test.ps1 publish\fdd\JpScratch.exe   # 煙テスト（%APPDATA%\JpScratch を消すので注意）
+powershell -File tools\smoke-test.ps1 publish\fdd\JpScratch.exe   # 煙テスト（一時フォルダーで実行。アプリ起動中は中止）
 dotnet run --project PromptValidation -- --self-test   # オフライン回帰テスト（外部 API 不使用）
 dotnet run --project PromptValidation -- --model-benchmark   # 全モデル比較（実課金。--self-test には入れない）
 python tools/plot-model-benchmark.py   # 上の結果から README 用の比較図を生成
@@ -26,29 +27,32 @@ python tools/plot-model-benchmark.py   # 上の結果から README 用の比較�
 
 - `PromptValidation/` は本体とソースを共有する独立コンソールアプリ。校正ロジック変更時は必ず `--self-test` を通す。
 - 状態アイコン: `tools\build-tray-icons.py`（`--check` で差分確認のみ）。MSI: `installer\build.ps1`（WiX v5 固定）。
+- 開発環境とインストーラーの手順は [docs/how-to-build.md](docs/how-to-build.md)、契約サービスの接続と検証は [docs/subscription-backends.md](docs/subscription-backends.md) を参照する。
 
 ## ディレクトリ構成
 
-- `App.xaml.cs` 起動・常駐・単一インスタンス・クラッシュ時保存
+- `Application/App.xaml.cs` 起動・常駐・単一インスタンス・クラッシュ時保存
 - `Controls/` 検索・置換パネル / `Editor/` AvalonEdit の拡張（検索・不可視文字・校正提案の描画）
 - `Infrastructure/` Win32 相互運用・原子的ファイル書き込み・パス解決
 - `Models/` 設定・タブ・ホットキー / `Proofreading/` 校正クライアント・プロンプト・段落計画・差分・提案セッション
 - `Services/` 設定・SQLite・資格情報・リアクション・タブ・ホットキー・配置・テーマ・トレイ
 - `Themes/` ライト / ダーク / 共通スタイル / `Views/` メインウィンドウ・設定・全タブ検索・ダイアログ
 - `installer/` WiX による MSI / `tools/` 煙テスト・アイコン生成スクリプト / `PromptValidation/` 検証アプリ
-- `docs/` 設計メモ（`proofreading-ux-fixes-plan.md`）・モデル仕様書・README 用画像（`requirements.md` はルートのまま）
+- `docs/` 使い方・契約サービスの接続・バックアップ・ビルド手順・モデル仕様書・画像（`requirements.md` はルートのまま）
 
 ## 重要な実装上の注意
 
-- **ウィンドウ位置は物理ピクセルで扱う**（`Services/WindowPlacer.cs`）。混在 DPI では WPF の `Window.Left/Top` を使わず `SetWindowPos` を直接呼ぶ。
+- **ウィンドウ位置は物理ピクセルで扱う**（`Services/Shell/WindowPlacer.cs`）。混在 DPI では WPF の `Window.Left/Top` を使わず `SetWindowPos` を直接呼ぶ。
 - **WinForms の暗黙 using を追加しない**（`Brush` / `Point` / `KeyEventArgs` が WPF 側と全面衝突する）。
 - **IME 変換中は自動非表示を止める**（`NativeMethods.HasImeComposition`）。
-- **テーマ辞書は `ThemeService` だけが差し込む**。App.xaml で読むと二重マージになり切り替えが効かない。
+- **テーマ辞書は `ThemeService` だけが差し込む**。Application/App.xaml で読むと二重マージになり切り替えが効かない。
 - **二重起動の呼び戻しは名前付きイベント**（`Infrastructure/SingleInstance.cs`）。`PostMessage(HWND_BROADCAST)` は不可。
 - **`Assets/app.ico` は手作りの正典**。小サイズは DIB、256px のみ PNG 圧縮（`NotifyIcon` が PNG を展開できないため）。
 - **PowerShell スクリプトは UTF-8 BOM 付きで保存**（BOM なしだと CP932 として読まれコメントが壊れる）。
 - **打ち切り・拒否の検出は `ProofreadingClientBase.EnsureCompleted` が正典**。本文抽出より前に必ず走る。切れた応答を採用すると「本文末尾を削除する提案」に化け、安全検査を通過して一括許可で本文が消える。プロバイダーを足したら `ProviderCompletionGuardValidation` の表にも行を足す。
 - **タイムアウトでは再試行しない**（二重課金と待ち時間の倍化を避ける）。再試行は 429 / 5xx のみ。
+- **契約サービスの状態はUIコンテキストで管理する**。`SubscriptionService` の呼び出し・状態参照・破棄はUIから行う。I/Oだけを別スレッドに出し、Codex／Copilotごとのゲートで直列化する。接続確認の制限時間には順番待ちを含めない。起動時は自動用／手動用に選択された契約サービスだけ確認する。
+- **契約枠をAPI金額へ換算しない**。DB v6の接続方式・使用量既知フラグを使い、古い契約履歴は `subscription_daily` に集約する。Copilotの資格情報は平文で保存されるため、保存前にユーザーへ確認する。保存先はアプリ専用ホームとし、バックアップには含めない。実契約での認証・生成検証は事前承認を得る。
 - **モデルごとの差異は `ProofreadingModelCatalog` の表に持たせる**（単価・推奨タイムアウト・用途別の思考量・プロバイダー）。if 分岐を増やさない。
 - **`pricing.json` の `currency` は編集で落とさない**（省略時 USD。円建ての PLaMo が $ 扱いになると桁が狂う）。
 - **コピー時の HTML 形式は捨てる**（`MainWindow` が `DataObject.SettingData` で `DataFormats.Html` をキャンセル）。AvalonEdit の HTML フラグメントは行間が `<br>` ＋生の改行のため、HTML を優先する貼り付け先（Google Chat など）で行間が倍になり前後にも空行が入る。
@@ -62,7 +66,7 @@ python tools/plot-model-benchmark.py   # 上の結果から README 用の比較�
 ## コーディング規約
 
 - UI 文言はすべて日本語ハードコード。サテライトリソースは使わない。
-- 校正プロンプトは `Proofreading/ProofreadingPrompt.cs` が正典。本体と検証アプリで共有する。
+- 校正プロンプトは `Proofreading/Pipeline/ProofreadingPrompt.cs` が正典。本体と検証アプリで共有する。
 - 変更後は `dotnet build` と `PromptValidation --self-test` で確認する。
 
 ## graphify

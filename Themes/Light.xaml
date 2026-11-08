@@ -32,6 +32,7 @@
     <SolidColorBrush x:Key="ControlPressedBrush" Color="#CFCFCF" />
 
     <SolidColorBrush x:Key="SettingsCardBackgroundBrush" Color="#FBFBFB" />
+    <SolidColorBrush x:Key="SettingsActionBrush" Color="#245DBA" />
     <SolidColorBrush x:Key="SettingsSeparatorBrush" Color="#E1E1E1" />
     <SolidColorBrush x:Key="ToggleOffBrush" Color="#C8C8C8" />
     <SolidColorBrush x:Key="ToggleThumbBrush" Color="#FFFFFF" />

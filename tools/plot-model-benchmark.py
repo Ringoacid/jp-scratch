@@ -3,12 +3,12 @@
 
     pip install matplotlib
     python tools/plot-model-benchmark.py
-    python tools/plot-model-benchmark.py --input PromptValidation/results/xxx.json --markdown table.md
+    python tools/plot-model-benchmark.py --input PromptValidation/results/benchmarks/xxx.json --markdown table.md
     python tools/plot-model-benchmark.py --input base.json --input supplement.json
 
-入力を省略すると PromptValidation/results/*benchmark-*.json から、同じ計測名の最新リビジョンを
+入力を省略すると PromptValidation/results/benchmarks/*benchmark-*.json から、同じ計測名の最新リビジョンを
 すべて読み込む。複数の実行を混ぜる場合は、文章・試行数・タイムアウト・システム指示が同じものに限る。
-出力は docs/images/ へ、ライト用とダーク用を別々に書き出す（GitHub の README から
+出力は docs/images/benchmarks/ へ、ライト用とダーク用を別々に書き出す（GitHub の README から
 <picture> で出し分ける前提。自動反転ではなく、ダーク面に合わせて選んだ色を使う）。
 
 図のルール（意図的な設計なので変更時は理由を持って変えること）:
@@ -36,8 +36,8 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_DIR = REPO_ROOT / "PromptValidation" / "results"
-IMAGES_DIR = REPO_ROOT / "docs" / "images"
+RESULTS_DIR = REPO_ROOT / "PromptValidation" / "results" / "benchmarks"
+IMAGES_DIR = REPO_ROOT / "docs" / "images" / "benchmarks"
 
 # 日本語を明示しないと matplotlib の既定（DejaVu Sans）で豆腐になる。
 FONT_STACK = ["Yu Gothic", "Noto Sans JP", "Meiryo", "BIZ UDGothic", "MS Gothic"]
@@ -430,10 +430,14 @@ def draw_bars(data: list[dict], theme: dict, meta: str, path: Path) -> None:
         fontsize=15,
         fontweight="bold",
     )
+    providers_present = [
+        provider for provider in PROVIDER_ORDER
+        if any(row["provider"] == provider for row in data)
+    ]
     figure.text(
         0.03,
         0.918,
-        "行はプロバイダーごとにまとめ、区切り線の上から OpenAI / Gemini / Anthropic / PLaMo",
+        "行はプロバイダーごとにまとめ、上から " + " / ".join(providers_present),
         color=theme["secondary"],
         fontsize=10,
         ha="left",
@@ -518,8 +522,11 @@ def main() -> None:
         date = report["runStartedAt"][:10]
         suffix = "追補" if index > 0 else "一斉計測"
         run_labels.append(f"{date} {len(report['summary'])}モデル {suffix}")
+    purpose_label = {"Automatic": "自動用", "Manual": "手動用"}.get(
+        reports[0]["purpose"], reports[0]["purpose"]
+    )
     meta = (
-        f"計測 {' ＋ '.join(run_labels)} / 手動用 effort / "
+        f"計測 {' ＋ '.join(run_labels)} / {purpose_label} effort / "
         f"7 文章 × {reports[0]['trialCount']} 試行 / タイムアウト "
         f"{reports[0]['timeoutSeconds']} 秒 / 料金は各実行日の固定為替"
     )

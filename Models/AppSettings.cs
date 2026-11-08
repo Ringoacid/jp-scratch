@@ -86,12 +86,21 @@ public sealed class AppSettings
     /// <summary>PLaMo APIキーの取得元。</summary>
     public ApiKeySource PlamoApiKeySource { get; set; } = ApiKeySource.Unspecified;
 
+    /// <summary>OpenAI Chat Completions 互換接続。APIキーは credentials.dat に別保存する。</summary>
+    public List<OpenAiCompatibleProfile> OpenAiCompatibleProfiles { get; set; } = [];
+
     // ---- 校正モデル（要件 3.5.1「用途別の 2 枠」） ----
     /// <summary>
     /// v3 までの単一モデル設定。読み込み時に自動用・手動用へ移行するためだけに残す。
     /// 移行後は空文字になり、以降は参照しない。
     /// </summary>
     public string ProofreadingModel { get; set; } = "";
+
+    public BackendKind AutoBackend { get; set; }
+    public BackendKind ManualBackend { get; set; }
+    public bool SubscriptionAutomaticEnabled { get; set; }
+    public string CodexCliPath { get; set; } = "";
+    public string CopilotCliPath { get; set; } = "";
 
     /// <summary>入力中の自動校正と、理由つき別案生成に使うモデルID。料金表のキーと一致させる。</summary>
     public string AutoProofreadingModel { get; set; } =
@@ -100,6 +109,16 @@ public sealed class AppSettings
     /// <summary>明示的な校正実行と、スタイルガイド自動生成に使うモデルID。</summary>
     public string ManualProofreadingModel { get; set; } =
         ProofreadingModelCatalog.DefaultManualModel;
+
+    /// <summary>
+    /// 自動用の思考量（effort / thinkingLevel / reasoning_effort）。空文字は「モデル表の用途別既定」
+    /// （<see cref="ModelDescriptor.EffortFor"/>）で、旧バージョンからの更新でも挙動を変えない。
+    /// モデルが受け付けない値は <see cref="ProofreadingModelCatalog.ResolveEffort"/> が既定へ戻す。
+    /// </summary>
+    public string AutoProofreadingEffort { get; set; } = "";
+
+    /// <summary>手動用の思考量。意味は <see cref="AutoProofreadingEffort"/> と同じ。</summary>
+    public string ManualProofreadingEffort { get; set; } = "";
 
     /// <summary>
     /// 自動校正 1 リクエストのタイムアウト秒数（要件 3.5.1）。
@@ -218,5 +237,10 @@ public sealed class AppSettings
         new HotkeySpec(System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Alt,
                        System.Windows.Input.Key.Enter));
 
-    public AppSettings Clone() => (AppSettings)MemberwiseClone();
+    public AppSettings Clone()
+    {
+        var clone = (AppSettings)MemberwiseClone();
+        clone.OpenAiCompatibleProfiles = [.. OpenAiCompatibleProfiles];
+        return clone;
+    }
 }

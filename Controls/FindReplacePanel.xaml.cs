@@ -355,7 +355,7 @@ public partial class FindReplacePanel : UserControl
             return false;
         }
 
-        replacement = match.Result(ReplaceBox.Text);
+        replacement = match.Result(RegexReplacement.ExpandEscapes(ReplaceBox.Text));
         return true;
     }
 

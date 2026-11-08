@@ -1,0 +1,175 @@
+using JpScratch.Models;
+using JpScratch.Services;
+
+namespace JpScratch.Proofreading;
+
+/// <summary>
+/// 用途（自動 / 手動）と設定中のモデルに応じて、プロバイダー別のクライアントへ振り分ける。
+/// 設定画面でモデルを変更した後も再起動せずに次の校正から反映できる。
+///
+/// クライアントは**使うときに初めて作る**。4 プロバイダー分の <see cref="System.Net.Http.HttpClient"/> を
+/// 起動時にまとめて作ると、実際には 1 つしか使わないのに接続プールを 4 つ抱えることになるため
+/// （起動速度とメモリを優先する方針）。
+/// </summary>
+internal sealed class ProofreadingClientRouter : IProofreadingClient
+{
+    private readonly SettingsService _settings;
+    private readonly Dictionary<ApiProvider, Lazy<IProofreadingClient>> _clients;
+
+    private string? _pinnedModel;
+    private ProofreadingPurpose? _pinnedPurpose;
+    private BackendKind? _pinnedBackend;
+    private TimeSpan? _pinnedTimeout;
+    private string? _pinnedEffort;
+    private OpenAiCompatibleProfile? _pinnedCompatibleProfile;
+    private IProofreadingClient? _subscriptionRun;
+    internal SubscriptionService Subscriptions { get; } = new();
+    internal BackendKind Backend => _pinnedBackend ?? BackendFor(CurrentPurpose);
+    internal BackendKind BackendFor(ProofreadingPurpose purpose) => purpose == ProofreadingPurpose.Manual ? _settings.Current.ManualBackend : _settings.Current.AutoBackend;
+    internal string PathFor(BackendKind backend) => backend == BackendKind.CodexAppServer ? _settings.Current.CodexCliPath : _settings.Current.CopilotCliPath;
+
+    internal ProofreadingClientRouter(
+        SettingsService settings,
+        CredentialService credentials)
+    {
+        _settings = settings;
+
+        // どのクライアントも「現在のモデル」「現在のタイムアウト」「現在の用途」を遅延解決する。
+        // 1 つのプロバイダーが自動用と手動用で別のモデルを持ちうるため（例: 自動 Luna / 手動 Terra）、
+        // 生成時に固定してはいけない。実行中に揺れないことは PinModel が保証する。
+        _clients = new Dictionary<ApiProvider, Lazy<IProofreadingClient>>
+        {
+            [ApiProvider.Google] = new(() => new GeminiProofreadingClient(
+                credentials,
+                () => settings.Current.GeminiApiKeySource,
+                () => Model,
+                () => CurrentTimeout,
+                () => CurrentPurpose,
+                () => CurrentEffort)),
+            [ApiProvider.OpenAi] = new(() => new OpenAiProofreadingClient(
+                credentials,
+                () => settings.Current.OpenAiApiKeySource,
+                () => Model,
+                () => CurrentTimeout,
+                () => CurrentPurpose,
+                () => CurrentEffort)),
+            [ApiProvider.Anthropic] = new(() => new AnthropicProofreadingClient(
+                credentials,
+                () => settings.Current.AnthropicApiKeySource,
+                () => Model,
+                () => CurrentTimeout,
+                () => CurrentPurpose,
+                () => CurrentEffort)),
+            [ApiProvider.PreferredNetworks] = new(() => new PlamoProofreadingClient(
+                credentials,
+                () => settings.Current.PlamoApiKeySource,
+                () => Model,
+                () => CurrentTimeout,
+                () => CurrentPurpose,
+                () => CurrentEffort)),
+            [ApiProvider.OpenAiCompatible] = new(() => new OpenAiCompatibleProofreadingClient(
+                credentials,
+                () => CurrentCompatibleProfile,
+                () => Model,
+                () => CurrentTimeout)),
+        };
+    }
+
+    public string Model => _pinnedModel ?? ModelFor(CurrentPurpose);
+
+    /// <summary>
+    /// ピン留めされていないときは自動用として扱う。実行経路はすべて実行前にピン留めするため、
+    /// ここへ落ちるのは表示用の参照だけ。安い側へ倒しておく。
+    /// </summary>
+    private ProofreadingPurpose CurrentPurpose => _pinnedPurpose ?? ProofreadingPurpose.Automatic;
+
+    /// <summary>設定画面で選ばれた思考量。空は「モデル表の用途別既定」（クライアント側で解決する）。</summary>
+    private string? CurrentEffort => _pinnedEffort ?? EffortFor(CurrentPurpose);
+
+    private TimeSpan CurrentTimeout => _pinnedTimeout ?? TimeoutFor(CurrentPurpose);
+
+    private OpenAiCompatibleProfile? CurrentCompatibleProfile =>
+        _pinnedCompatibleProfile ?? OpenAiCompatibleProfile.Find(_settings.Current, Model);
+
+    internal OpenAiCompatibleProfile? CompatibleProfileForCurrentCall =>
+        ProofreadingModelCatalog.ProviderOf(Model) == ApiProvider.OpenAiCompatible
+            ? CurrentCompatibleProfile
+            : null;
+
+    internal string ModelFor(ProofreadingPurpose purpose)
+        => purpose == ProofreadingPurpose.Manual
+            ? _settings.Current.ManualProofreadingModel
+            : _settings.Current.AutoProofreadingModel;
+
+    internal string? EffortFor(ProofreadingPurpose purpose)
+        => purpose == ProofreadingPurpose.Manual
+            ? _settings.Current.ManualProofreadingEffort
+            : _settings.Current.AutoProofreadingEffort;
+
+    internal TimeSpan TimeoutFor(ProofreadingPurpose purpose)
+        => ProofreadingModelCatalog.ClampTimeout(TimeSpan.FromSeconds(
+            purpose == ProofreadingPurpose.Manual
+                ? _settings.Current.ManualProofreadingTimeoutSeconds
+                : _settings.Current.AutoProofreadingTimeoutSeconds));
+
+    /// <summary>
+    /// 1回の校正実行の間だけ使う用途とモデルを固定する。実行中に設定画面でモデルを切り替えても、
+    /// 同一実行の途中でプロバイダ・APIキー取得元・料金単価・タイムアウト・思考量が揺れないようにする。
+    /// 呼び出し側（MainWindow）は実行開始前に用途を指定して固定し、対応する finally で
+    /// <see cref="UnpinModel"/> を必ず呼ぶ。
+    /// </summary>
+    internal void PinModel(ProofreadingPurpose purpose, bool allowUnknownQuota = false)
+    {
+        _pinnedPurpose = purpose;
+        _pinnedModel = ModelFor(purpose);
+        _pinnedBackend = BackendFor(purpose);
+        _pinnedTimeout = TimeoutFor(purpose);
+        _pinnedEffort = EffortFor(purpose);
+        _pinnedCompatibleProfile = OpenAiCompatibleProfile.Find(_settings.Current, _pinnedModel);
+        if (Backend != BackendKind.Api)
+            _subscriptionRun = new SubscriptionProofreadingClient(Subscriptions, Backend, PathFor(Backend), Model,
+                Subscriptions.State(Backend)?.Account, allowUnknownQuota, CurrentTimeout,
+                _settings.Current.ProofreadingMinimumIntervalSeconds);
+    }
+
+    internal void UnpinModel()
+    {
+        _pinnedModel = null;
+        _pinnedPurpose = null;
+        _pinnedBackend = null;
+        _pinnedTimeout = null;
+        _pinnedEffort = null;
+        _pinnedCompatibleProfile = null;
+        _subscriptionRun = null;
+    }
+
+    private IProofreadingClient Active =>
+        Backend == BackendKind.Api ? _clients[ProofreadingModelCatalog.ProviderOf(Model)].Value :
+        _subscriptionRun ?? throw new InvalidOperationException("接続方式を固定してから実行してください。");
+
+    public Task<GeminiProofreadingResult> ProofreadAsync(
+        ProofreadingRequest request,
+        CancellationToken cancellationToken = default)
+        => Active.ProofreadAsync(request, cancellationToken);
+
+    public Task<GeminiAlternativeResult> GenerateAlternativeAsync(
+        ProofreadingProposal proposal,
+        string reason,
+        CancellationToken cancellationToken = default)
+        => Active.GenerateAlternativeAsync(proposal, reason, cancellationToken);
+
+    public Task<GeminiStyleGuideResult> GenerateStyleGuideAsync(
+        IReadOnlyList<FewShotExample> reactionHistory,
+        CancellationToken cancellationToken = default)
+        => Active.GenerateStyleGuideAsync(reactionHistory, cancellationToken);
+
+    public void Dispose()
+    {
+        Subscriptions.Dispose();
+        foreach (Lazy<IProofreadingClient> client in _clients.Values)
+        {
+            // 一度も使っていないプロバイダーは生成自体していないので破棄も不要。
+            if (client.IsValueCreated) client.Value.Dispose();
+        }
+    }
+}
