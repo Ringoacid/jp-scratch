@@ -46,3 +46,5 @@ graphify-out/.graphify_root
 
 # AIエージェント用の一時フォルダ
 .tmp/
+
+.xamlpairview
